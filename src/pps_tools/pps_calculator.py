@@ -279,54 +279,221 @@ def calculate_booklet_price(
     }
 
 
-def generate_brochure_pricing():
-    """Generate standard brochure pricing at common quantity tiers.
+# ── Brochure & Flat Printing Calculator ──────────────────────────────────
+# Ported from wcpa-forms-lists-export brochures and flat printing form.
+# This is a DIFFERENT calculator from the booklet one above.
+# Brochures are single sheets that get folded (not saddle-stitched).
 
-    A 'brochure' in PPS terms is a saddlestitch booklet - typically
-    a folded sheet (4 or 8 pages) on gloss text stock, full color.
+# Fold types and their panel multiplier (determines cuts needed)
+FOLD_TYPES = {
+    "flat": {"label": "Flat - No Folding", "panels": 1, "folds": 0},
+    "bifold": {"label": "Bifold (2 Panel)", "panels": 2, "folds": 1},
+    "trifold": {"label": "Trifold (3 Panel)", "panels": 3, "folds": 2},
+    "accordion3": {"label": "Accordion (3 Panel)", "panels": 3, "folds": 2},
+    "gatefold": {"label": "Gate Fold (3 Panel)", "panels": 3, "folds": 2},
+    "accordion4": {"label": "Accordion (4 Panel)", "panels": 4, "folds": 3},
+    "rollfold": {"label": "Roll Fold (4 Panel)", "panels": 4, "folds": 3},
+    "doublegate": {"label": "Double Gate Fold (4 Panel)", "panels": 4, "folds": 3},
+    "doubleparallel": {"label": "Double Parallel Fold (4 Panel)", "panels": 4, "folds": 3},
+}
+
+# Brochure sheet sizes: unfolded size -> (longest, shortest, sheets_per_parent)
+# Parent sheet is 13x19 for standard, oversize for larger
+BROCHURE_SIZES = {
+    "8.5x11": {"longest": 11, "shortest": 8.5, "sheets_per_parent": 2, "label": "8.5x11"},
+    "8.5x14": {"longest": 14, "shortest": 8.5, "sheets_per_parent": 1, "label": "8.5x14"},
+    "11x17": {"longest": 17, "shortest": 11, "sheets_per_parent": 1, "label": "11x17"},
+    "6x9": {"longest": 9, "shortest": 6, "sheets_per_parent": 4, "label": "6x9"},
+    "5.5x8.5": {"longest": 8.5, "shortest": 5.5, "sheets_per_parent": 4, "label": "5.5x8.5"},
+    "4x6": {"longest": 6, "shortest": 4, "sheets_per_parent": 8, "label": "4x6"},
+    "4.25x5.5": {"longest": 5.5, "shortest": 4.25, "sheets_per_parent": 8, "label": "4.25x5.5"},
+    "3.5x5": {"longest": 5, "shortest": 3.5, "sheets_per_parent": 8, "label": "3.5x5"},
+}
+
+# Additional PCF values for brochure calc (from pps-config-admin.php)
+PCF_BROCHURE = {
+    **PCF,
+    "cutter_stackheight_inches": 3,
+    "cutter_cyclesperhour": 200,
+    "labor_gw_hour": 35,
+    "speed_gwperhr": 750,
+    "labor_gw_setup": 15,
+    "easydiscount_factor": 0.05,
+}
+
+
+def calculate_brochure_price(
+    qty: int,
+    paper: dict,
+    size: str = "8.5x11",
+    fold: str = "trifold",
+    front_color: str = "full_color",
+    back_color: str = "full_color",
+    coating_val: int = 0,
+    num_sets: int = 1,
+    vivid: bool = False,
+) -> dict:
+    """Calculate the total price for a brochure/flat print order.
+
+    Ported from the WCPA brochures & flat printing form formulas.
+    """
+    sz = BROCHURE_SIZES.get(size, BROCHURE_SIZES["8.5x11"])
+    fold_info = FOLD_TYPES.get(fold, FOLD_TYPES["trifold"])
+    coating = next((c for c in COATINGS if c["val"] == coating_val), COATINGS[0])
+    is_flat = fold == "flat"
+
+    tQ = qty * num_sets
+    spp = sz["sheets_per_parent"]  # sheets per parent (13x19)
+    parent_sheets = math.ceil(tQ / spp)
+
+    # Paper cost: price per parent sheet * number of parent sheets
+    # paper["price"] is cost per 13x19 sheet
+    paper_cost_raw = paper["price"] * parent_sheets
+
+    # Print cost per side
+    front_cost_raw = (
+        PCF_BROCHURE["printing_black_cost"] if front_color == "bw"
+        else PCF_BROCHURE["printing_fullcolor_cost"]
+    ) * parent_sheets
+
+    back_cost_raw = (
+        PCF_BROCHURE["printing_black_cost"] if back_color == "bw"
+        else PCF_BROCHURE["printing_fullcolor_cost"]
+    ) * parent_sheets
+
+    print_cost_raw = front_cost_raw + back_cost_raw
+
+    # Markup calculation (same log curve as booklet calc)
+    if parent_sheets > 0:
+        dL = (0.6 * math.log(parent_sheets)) - 0.1447
+    else:
+        dL = 0
+    mk = max(PCF_BROCHURE["backend_maximummarkup"] - dL, PCF_BROCHURE["backend_minimummarkup"])
+
+    P = {}
+
+    # Paper + print with markup
+    P["paper"] = paper_cost_raw * mk
+    P["printing"] = print_cost_raw * mk
+
+    # Press labor
+    P["press"] = (parent_sheets / PCF_BROCHURE["press_printsperhour"]) * PCF_BROCHURE["labor_press_hr"]
+
+    # Cutting labor: sheets / stack height -> stacks, stacks / cycles per hour -> hours
+    # Number of cuts depends on spp (how many pieces per parent sheet)
+    cuts_per_sheet = max(1, spp - 1) + fold_info["folds"]
+    stacks = math.ceil(parent_sheets / PCF_BROCHURE["cutter_stackheight_inches"])
+    P["cutting"] = (
+        ((stacks * cuts_per_sheet) / PCF_BROCHURE["cutter_cyclesperhour"]) * PCF_BROCHURE["labor_cutting_hr"]
+        + PCF_BROCHURE["cutterbasefee"]
+    )
+
+    # Folding/scoring (bindery) - only if not flat
+    if not is_flat:
+        P["folding"] = (
+            (tQ / PCF_BROCHURE["bindery_morgana_impressionperhour"]) * PCF_BROCHURE["labor_bindery_hr"]
+            + (PCF_BROCHURE["labor_bindery_hr"] / 3)  # setup time
+        )
+    else:
+        P["folding"] = 0
+
+    # Vivid enhancement
+    P["vivid"] = math.ceil(P["press"]) if vivid else 0
+
+    # Coating
+    P["coat"] = 0
+    if coating["val"] > 0 and paper.get("coatable", False):
+        P["coat"] = math.ceil(
+            (coating["price"] * tQ * mk)
+            + (((tQ / PCF_BROCHURE["uvcoaterimpressionsperhour"]) * PCF_BROCHURE["labor_bindery_hr"])
+               * (coating["price"] * mk * 3))
+            + PCF_BROCHURE["labor_bindery_hr"]
+        )
+
+    # Non-inventory fee
+    is_inv = paper["val"] in INV_NC or paper["val"] in INV_CS
+    P["nonInv"] = 0 if is_inv else PCF_BROCHURE["non_inventory_fee"]
+
+    # Sets surcharge
+    P["sets"] = (num_sets * PCF_BROCHURE["sets_surcharge"]) - PCF_BROCHURE["sets_surcharge"]
+
+    # Discounts
+    # Easy discount for standard sizes (flat gets a smaller discount)
+    is_standard = size in BROCHURE_SIZES and spp >= 2
+    if is_standard and is_flat:
+        P["discEasy"] = -min(
+            (P["paper"] + P["printing"]) * PCF_BROCHURE["easydiscount_factor"],
+            PCF_BROCHURE["easydiscount_max"] / 10,
+        )
+    elif is_standard:
+        P["discEasy"] = -min(
+            P["press"] + P["cutting"] + P["folding"],
+            PCF_BROCHURE["easydiscount_max"] / 10,
+        )
+    else:
+        P["discEasy"] = 0
+
+    total = sum(P.values())
+    per_unit = total / tQ if tQ > 0 else 0
+
+    return {
+        "total": round(total, 2),
+        "per_unit": round(per_unit, 4),
+        "qty": tQ,
+        "size": size,
+        "fold": fold_info["label"],
+        "markup": round(mk, 3),
+        "components": {k: round(v, 2) for k, v in P.items()},
+        "paper": paper["label"],
+    }
+
+
+def generate_brochure_pricing():
+    """Generate brochure pricing using the brochure & flat printing calculator.
+
+    Uses the WCPA brochures form logic (not the booklet/saddlestitch calc).
     """
     results = []
 
-    # Standard brochure configurations to price
     configs = [
-        # Trifold brochure = 1 sheet folded = ~6 panels = modeled as 4-page booklet on 100lb gloss
         {
             "name": "Trifold Brochure (8.5x11, 100lb Gloss Text, Full Color)",
             "product": "brochures",
             "paper": next(p for p in PAPERS_NC if "100lb Gloss Text" in p["label"]),
-            "paper_type": "non-cardstock",
-            "pages": 4,
+            "fold": "trifold",
             "size": "8.5x11",
             "paper_label": "100lb_gloss",
         },
-        # Bifold brochure = 1 sheet folded in half = 4 pages
         {
             "name": "Bifold Brochure (8.5x11, 100lb Gloss Text, Full Color)",
             "product": "brochures",
             "paper": next(p for p in PAPERS_NC if "100lb Gloss Text" in p["label"]),
-            "paper_type": "non-cardstock",
-            "pages": 4,
+            "fold": "bifold",
             "size": "8.5x11",
             "paper_label": "100lb_gloss",
         },
-        # Trifold on 80lb Matte
         {
             "name": "Trifold Brochure (8.5x11, 80lb Matte Text, Full Color)",
             "product": "brochures",
             "paper": next(p for p in PAPERS_NC if "80lb Matte Text" in p["label"]),
-            "paper_type": "non-cardstock",
-            "pages": 4,
+            "fold": "trifold",
             "size": "8.5x11",
             "paper_label": "matte",
         },
-        # 8-page booklet brochure on 100lb Gloss
         {
-            "name": "8-Page Booklet (5.5x8.5, 100lb Gloss Text, Full Color)",
-            "product": "booklets",
+            "name": "Flat Print (8.5x11, 100lb Gloss Text, Full Color)",
+            "product": "flyers",
             "paper": next(p for p in PAPERS_NC if "100lb Gloss Text" in p["label"]),
-            "paper_type": "non-cardstock",
-            "pages": 8,
-            "size": "5.5x8.5",
+            "fold": "flat",
+            "size": "8.5x11",
+            "paper_label": "100lb_gloss",
+        },
+        {
+            "name": "4-Panel Roll Fold (8.5x14, 100lb Gloss Text, Full Color)",
+            "product": "brochures",
+            "paper": next(p for p in PAPERS_NC if "100lb Gloss Text" in p["label"]),
+            "fold": "rollfold",
+            "size": "8.5x14",
             "paper_label": "100lb_gloss",
         },
     ]
@@ -335,14 +502,11 @@ def generate_brochure_pricing():
 
     for config in configs:
         for qty in quantities:
-            result = calculate_booklet_price(
+            result = calculate_brochure_price(
                 qty=qty,
-                pages=config["pages"],
-                inside_paper=config["paper"],
-                inside_paper_type=config["paper_type"],
-                inside_color="full_color",
-                cover_mode="same",
+                paper=config["paper"],
                 size=config["size"],
+                fold=config["fold"],
             )
             results.append({
                 "config_name": config["name"],
@@ -350,8 +514,8 @@ def generate_brochure_pricing():
                 "quantity": qty,
                 "total_price": result["total"],
                 "per_unit": result["per_unit"],
-                "pages": config["pages"],
                 "size": config["size"],
+                "fold": result["fold"],
                 "paper_type": config["paper_label"],
                 "markup": result["markup"],
                 "components": result["components"],
@@ -372,7 +536,7 @@ def export_own_pricing_json(results: list, output_path: Path):
             "size": r["size"],
             "color_mode": "full_color",
             "sides": "double",
-            "finish": "saddle_stitch" if r["pages"] > 4 else "tri_fold",
+            "finish": r.get("fold", "tri_fold"),
         })
 
     with open(output_path, "w") as f:
@@ -384,7 +548,7 @@ if __name__ == "__main__":
     results = generate_brochure_pricing()
 
     print(f"\n{'='*80}")
-    print("PPS Brochure Pricing (from production calculator)")
+    print("PPS Brochure & Flat Pricing (from WCPA brochure calculator)")
     print(f"{'='*80}\n")
 
     current_config = None

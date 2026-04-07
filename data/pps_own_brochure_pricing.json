@@ -2,281 +2,351 @@
   {
     "product": "brochures",
     "quantity": 25,
-    "total_price": 74.79,
+    "total_price": 18.29,
     "paper_type": "100lb_gloss",
     "size": "8.5x11",
     "color_mode": "full_color",
     "sides": "double",
-    "finish": "tri_fold"
+    "finish": "Trifold (3 Panel)"
   },
   {
     "product": "brochures",
     "quantity": 50,
-    "total_price": 104.02,
+    "total_price": 33.36,
     "paper_type": "100lb_gloss",
     "size": "8.5x11",
     "color_mode": "full_color",
     "sides": "double",
-    "finish": "tri_fold"
+    "finish": "Trifold (3 Panel)"
   },
   {
     "product": "brochures",
     "quantity": 100,
-    "total_price": 159.4,
+    "total_price": 62.88,
     "paper_type": "100lb_gloss",
     "size": "8.5x11",
     "color_mode": "full_color",
     "sides": "double",
-    "finish": "tri_fold"
+    "finish": "Trifold (3 Panel)"
   },
   {
     "product": "brochures",
     "quantity": 250,
-    "total_price": 314.45,
+    "total_price": 144.48,
     "paper_type": "100lb_gloss",
     "size": "8.5x11",
     "color_mode": "full_color",
     "sides": "double",
-    "finish": "tri_fold"
+    "finish": "Trifold (3 Panel)"
   },
   {
     "product": "brochures",
     "quantity": 500,
-    "total_price": 474.43,
+    "total_price": 269.72,
     "paper_type": "100lb_gloss",
     "size": "8.5x11",
     "color_mode": "full_color",
     "sides": "double",
-    "finish": "tri_fold"
+    "finish": "Trifold (3 Panel)"
   },
   {
     "product": "brochures",
     "quantity": 1000,
-    "total_price": 887.51,
+    "total_price": 558.7,
     "paper_type": "100lb_gloss",
     "size": "8.5x11",
     "color_mode": "full_color",
     "sides": "double",
-    "finish": "tri_fold"
+    "finish": "Trifold (3 Panel)"
   },
   {
     "product": "brochures",
     "quantity": 2500,
-    "total_price": 2016.04,
+    "total_price": 1465.52,
     "paper_type": "100lb_gloss",
     "size": "8.5x11",
     "color_mode": "full_color",
     "sides": "double",
-    "finish": "tri_fold"
+    "finish": "Trifold (3 Panel)"
   },
   {
     "product": "brochures",
     "quantity": 25,
-    "total_price": 74.79,
+    "total_price": 18.29,
     "paper_type": "100lb_gloss",
     "size": "8.5x11",
     "color_mode": "full_color",
     "sides": "double",
-    "finish": "tri_fold"
+    "finish": "Bifold (2 Panel)"
   },
   {
     "product": "brochures",
     "quantity": 50,
-    "total_price": 104.02,
+    "total_price": 33.36,
     "paper_type": "100lb_gloss",
     "size": "8.5x11",
     "color_mode": "full_color",
     "sides": "double",
-    "finish": "tri_fold"
+    "finish": "Bifold (2 Panel)"
   },
   {
     "product": "brochures",
     "quantity": 100,
-    "total_price": 159.4,
+    "total_price": 62.88,
     "paper_type": "100lb_gloss",
     "size": "8.5x11",
     "color_mode": "full_color",
     "sides": "double",
-    "finish": "tri_fold"
+    "finish": "Bifold (2 Panel)"
   },
   {
     "product": "brochures",
     "quantity": 250,
-    "total_price": 314.45,
+    "total_price": 144.48,
     "paper_type": "100lb_gloss",
     "size": "8.5x11",
     "color_mode": "full_color",
     "sides": "double",
-    "finish": "tri_fold"
+    "finish": "Bifold (2 Panel)"
   },
   {
     "product": "brochures",
     "quantity": 500,
-    "total_price": 474.43,
+    "total_price": 269.72,
     "paper_type": "100lb_gloss",
     "size": "8.5x11",
     "color_mode": "full_color",
     "sides": "double",
-    "finish": "tri_fold"
+    "finish": "Bifold (2 Panel)"
   },
   {
     "product": "brochures",
     "quantity": 1000,
-    "total_price": 887.51,
+    "total_price": 521.12,
     "paper_type": "100lb_gloss",
     "size": "8.5x11",
     "color_mode": "full_color",
     "sides": "double",
-    "finish": "tri_fold"
+    "finish": "Bifold (2 Panel)"
   },
   {
     "product": "brochures",
     "quantity": 2500,
-    "total_price": 2016.04,
+    "total_price": 1371.7,
     "paper_type": "100lb_gloss",
     "size": "8.5x11",
     "color_mode": "full_color",
     "sides": "double",
-    "finish": "tri_fold"
+    "finish": "Bifold (2 Panel)"
   },
   {
     "product": "brochures",
     "quantity": 25,
-    "total_price": 70.47,
+    "total_price": 16.71,
     "paper_type": "matte",
     "size": "8.5x11",
     "color_mode": "full_color",
     "sides": "double",
-    "finish": "tri_fold"
+    "finish": "Trifold (3 Panel)"
   },
   {
     "product": "brochures",
     "quantity": 50,
-    "total_price": 95.86,
+    "total_price": 30.48,
     "paper_type": "matte",
     "size": "8.5x11",
     "color_mode": "full_color",
     "sides": "double",
-    "finish": "tri_fold"
+    "finish": "Trifold (3 Panel)"
   },
   {
     "product": "brochures",
     "quantity": 100,
-    "total_price": 144.08,
+    "total_price": 57.44,
     "paper_type": "matte",
     "size": "8.5x11",
     "color_mode": "full_color",
     "sides": "double",
-    "finish": "tri_fold"
+    "finish": "Trifold (3 Panel)"
   },
   {
     "product": "brochures",
     "quantity": 250,
-    "total_price": 279.46,
+    "total_price": 131.98,
     "paper_type": "matte",
     "size": "8.5x11",
     "color_mode": "full_color",
     "sides": "double",
-    "finish": "tri_fold"
+    "finish": "Trifold (3 Panel)"
   },
   {
     "product": "brochures",
     "quantity": 500,
-    "total_price": 409.43,
+    "total_price": 246.39,
     "paper_type": "matte",
     "size": "8.5x11",
     "color_mode": "full_color",
     "sides": "double",
-    "finish": "tri_fold"
+    "finish": "Trifold (3 Panel)"
   },
   {
     "product": "brochures",
     "quantity": 1000,
-    "total_price": 767.51,
+    "total_price": 515.37,
     "paper_type": "matte",
     "size": "8.5x11",
     "color_mode": "full_color",
     "sides": "double",
-    "finish": "tri_fold"
+    "finish": "Trifold (3 Panel)"
   },
   {
     "product": "brochures",
     "quantity": 2500,
-    "total_price": 1749.02,
+    "total_price": 1368.2,
     "paper_type": "matte",
     "size": "8.5x11",
     "color_mode": "full_color",
     "sides": "double",
-    "finish": "tri_fold"
+    "finish": "Trifold (3 Panel)"
   },
   {
-    "product": "booklets",
+    "product": "flyers",
     "quantity": 25,
-    "total_price": 69.53,
+    "total_price": 26.76,
     "paper_type": "100lb_gloss",
-    "size": "5.5x8.5",
+    "size": "8.5x11",
     "color_mode": "full_color",
     "sides": "double",
-    "finish": "saddle_stitch"
+    "finish": "Flat - No Folding"
   },
   {
-    "product": "booklets",
+    "product": "flyers",
     "quantity": 50,
-    "total_price": 94.06,
+    "total_price": 42.68,
     "paper_type": "100lb_gloss",
-    "size": "5.5x8.5",
+    "size": "8.5x11",
     "color_mode": "full_color",
     "sides": "double",
-    "finish": "saddle_stitch"
+    "finish": "Flat - No Folding"
   },
   {
-    "product": "booklets",
+    "product": "flyers",
     "quantity": 100,
-    "total_price": 140.62,
+    "total_price": 73.97,
     "paper_type": "100lb_gloss",
-    "size": "5.5x8.5",
+    "size": "8.5x11",
     "color_mode": "full_color",
     "sides": "double",
-    "finish": "saddle_stitch"
+    "finish": "Flat - No Folding"
   },
   {
-    "product": "booklets",
+    "product": "flyers",
     "quantity": 250,
-    "total_price": 271.27,
+    "total_price": 161.5,
     "paper_type": "100lb_gloss",
-    "size": "5.5x8.5",
+    "size": "8.5x11",
     "color_mode": "full_color",
     "sides": "double",
-    "finish": "saddle_stitch"
+    "finish": "Flat - No Folding"
   },
   {
-    "product": "booklets",
+    "product": "flyers",
     "quantity": 500,
-    "total_price": 384.16,
+    "total_price": 297.22,
     "paper_type": "100lb_gloss",
-    "size": "5.5x8.5",
+    "size": "8.5x11",
     "color_mode": "full_color",
     "sides": "double",
-    "finish": "saddle_stitch"
+    "finish": "Flat - No Folding"
   },
   {
-    "product": "booklets",
+    "product": "flyers",
     "quantity": 1000,
-    "total_price": 718.44,
+    "total_price": 550.17,
     "paper_type": "100lb_gloss",
-    "size": "5.5x8.5",
+    "size": "8.5x11",
     "color_mode": "full_color",
     "sides": "double",
-    "finish": "saddle_stitch"
+    "finish": "Flat - No Folding"
   },
   {
-    "product": "booklets",
+    "product": "flyers",
     "quantity": 2500,
-    "total_price": 1631.26,
+    "total_price": 1243.28,
     "paper_type": "100lb_gloss",
-    "size": "5.5x8.5",
+    "size": "8.5x11",
     "color_mode": "full_color",
     "sides": "double",
-    "finish": "saddle_stitch"
+    "finish": "Flat - No Folding"
+  },
+  {
+    "product": "brochures",
+    "quantity": 25,
+    "total_price": 63.25,
+    "paper_type": "100lb_gloss",
+    "size": "8.5x14",
+    "color_mode": "full_color",
+    "sides": "double",
+    "finish": "Roll Fold (4 Panel)"
+  },
+  {
+    "product": "brochures",
+    "quantity": 50,
+    "total_price": 102.59,
+    "paper_type": "100lb_gloss",
+    "size": "8.5x14",
+    "color_mode": "full_color",
+    "sides": "double",
+    "finish": "Roll Fold (4 Panel)"
+  },
+  {
+    "product": "brochures",
+    "quantity": 100,
+    "total_price": 178.33,
+    "paper_type": "100lb_gloss",
+    "size": "8.5x14",
+    "color_mode": "full_color",
+    "sides": "double",
+    "finish": "Roll Fold (4 Panel)"
+  },
+  {
+    "product": "brochures",
+    "quantity": 250,
+    "total_price": 390.74,
+    "paper_type": "100lb_gloss",
+    "size": "8.5x14",
+    "color_mode": "full_color",
+    "sides": "double",
+    "finish": "Roll Fold (4 Panel)"
+  },
+  {
+    "product": "brochures",
+    "quantity": 500,
+    "total_price": 722.94,
+    "paper_type": "100lb_gloss",
+    "size": "8.5x14",
+    "color_mode": "full_color",
+    "sides": "double",
+    "finish": "Roll Fold (4 Panel)"
+  },
+  {
+    "product": "brochures",
+    "quantity": 1000,
+    "total_price": 1349.78,
+    "paper_type": "100lb_gloss",
+    "size": "8.5x14",
+    "color_mode": "full_color",
+    "sides": "double",
+    "finish": "Roll Fold (4 Panel)"
+  },
+  {
+    "product": "brochures",
+    "quantity": 2500,
+    "total_price": 3090.52,
+    "paper_type": "100lb_gloss",
+    "size": "8.5x14",
+    "color_mode": "full_color",
+    "sides": "double",
+    "finish": "Roll Fold (4 Panel)"
   }
 ]
