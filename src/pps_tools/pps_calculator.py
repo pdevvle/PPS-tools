@@ -608,11 +608,7 @@ def print_comparison(results: list):
                 for c in all_competitors:
                     if c in comp_prices:
                         cp = comp_prices[c]
-                        diff = ((cp - pps) / pps) * 100 if pps > 0 else 0
-                        if diff > 0:
-                            cols.append(f"${cp:>8.0f}  ")
-                        else:
-                            cols.append(f"${cp:>8.0f}* ")
+                        cols.append(f"${cp:>8.0f}  ")
                     else:
                         cols.append(f"{'--':>10} ")
 
@@ -639,7 +635,7 @@ def print_comparison(results: list):
             for r in rows:
                 print(f"  {r['quantity']:>6,}  ${r['total_price']:>9.2f}  ${r['per_unit']:>9.4f}  {r['markup']:>6.2f}x")
 
-    print(f"\n  * = competitor is cheaper than PPS")
+    print()
 
 
 if __name__ == "__main__":
