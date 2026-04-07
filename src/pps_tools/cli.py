@@ -5,9 +5,11 @@ import click
 from pps_tools.commands.db import db_group
 from pps_tools.commands.discover import discover
 from pps_tools.commands.fetch import fetch
+from pps_tools.commands.scrape_all import scrape_all
 from pps_tools.commands.compare import compare
 from pps_tools.commands.report import report
 from pps_tools.commands.export import export
+from pps_tools.commands.export_comp_js import export_comp_js
 from pps_tools.commands.import_data import import_group
 
 
@@ -34,9 +36,11 @@ def main():
 main.add_command(db_group, "db")
 main.add_command(discover)
 main.add_command(fetch)
+main.add_command(scrape_all)
 main.add_command(compare)
 main.add_command(report)
 main.add_command(export)
+main.add_command(export_comp_js)
 main.add_command(import_group, "import")
 
 
