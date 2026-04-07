@@ -1,0 +1,282 @@
+[
+  {
+    "product": "brochures",
+    "quantity": 25,
+    "total_price": 74.79,
+    "paper_type": "100lb_gloss",
+    "size": "8.5x11",
+    "color_mode": "full_color",
+    "sides": "double",
+    "finish": "tri_fold"
+  },
+  {
+    "product": "brochures",
+    "quantity": 50,
+    "total_price": 104.02,
+    "paper_type": "100lb_gloss",
+    "size": "8.5x11",
+    "color_mode": "full_color",
+    "sides": "double",
+    "finish": "tri_fold"
+  },
+  {
+    "product": "brochures",
+    "quantity": 100,
+    "total_price": 159.4,
+    "paper_type": "100lb_gloss",
+    "size": "8.5x11",
+    "color_mode": "full_color",
+    "sides": "double",
+    "finish": "tri_fold"
+  },
+  {
+    "product": "brochures",
+    "quantity": 250,
+    "total_price": 314.45,
+    "paper_type": "100lb_gloss",
+    "size": "8.5x11",
+    "color_mode": "full_color",
+    "sides": "double",
+    "finish": "tri_fold"
+  },
+  {
+    "product": "brochures",
+    "quantity": 500,
+    "total_price": 474.43,
+    "paper_type": "100lb_gloss",
+    "size": "8.5x11",
+    "color_mode": "full_color",
+    "sides": "double",
+    "finish": "tri_fold"
+  },
+  {
+    "product": "brochures",
+    "quantity": 1000,
+    "total_price": 887.51,
+    "paper_type": "100lb_gloss",
+    "size": "8.5x11",
+    "color_mode": "full_color",
+    "sides": "double",
+    "finish": "tri_fold"
+  },
+  {
+    "product": "brochures",
+    "quantity": 2500,
+    "total_price": 2016.04,
+    "paper_type": "100lb_gloss",
+    "size": "8.5x11",
+    "color_mode": "full_color",
+    "sides": "double",
+    "finish": "tri_fold"
+  },
+  {
+    "product": "brochures",
+    "quantity": 25,
+    "total_price": 74.79,
+    "paper_type": "100lb_gloss",
+    "size": "8.5x11",
+    "color_mode": "full_color",
+    "sides": "double",
+    "finish": "tri_fold"
+  },
+  {
+    "product": "brochures",
+    "quantity": 50,
+    "total_price": 104.02,
+    "paper_type": "100lb_gloss",
+    "size": "8.5x11",
+    "color_mode": "full_color",
+    "sides": "double",
+    "finish": "tri_fold"
+  },
+  {
+    "product": "brochures",
+    "quantity": 100,
+    "total_price": 159.4,
+    "paper_type": "100lb_gloss",
+    "size": "8.5x11",
+    "color_mode": "full_color",
+    "sides": "double",
+    "finish": "tri_fold"
+  },
+  {
+    "product": "brochures",
+    "quantity": 250,
+    "total_price": 314.45,
+    "paper_type": "100lb_gloss",
+    "size": "8.5x11",
+    "color_mode": "full_color",
+    "sides": "double",
+    "finish": "tri_fold"
+  },
+  {
+    "product": "brochures",
+    "quantity": 500,
+    "total_price": 474.43,
+    "paper_type": "100lb_gloss",
+    "size": "8.5x11",
+    "color_mode": "full_color",
+    "sides": "double",
+    "finish": "tri_fold"
+  },
+  {
+    "product": "brochures",
+    "quantity": 1000,
+    "total_price": 887.51,
+    "paper_type": "100lb_gloss",
+    "size": "8.5x11",
+    "color_mode": "full_color",
+    "sides": "double",
+    "finish": "tri_fold"
+  },
+  {
+    "product": "brochures",
+    "quantity": 2500,
+    "total_price": 2016.04,
+    "paper_type": "100lb_gloss",
+    "size": "8.5x11",
+    "color_mode": "full_color",
+    "sides": "double",
+    "finish": "tri_fold"
+  },
+  {
+    "product": "brochures",
+    "quantity": 25,
+    "total_price": 70.47,
+    "paper_type": "matte",
+    "size": "8.5x11",
+    "color_mode": "full_color",
+    "sides": "double",
+    "finish": "tri_fold"
+  },
+  {
+    "product": "brochures",
+    "quantity": 50,
+    "total_price": 95.86,
+    "paper_type": "matte",
+    "size": "8.5x11",
+    "color_mode": "full_color",
+    "sides": "double",
+    "finish": "tri_fold"
+  },
+  {
+    "product": "brochures",
+    "quantity": 100,
+    "total_price": 144.08,
+    "paper_type": "matte",
+    "size": "8.5x11",
+    "color_mode": "full_color",
+    "sides": "double",
+    "finish": "tri_fold"
+  },
+  {
+    "product": "brochures",
+    "quantity": 250,
+    "total_price": 279.46,
+    "paper_type": "matte",
+    "size": "8.5x11",
+    "color_mode": "full_color",
+    "sides": "double",
+    "finish": "tri_fold"
+  },
+  {
+    "product": "brochures",
+    "quantity": 500,
+    "total_price": 409.43,
+    "paper_type": "matte",
+    "size": "8.5x11",
+    "color_mode": "full_color",
+    "sides": "double",
+    "finish": "tri_fold"
+  },
+  {
+    "product": "brochures",
+    "quantity": 1000,
+    "total_price": 767.51,
+    "paper_type": "matte",
+    "size": "8.5x11",
+    "color_mode": "full_color",
+    "sides": "double",
+    "finish": "tri_fold"
+  },
+  {
+    "product": "brochures",
+    "quantity": 2500,
+    "total_price": 1749.02,
+    "paper_type": "matte",
+    "size": "8.5x11",
+    "color_mode": "full_color",
+    "sides": "double",
+    "finish": "tri_fold"
+  },
+  {
+    "product": "booklets",
+    "quantity": 25,
+    "total_price": 69.53,
+    "paper_type": "100lb_gloss",
+    "size": "5.5x8.5",
+    "color_mode": "full_color",
+    "sides": "double",
+    "finish": "saddle_stitch"
+  },
+  {
+    "product": "booklets",
+    "quantity": 50,
+    "total_price": 94.06,
+    "paper_type": "100lb_gloss",
+    "size": "5.5x8.5",
+    "color_mode": "full_color",
+    "sides": "double",
+    "finish": "saddle_stitch"
+  },
+  {
+    "product": "booklets",
+    "quantity": 100,
+    "total_price": 140.62,
+    "paper_type": "100lb_gloss",
+    "size": "5.5x8.5",
+    "color_mode": "full_color",
+    "sides": "double",
+    "finish": "saddle_stitch"
+  },
+  {
+    "product": "booklets",
+    "quantity": 250,
+    "total_price": 271.27,
+    "paper_type": "100lb_gloss",
+    "size": "5.5x8.5",
+    "color_mode": "full_color",
+    "sides": "double",
+    "finish": "saddle_stitch"
+  },
+  {
+    "product": "booklets",
+    "quantity": 500,
+    "total_price": 384.16,
+    "paper_type": "100lb_gloss",
+    "size": "5.5x8.5",
+    "color_mode": "full_color",
+    "sides": "double",
+    "finish": "saddle_stitch"
+  },
+  {
+    "product": "booklets",
+    "quantity": 1000,
+    "total_price": 718.44,
+    "paper_type": "100lb_gloss",
+    "size": "5.5x8.5",
+    "color_mode": "full_color",
+    "sides": "double",
+    "finish": "saddle_stitch"
+  },
+  {
+    "product": "booklets",
+    "quantity": 2500,
+    "total_price": 1631.26,
+    "paper_type": "100lb_gloss",
+    "size": "5.5x8.5",
+    "color_mode": "full_color",
+    "sides": "double",
+    "finish": "saddle_stitch"
+  }
+]
