@@ -2,414 +2,379 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PPS Pricing Comparison</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>PPS Pricing Calculator</title>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; padding: 20px; max-width: 960px; margin: 0 auto; }
-  h1 { font-size: 22px; margin-bottom: 4px; }
-  .subtitle { color: #666; font-size: 13px; margin-bottom: 20px; }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif; background: #1a1d23; color: #e0e0e0; min-height: 100vh; }
 
-  .controls { background: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 20px; }
-  .controls h2 { font-size: 15px; margin-bottom: 14px; color: #555; text-transform: uppercase; letter-spacing: 0.5px; }
-  .row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
-  .field { flex: 1; min-width: 180px; }
-  .field label { display: block; font-size: 12px; font-weight: 600; color: #777; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.3px; }
-  .field select, .field input { width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; background: #fafafa; }
-  .field select:focus, .field input:focus { outline: none; border-color: #4a90d9; box-shadow: 0 0 0 2px rgba(74,144,217,0.2); }
+  /* ── PPS CMYK palette ── */
+  :root {
+    --cyan: #007eff;
+    --magenta: #d1246a;
+    --yellow: #f0a830;
+    --key: #2b2b2b;
+    --bg: #1a1d23;
+    --card: #22252b;
+    --border: rgba(255,255,255,.08);
+    --light: #888;
+    --mid: #bbb;
+    --dark: #e8e8e8;
+  }
 
-  /* ── Results ── */
-  .qty-card { background: #fff; border-radius: 10px; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 12px; }
-  .qty-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-  .qty-label { font-size: 13px; color: #888; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
-  .qty-pps { font-size: 22px; font-weight: 700; color: #2563eb; }
-  .qty-unit { font-size: 12px; color: #888; font-weight: 400; margin-left: 6px; }
+  .header { padding: 18px 24px; background: linear-gradient(135deg, #1a1d23 0%, #22252b 100%); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 14px; }
+  .logo-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .header h1 { font-size: 16px; font-weight: 700; color: #fff; letter-spacing: -0.3px; }
+  .header span { font-size: 11px; color: var(--light); }
 
-  .comp-bar { display: flex; align-items: center; padding: 6px 0; border-bottom: 1px solid #f3f4f6; }
-  .comp-bar:last-child { border-bottom: none; }
-  .comp-rank { width: 28px; font-size: 12px; font-weight: 700; color: #9ca3af; text-align: center; flex-shrink: 0; }
-  .comp-name { flex: 1; font-size: 13px; padding-left: 8px; }
-  .comp-name.is-pps { font-weight: 700; color: #2563eb; }
-  .comp-price-val { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; width: 80px; text-align: right; flex-shrink: 0; }
-  .comp-meter { flex: 2; padding: 0 12px; min-width: 100px; }
-  .comp-meter-bg { height: 8px; background: #f3f4f6; border-radius: 4px; overflow: hidden; position: relative; }
-  .comp-meter-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
-  .comp-diff { font-size: 11px; width: 60px; text-align: right; flex-shrink: 0; }
+  .wrap { max-width: 520px; margin: 0 auto; padding: 16px; }
 
-  .fill-pps { background: #2563eb; }
-  .fill-cheaper { background: #dc2626; }
-  .fill-more { background: #10b981; }
+  /* ── Card ── */
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .card-head { padding: 10px 16px; border-bottom: 1px solid var(--border); }
+  .card-head h2 { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px; color: var(--light); }
+  .card-body { padding: 14px 16px; }
 
-  .diff-cheaper { color: #dc2626; }
-  .diff-more { color: #059669; }
-  .diff-pps { color: #2563eb; }
+  /* ── Form fields (matches your calculator style) ── */
+  .field { margin-bottom: 10px; }
+  .field label { display: block; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; color: var(--light); margin-bottom: 4px; }
+  .field select, .field input {
+    width: 100%; padding: 9px 11px; background: rgba(255,255,255,.04);
+    border: 1px solid var(--border); border-radius: 7px; color: var(--dark);
+    font-size: 14px; font-family: inherit; transition: border-color .2s;
+    -webkit-appearance: none; appearance: none;
+  }
+  .field select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 30px; }
+  .field select:focus, .field input:focus { outline: none; border-color: var(--cyan); box-shadow: 0 0 0 2px rgba(0,126,255,.15); }
+  .row2 { display: flex; gap: 10px; }
+  .row2 .field { flex: 1; }
 
-  .position-badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; }
-  .badge-1 { background: #d1fae5; color: #065f46; }
-  .badge-mid { background: #fef3c7; color: #92400e; }
-  .badge-last { background: #fee2e2; color: #991b1b; }
+  /* ── Price panel (matches your calculator's output panel) ── */
+  .price-panel { border-radius: 10px; overflow: hidden; background: var(--card); border: 1px solid var(--border); margin-bottom: 14px; }
+  .price-hero { padding: 20px 18px 16px; background: linear-gradient(135deg, var(--cyan) 0%, #0066cc 100%); color: #fff; }
+  .price-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; opacity: .8; margin-bottom: 4px; }
+  .price-total { font-size: 36px; font-weight: 800; letter-spacing: -1.5px; line-height: 1; }
+  .price-stats { display: flex; border-bottom: 1px solid var(--border); }
+  .price-stat { flex: 1; padding: 10px 8px; text-align: center; border-right: 1px solid var(--border); }
+  .price-stat:last-child { border-right: none; }
+  .price-stat-label { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; color: var(--light); margin-bottom: 1px; }
+  .price-stat-val { font-size: 14px; font-weight: 700; color: var(--dark); }
 
-  .summary-bar { background: #fff; border-radius: 10px; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 20px; }
-  .summary-bar h2 { font-size: 15px; margin-bottom: 10px; color: #555; }
-  .summary-stats { display: flex; gap: 20px; flex-wrap: wrap; }
-  .stat { text-align: center; flex: 1; min-width: 100px; }
-  .stat-num { font-size: 28px; font-weight: 700; }
-  .stat-num.green { color: #059669; }
-  .stat-num.red { color: #dc2626; }
-  .stat-num.yellow { color: #d97706; }
-  .stat-label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.3px; margin-top: 2px; }
+  /* ── Competitor comparison ── */
+  .comp-section { padding: 14px 16px; border-top: 1px solid var(--border); }
+  .comp-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--light); margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+  .comp-row { display: flex; align-items: center; padding: 4px 0; gap: 6px; }
+  .comp-rank { width: 18px; font-size: 10px; font-weight: 700; color: #555; text-align: center; flex-shrink: 0; }
+  .comp-name { width: 95px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
+  .comp-name.is-pps { color: var(--cyan); font-weight: 700; }
+  .comp-bar-wrap { flex: 1; height: 7px; background: rgba(255,255,255,.06); border-radius: 4px; overflow: hidden; }
+  .comp-bar { height: 100%; border-radius: 4px; transition: width .4s ease; }
+  .bar-pps { background: var(--cyan); }
+  .bar-cheaper { background: var(--magenta); }
+  .bar-more { background: #10b981; }
+  .comp-price { width: 58px; font-size: 12px; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+  .comp-diff { width: 40px; font-size: 10px; text-align: right; font-weight: 600; flex-shrink: 0; }
+  .diff-pps { color: var(--cyan); }
+  .diff-cheaper { color: var(--magenta); }
+  .diff-more { color: #10b981; }
 
-  .no-comp { color: #aaa; font-size: 12px; font-style: italic; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 9px; font-weight: 700; letter-spacing: .3px; }
+  .badge-win { background: rgba(16,185,129,.15); color: #10b981; }
+  .badge-lose { background: rgba(209,36,106,.15); color: var(--magenta); }
+  .badge-mid { background: rgba(240,168,48,.15); color: var(--yellow); }
+
+  .comp-note { font-size: 9px; color: #555; margin-top: 8px; line-height: 1.4; }
+
+  /* ── Quantity selector ── */
+  .qty-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 14px; }
+  .qty-tab { padding: 6px 12px; background: rgba(255,255,255,.04); border: 1px solid var(--border); border-radius: 6px; font-size: 12px; font-weight: 600; color: var(--light); cursor: pointer; transition: all .15s; }
+  .qty-tab:hover { border-color: var(--cyan); color: var(--cyan); }
+  .qty-tab.active { background: var(--cyan); border-color: var(--cyan); color: #000; }
 </style>
 </head>
 <body>
 
-<h1>PPS Pricing Comparison</h1>
-<p class="subtitle">Pick your specs — see how your price stacks up instantly</p>
-
-<div class="controls">
-  <h2>Configuration</h2>
-  <div class="row">
-    <div class="field">
-      <label>Product Type</label>
-      <select id="productType" onchange="onProductChange(); calculate();">
-        <option value="brochure">Brochure</option>
-        <option value="flat">Flat Print / Flyer</option>
-      </select>
-    </div>
-    <div class="field">
-      <label>Fold Type</label>
-      <select id="foldType" onchange="calculate()">
-        <option value="trifold">Trifold (3 Panel)</option>
-        <option value="bifold">Bifold (2 Panel)</option>
-        <option value="accordion3">Accordion (3 Panel)</option>
-        <option value="gatefold">Gate Fold (3 Panel)</option>
-        <option value="accordion4">Accordion (4 Panel)</option>
-        <option value="rollfold">Roll Fold (4 Panel)</option>
-        <option value="doublegate">Double Gate Fold (4 Panel)</option>
-        <option value="doubleparallel">Double Parallel Fold (4 Panel)</option>
-      </select>
-    </div>
-    <div class="field">
-      <label>Size (Unfolded)</label>
-      <select id="size" onchange="calculate()">
-        <option value="8.5x11">8.5 x 11</option>
-        <option value="8.5x14">8.5 x 14</option>
-        <option value="11x17">11 x 17</option>
-        <option value="6x9">6 x 9</option>
-        <option value="5.5x8.5">5.5 x 8.5</option>
-        <option value="4x6">4 x 6</option>
-        <option value="4.25x5.5">4.25 x 5.5</option>
-        <option value="3.5x5">3.5 x 5</option>
-      </select>
-    </div>
-  </div>
-  <div class="row">
-    <div class="field">
-      <label>Paper</label>
-      <select id="paper" onchange="calculate()">
-        <optgroup label="Text Weight">
-          <option value="0.001">70lb Uncoated Opaque Text</option>
-          <option value="0.002">80lb Matte Text</option>
-          <option value="0.003" selected>100lb Gloss Text</option>
-          <option value="2.001">50lb Offset Smooth Opaque</option>
-          <option value="2.002">60lb Offset Smooth Opaque</option>
-          <option value="2.003">80lb Offset Smooth Opaque</option>
-          <option value="2.004">80lb Gloss Factory Coated</option>
-          <option value="2.005">100lb Matte Factory Coated</option>
-        </optgroup>
-        <optgroup label="Cardstock">
-          <option value="0.01">80lb Opaque Uncoated</option>
-          <option value="0.02">80lb Matte Cardstock</option>
-          <option value="0.03">100lb Gloss Cardstock</option>
-          <option value="1.01">14pt Gloss C1S</option>
-          <option value="1.02">16pt Coated C2S</option>
-        </optgroup>
-      </select>
-    </div>
-    <div class="field">
-      <label>Front Color</label>
-      <select id="frontColor" onchange="calculate()">
-        <option value="full_color">Full Color</option>
-        <option value="bw">Greyscale</option>
-      </select>
-    </div>
-    <div class="field">
-      <label>Back Color</label>
-      <select id="backColor" onchange="calculate()">
-        <option value="full_color">Full Color</option>
-        <option value="bw">Greyscale</option>
-      </select>
-    </div>
-  </div>
-  <div class="row">
-    <div class="field">
-      <label>Quantities (comma-separated)</label>
-      <input type="text" id="quantities" value="25, 50, 100, 250, 500, 1000, 2500" onchange="calculate()" onkeyup="clearTimeout(window._qd); window._qd=setTimeout(calculate, 400);">
-    </div>
+<div class="header">
+  <div class="logo-dot" style="background:var(--cyan)"></div>
+  <div class="logo-dot" style="background:var(--magenta)"></div>
+  <div class="logo-dot" style="background:var(--yellow)"></div>
+  <div class="logo-dot" style="background:var(--key)"></div>
+  <div>
+    <h1>Pricing Calculator</h1>
+    <span>Priority Print Service</span>
   </div>
 </div>
 
-<div id="summaryBar"></div>
-<div id="resultsPanel"></div>
+<div class="wrap">
+
+  <!-- Config -->
+  <div class="card">
+    <div class="card-head"><h2>Configuration</h2></div>
+    <div class="card-body">
+      <div class="field">
+        <label>Product</label>
+        <select id="productType" onchange="onProductChange(); calc();">
+          <option value="brochure">Brochure</option>
+          <option value="flat">Flat Print / Flyer</option>
+        </select>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>Fold Type</label>
+          <select id="foldType" onchange="calc()">
+            <option value="trifold">Trifold (3 Panel)</option>
+            <option value="bifold">Bifold (2 Panel)</option>
+            <option value="accordion3">Accordion (3 Panel)</option>
+            <option value="gatefold">Gate Fold (3 Panel)</option>
+            <option value="accordion4">Accordion (4 Panel)</option>
+            <option value="rollfold">Roll Fold (4 Panel)</option>
+            <option value="doublegate">Double Gate (4 Panel)</option>
+            <option value="doubleparallel">Dbl Parallel (4 Panel)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Size (Unfolded)</label>
+          <select id="size" onchange="calc()">
+            <option value="8.5x11">8.5 x 11</option>
+            <option value="8.5x14">8.5 x 14</option>
+            <option value="11x17">11 x 17</option>
+            <option value="6x9">6 x 9</option>
+            <option value="5.5x8.5">5.5 x 8.5</option>
+            <option value="4x6">4 x 6</option>
+            <option value="4.25x5.5">4.25 x 5.5</option>
+            <option value="3.5x5">3.5 x 5</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label>Paper</label>
+        <select id="paper" onchange="calc()">
+          <optgroup label="Text Weight">
+            <option value="0.001">70lb Uncoated Opaque Text</option>
+            <option value="0.002">80lb Matte Text</option>
+            <option value="0.003" selected>100lb Gloss Text</option>
+            <option value="2.001">50lb Offset Smooth Opaque</option>
+            <option value="2.002">60lb Offset Smooth Opaque</option>
+            <option value="2.003">80lb Offset Smooth Opaque</option>
+            <option value="2.004">80lb Gloss Factory Coated</option>
+            <option value="2.005">100lb Matte Factory Coated</option>
+          </optgroup>
+          <optgroup label="Cardstock">
+            <option value="0.01">80lb Opaque Uncoated</option>
+            <option value="0.02">80lb Matte Cardstock</option>
+            <option value="0.03">100lb Gloss Cardstock</option>
+            <option value="1.01">14pt Gloss C1S</option>
+            <option value="1.02">16pt Coated C2S</option>
+          </optgroup>
+        </select>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>Front Color</label>
+          <select id="frontColor" onchange="calc()">
+            <option value="full_color">Full Color</option>
+            <option value="bw">Greyscale</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Back Color</label>
+          <select id="backColor" onchange="calc()">
+            <option value="full_color">Full Color</option>
+            <option value="bw">Greyscale</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quantity tabs -->
+  <div class="qty-tabs" id="qtyTabs"></div>
+
+  <!-- Price output + comparison (populated by JS) -->
+  <div id="output"></div>
+
+</div>
 
 <script>
-// ── Paper data ──
+// ── Data ──
 const ALL_PAPERS = [
-  {label:"70lb Uncoated Opaque Text", val:0.001, price:0.06, factory:false, coatable:false, cat:"text"},
-  {label:"80lb Matte Text", val:0.002, price:0.069, factory:false, coatable:false, cat:"text"},
-  {label:"100lb Gloss Text", val:0.003, price:0.085, factory:false, coatable:true, cat:"text"},
-  {label:"50lb Offset Smooth Opaque", val:2.001, price:0.039, factory:true, coatable:false, cat:"text"},
-  {label:"60lb Offset Smooth Opaque", val:2.002, price:0.042, factory:true, coatable:false, cat:"text"},
-  {label:"80lb Offset Smooth Opaque", val:2.003, price:0.056, factory:true, coatable:false, cat:"text"},
-  {label:"80lb Gloss Factory Coated", val:2.004, price:0.0525, factory:true, coatable:true, cat:"text"},
-  {label:"100lb Matte Factory Coated", val:2.005, price:0.070, factory:true, coatable:true, cat:"text"},
-  {label:"80lb Opaque Uncoated", val:0.01, price:0.0919, factory:false, coatable:false, cat:"cardstock"},
-  {label:"80lb Matte Cardstock", val:0.02, price:0.1119, factory:false, coatable:true, cat:"cardstock"},
-  {label:"100lb Gloss Cardstock", val:0.03, price:0.1319, factory:false, coatable:true, cat:"cardstock"},
-  {label:"14pt Gloss C1S", val:1.01, price:0.1619, factory:false, coatable:true, cat:"cardstock"},
-  {label:"16pt Coated C2S", val:1.02, price:0.1919, factory:false, coatable:true, cat:"cardstock"},
+  {label:"70lb Uncoated Opaque Text",val:0.001,price:0.06,cat:"text"},
+  {label:"80lb Matte Text",val:0.002,price:0.069,cat:"text"},
+  {label:"100lb Gloss Text",val:0.003,price:0.085,cat:"text"},
+  {label:"50lb Offset Smooth Opaque",val:2.001,price:0.039,cat:"text"},
+  {label:"60lb Offset Smooth Opaque",val:2.002,price:0.042,cat:"text"},
+  {label:"80lb Offset Smooth Opaque",val:2.003,price:0.056,cat:"text"},
+  {label:"80lb Gloss Factory Coated",val:2.004,price:0.0525,cat:"text"},
+  {label:"100lb Matte Factory Coated",val:2.005,price:0.070,cat:"text"},
+  {label:"80lb Opaque Uncoated",val:0.01,price:0.0919,cat:"cs"},
+  {label:"80lb Matte Cardstock",val:0.02,price:0.1119,cat:"cs"},
+  {label:"100lb Gloss Cardstock",val:0.03,price:0.1319,cat:"cs"},
+  {label:"14pt Gloss C1S",val:1.01,price:0.1619,cat:"cs"},
+  {label:"16pt Coated C2S",val:1.02,price:0.1919,cat:"cs"},
 ];
-
-const INV_NC = [0.001, 0.002, 0.003];
-const INV_CS = [0.01, 0.02, 0.03, 1.01, 1.02];
-
+const INV = [0.001,0.002,0.003,0.01,0.02,0.03,1.01,1.02];
 const PCF = {
-  printing_fullcolor_cost: 0.05, printing_black_cost: 0.01,
-  labor_press_hr: 35, labor_bindery_hr: 35, labor_cutting_hr: 45,
-  press_printsperhour: 600, bindery_morgana_impressionperhour: 750,
-  cutterbasefee: 7.5, backend_maximummarkup: 9, backend_minimummarkup: 1.5,
-  easydiscount_max: 1500, easydiscount_factor: 0.05,
-  non_inventory_fee: 35, sets_surcharge: 20,
-  cutter_stackheight_inches: 3, cutter_cyclesperhour: 200,
+  fc:0.05, bw:0.01, lp:35, lb:35, lc:45, pph:600, mph:750,
+  cbf:7.5, mkx:9, mkn:1.5, edm:1500, edf:0.05, nif:35,
+  csi:3, cph:200
 };
-
 const FOLDS = {
-  flat:           {label:"Flat - No Folding", folds:0},
-  bifold:         {label:"Bifold (2 Panel)", folds:1},
-  trifold:        {label:"Trifold (3 Panel)", folds:2},
-  accordion3:     {label:"Accordion (3 Panel)", folds:2},
-  gatefold:       {label:"Gate Fold (3 Panel)", folds:2},
-  accordion4:     {label:"Accordion (4 Panel)", folds:3},
-  rollfold:       {label:"Roll Fold (4 Panel)", folds:3},
-  doublegate:     {label:"Double Gate Fold (4 Panel)", folds:3},
-  doubleparallel: {label:"Double Parallel Fold (4 Panel)", folds:3},
+  flat:{l:"Flat",f:0}, bifold:{l:"Bifold",f:1}, trifold:{l:"Trifold",f:2},
+  accordion3:{l:"Accordion 3P",f:2}, gatefold:{l:"Gate Fold",f:2},
+  accordion4:{l:"Accordion 4P",f:3}, rollfold:{l:"Roll Fold",f:3},
+  doublegate:{l:"Double Gate",f:3}, doubleparallel:{l:"Dbl Parallel",f:3}
 };
+const SIZES = {"8.5x11":2,"8.5x14":1,"11x17":1,"6x9":4,"5.5x8.5":4,"4x6":8,"4.25x5.5":8,"3.5x5":8};
+const QTYS = [25,50,100,250,500,1000,2500];
 
-const SIZES = {
-  "8.5x11":{spp:2}, "8.5x14":{spp:1}, "11x17":{spp:1}, "6x9":{spp:4},
-  "5.5x8.5":{spp:4}, "4x6":{spp:8}, "4.25x5.5":{spp:8}, "3.5x5":{spp:8},
-};
-
-// ── Competitor prices ──
-// Each entry: {competitor: price} at competitor's standard config.
-// spec notes what they were priced on so you know the comparison basis.
-const COMP_PRICES = {
+// ── Competitor prices (update via: pps scrape-all && pps export-comp-js) ──
+const COMP = {
   brochures: {
-    spec: "8.5x11, 100lb gloss text, full color, double-sided, trifold",
-    tiers: {
-      25:   {gotprint:32, overnightprints:40, printplace:35, psprint:42, uprinting:38, vistaprint:46},
-      50:   {gotprint:42, overnightprints:55, printplace:48, psprint:58, uprinting:50, vistaprint:72},
-      100:  {gotprint:62, overnightprints:78, printplace:68, psprint:82, uprinting:72, vistaprint:110},
-      250:  {gotprint:100, overnightprints:135, printplace:115, psprint:145, uprinting:125, vistaprint:190},
-      500:  {gotprint:160, overnightprints:210, printplace:180, psprint:230, uprinting:195, vistaprint:310},
-      1000: {gotprint:270, overnightprints:360, printplace:310, psprint:400, uprinting:340, vistaprint:520},
-      2500: {gotprint:540, overnightprints:730, printplace:620, psprint:810, uprinting:690, vistaprint:1050},
+    spec:"8.5x11, 100lb gloss text, full color, both sides, trifold",
+    tiers:{
+      25:{gotprint:32,overnightprints:40,printplace:35,psprint:42,uprinting:38,vistaprint:46},
+      50:{gotprint:42,overnightprints:55,printplace:48,psprint:58,uprinting:50,vistaprint:72},
+      100:{gotprint:62,overnightprints:78,printplace:68,psprint:82,uprinting:72,vistaprint:110},
+      250:{gotprint:100,overnightprints:135,printplace:115,psprint:145,uprinting:125,vistaprint:190},
+      500:{gotprint:160,overnightprints:210,printplace:180,psprint:230,uprinting:195,vistaprint:310},
+      1000:{gotprint:270,overnightprints:360,printplace:310,psprint:400,uprinting:340,vistaprint:520},
+      2500:{gotprint:540,overnightprints:730,printplace:620,psprint:810,uprinting:690,vistaprint:1050}
     }
   },
   flyers: {
-    spec: "8.5x11, 100lb gloss text, full color, single-sided, flat",
-    tiers: {
-      100:  {gotprint:18, printplace:20, uprinting:19, vistaprint:24},
-      250:  {gotprint:28, printplace:32, uprinting:30, vistaprint:40},
-      500:  {gotprint:40, printplace:45, uprinting:42, vistaprint:60},
-      1000: {gotprint:60, printplace:65, uprinting:62, vistaprint:90},
-      5000: {gotprint:180, printplace:200, uprinting:190, vistaprint:250},
+    spec:"8.5x11, 100lb gloss text, full color, single-sided",
+    tiers:{
+      100:{gotprint:18,printplace:20,uprinting:19,vistaprint:24},
+      250:{gotprint:28,printplace:32,uprinting:30,vistaprint:40},
+      500:{gotprint:40,printplace:45,uprinting:42,vistaprint:60},
+      1000:{gotprint:60,printplace:65,uprinting:62,vistaprint:90},
+      5000:{gotprint:180,printplace:200,uprinting:190,vistaprint:250}
     }
   }
 };
 
+let activeQty = 100;
+
 // ── Calculator ──
-function calcPPS(qty, paperVal, sizeKey, foldKey, frontColor, backColor) {
-  const paper = ALL_PAPERS.find(p => p.val === paperVal);
-  if (!paper) return null;
-  const sz = SIZES[sizeKey] || SIZES["8.5x11"];
-  const fold = FOLDS[foldKey] || FOLDS["flat"];
-  const isFlat = foldKey === "flat";
-  const spp = sz.spp;
-  const parentSheets = Math.ceil(qty / spp);
-
-  const paperCostRaw = paper.price * parentSheets;
-  const frontCostRaw = (frontColor === "bw" ? PCF.printing_black_cost : PCF.printing_fullcolor_cost) * parentSheets;
-  const backCostRaw  = (backColor === "bw"  ? PCF.printing_black_cost : PCF.printing_fullcolor_cost) * parentSheets;
-
-  const dL = parentSheets > 0 ? (0.6 * Math.log(parentSheets)) - 0.1447 : 0;
-  const mk = Math.max(PCF.backend_maximummarkup - dL, PCF.backend_minimummarkup);
-
+function calcPPS(qty, pv, sz, fk, fc, bc) {
+  const p = ALL_PAPERS.find(x => x.val === pv); if(!p) return null;
+  const spp = SIZES[sz]||2, fold = FOLDS[fk]||FOLDS.flat, flat = fk==="flat";
+  const ps = Math.ceil(qty/spp);
+  const dL = ps>0?(0.6*Math.log(ps))-0.1447:0;
+  const mk = Math.max(PCF.mkx-dL, PCF.mkn);
   const P = {};
-  P.paper = paperCostRaw * mk;
-  P.printing = (frontCostRaw + backCostRaw) * mk;
-  P.press = (parentSheets / PCF.press_printsperhour) * PCF.labor_press_hr;
-  const cutsPerSheet = Math.max(1, spp - 1) + fold.folds;
-  const stacks = Math.ceil(parentSheets / PCF.cutter_stackheight_inches);
-  P.cutting = ((stacks * cutsPerSheet) / PCF.cutter_cyclesperhour) * PCF.labor_cutting_hr + PCF.cutterbasefee;
-  P.folding = isFlat ? 0 : (qty / PCF.bindery_morgana_impressionperhour) * PCF.labor_bindery_hr + (PCF.labor_bindery_hr / 3);
-  P.nonInv = (INV_NC.includes(paper.val) || INV_CS.includes(paper.val)) ? 0 : PCF.non_inventory_fee;
-
-  const isStandard = spp >= 2;
-  if (isStandard && isFlat) P.discEasy = -Math.min((P.paper + P.printing) * PCF.easydiscount_factor, PCF.easydiscount_max / 10);
-  else if (isStandard) P.discEasy = -Math.min(P.press + P.cutting + P.folding, PCF.easydiscount_max / 10);
-  else P.discEasy = 0;
-
-  const total = Object.values(P).reduce((a, b) => a + b, 0);
-  return { total: Math.round(total * 100) / 100, perUnit: total / qty, markup: mk };
+  P.paper = p.price*ps*mk;
+  P.print = ((fc==="bw"?PCF.bw:PCF.fc)+(bc==="bw"?PCF.bw:PCF.fc))*ps*mk;
+  P.press = (ps/PCF.pph)*PCF.lp;
+  P.cut = ((Math.ceil(ps/PCF.csi)*(Math.max(1,spp-1)+fold.f))/PCF.cph)*PCF.lc+PCF.cbf;
+  P.fold = flat?0:(qty/PCF.mph)*PCF.lb+(PCF.lb/3);
+  P.nif = INV.includes(p.val)?0:PCF.nif;
+  const std = spp>=2;
+  P.disc = std&&flat ? -Math.min((P.paper+P.print)*PCF.edf,PCF.edm/10) : std ? -Math.min(P.press+P.cut+P.fold,PCF.edm/10) : 0;
+  const t = Object.values(P).reduce((a,b)=>a+b,0);
+  return {total:Math.round(t*100)/100, unit:t/qty, mk};
 }
 
-// ── Quantity matching ──
-function matchQty(qty, tiers) {
-  const keys = Object.keys(tiers).map(Number).sort((a,b) => a - b);
-  if (keys.includes(qty)) return qty;
-  const lower = keys.filter(k => k <= qty);
-  return lower.length ? lower[lower.length - 1] : keys[0];
+function matchQty(q, tiers) {
+  const ks = Object.keys(tiers).map(Number).sort((a,b)=>a-b);
+  if(ks.includes(q)) return q;
+  const lo = ks.filter(k=>k<=q);
+  return lo.length ? lo[lo.length-1] : ks[0];
 }
 
 // ── UI ──
 function onProductChange() {
-  const foldSel = document.getElementById('foldType');
-  if (document.getElementById('productType').value === 'flat') {
-    foldSel.disabled = true;
-  } else {
-    foldSel.disabled = false;
-    if (!foldSel.value) foldSel.value = 'trifold';
-  }
+  const f = document.getElementById('foldType');
+  f.disabled = document.getElementById('productType').value === 'flat';
 }
 
-function calculate() {
-  const productType = document.getElementById('productType').value;
-  const foldKey = productType === 'flat' ? 'flat' : document.getElementById('foldType').value;
-  const sizeKey = document.getElementById('size').value;
-  const paperVal = parseFloat(document.getElementById('paper').value);
-  const frontColor = document.getElementById('frontColor').value;
-  const backColor = document.getElementById('backColor').value;
-  const qtys = document.getElementById('quantities').value.split(',').map(s => parseInt(s.trim())).filter(n => n > 0);
-
-  const compKey = productType === 'flat' ? 'flyers' : 'brochures';
-  const compBlock = COMP_PRICES[compKey];
-  const compTiers = compBlock ? compBlock.tiers : {};
-  const compSpec = compBlock ? compBlock.spec : '';
-
-  let cards = '';
-  let winCount = 0, loseCount = 0, midCount = 0;
-
-  for (const qty of qtys) {
-    const pps = calcPPS(qty, paperVal, sizeKey, foldKey, frontColor, backColor);
-    if (!pps) continue;
-
-    const matched = matchQty(qty, compTiers);
-    const comps = compTiers[matched] || {};
-    const hasComps = Object.keys(comps).length > 0;
-
-    // Build ranked list
-    const all = [{name: 'PPS (You)', price: pps.total, isPPS: true}];
-    for (const [name, price] of Object.entries(comps)) {
-      all.push({name: name.charAt(0).toUpperCase() + name.slice(1), price, isPPS: false});
-    }
-    all.sort((a, b) => a.price - b.price);
-    const ppsRank = all.findIndex(a => a.isPPS) + 1;
-    const total = all.length;
-
-    if (ppsRank === 1) winCount++;
-    else if (ppsRank === total && total > 1) loseCount++;
-    else midCount++;
-
-    // Max price for meter scaling
-    const maxPrice = Math.max(...all.map(a => a.price));
-
-    // Badge
-    let badgeClass, badgeText;
-    if (!hasComps) { badgeClass = ''; badgeText = ''; }
-    else if (ppsRank === 1) { badgeClass = 'badge-1'; badgeText = 'Cheapest'; }
-    else if (ppsRank === total) { badgeClass = 'badge-last'; badgeText = `#${ppsRank} of ${total}`; }
-    else { badgeClass = 'badge-mid'; badgeText = `#${ppsRank} of ${total}`; }
-
-    // Bars
-    let bars = '';
-    for (let i = 0; i < all.length; i++) {
-      const a = all[i];
-      const pct = (a.price / maxPrice * 100).toFixed(1);
-      let fillClass, diffClass, diffText;
-
-      if (a.isPPS) {
-        fillClass = 'fill-pps';
-        diffClass = 'diff-pps';
-        diffText = 'you';
-      } else {
-        const diff = ((a.price - pps.total) / pps.total * 100);
-        if (diff < 0) {
-          fillClass = 'fill-cheaper';
-          diffClass = 'diff-cheaper';
-          diffText = diff.toFixed(0) + '%';
-        } else {
-          fillClass = 'fill-more';
-          diffClass = 'diff-more';
-          diffText = '+' + diff.toFixed(0) + '%';
-        }
-      }
-
-      bars += `
-        <div class="comp-bar">
-          <div class="comp-rank">${i + 1}</div>
-          <div class="comp-name ${a.isPPS ? 'is-pps' : ''}">${a.name}</div>
-          <div class="comp-price-val">$${a.price.toFixed(2)}</div>
-          <div class="comp-meter"><div class="comp-meter-bg"><div class="comp-meter-fill ${fillClass}" style="width:${pct}%"></div></div></div>
-          <div class="comp-diff ${diffClass}">${diffText}</div>
-        </div>`;
-    }
-
-    const qtyNote = (hasComps && matched !== qty)
-      ? `<span class="no-comp">Competitor prices shown for ${matched.toLocaleString()} qty (closest match)</span>`
-      : '';
-
-    cards += `
-      <div class="qty-card">
-        <div class="qty-header">
-          <div>
-            <span class="qty-label">${qty.toLocaleString()} units</span>
-            ${qtyNote}
-          </div>
-          <div>
-            <span class="qty-pps">$${pps.total.toFixed(2)}</span>
-            <span class="qty-unit">($${pps.perUnit.toFixed(4)}/ea)</span>
-            ${badgeText ? `<span class="position-badge ${badgeClass}">${badgeText}</span>` : ''}
-          </div>
-        </div>
-        ${hasComps ? bars : '<span class="no-comp">No competitor data at this quantity</span>'}
-      </div>`;
-  }
-
-  // Summary bar
-  const totalTiers = winCount + loseCount + midCount;
-  let summaryHtml = '';
-  if (totalTiers > 0) {
-    summaryHtml = `
-      <div class="summary-bar">
-        <h2>Summary</h2>
-        <div class="summary-stats">
-          <div class="stat"><div class="stat-num green">${winCount}</div><div class="stat-label">Cheapest</div></div>
-          <div class="stat"><div class="stat-num yellow">${midCount}</div><div class="stat-label">Mid-range</div></div>
-          <div class="stat"><div class="stat-num red">${loseCount}</div><div class="stat-label">Most Expensive</div></div>
-          <div class="stat"><div class="stat-num">${totalTiers}</div><div class="stat-label">Qty Tiers</div></div>
-        </div>
-        ${compSpec ? `<div style="margin-top:10px;font-size:11px;color:#aaa;">Competitor baseline: ${compSpec}</div>` : ''}
-      </div>`;
-  }
-
-  document.getElementById('summaryBar').innerHTML = summaryHtml;
-  document.getElementById('resultsPanel').innerHTML = cards;
+function buildQtyTabs() {
+  const el = document.getElementById('qtyTabs');
+  el.innerHTML = QTYS.map(q =>
+    `<div class="qty-tab ${q===activeQty?'active':''}" onclick="activeQty=${q};buildQtyTabs();calc();">${q.toLocaleString()}</div>`
+  ).join('');
 }
 
-calculate();
+function calc() {
+  const pt = document.getElementById('productType').value;
+  const fk = pt==='flat'?'flat':document.getElementById('foldType').value;
+  const sz = document.getElementById('size').value;
+  const pv = parseFloat(document.getElementById('paper').value);
+  const fc = document.getElementById('frontColor').value;
+  const bc = document.getElementById('backColor').value;
+
+  const pps = calcPPS(activeQty, pv, sz, fk, fc, bc);
+  if(!pps) return;
+
+  const ck = pt==='flat'?'flyers':'brochures';
+  const cb = COMP[ck];
+  const tiers = cb?cb.tiers:{};
+  const mq = matchQty(activeQty, tiers);
+  const comps = tiers[mq]||{};
+  const hasComps = Object.keys(comps).length>0;
+
+  // Rank
+  const all = [{n:"PPS (You)",p:pps.total,pps:true}];
+  Object.entries(comps).forEach(([n,pr])=> all.push({n:n.charAt(0).toUpperCase()+n.slice(1),p:pr,pps:false}));
+  all.sort((a,b)=>a.p-b.p);
+  const rank = all.findIndex(a=>a.pps)+1;
+  const mx = Math.max(...all.map(a=>a.p));
+
+  // Badge
+  let badge='', bcls='';
+  if(hasComps){
+    if(rank===1){badge='Cheapest';bcls='badge-win';}
+    else if(rank===all.length){badge='#'+rank+' of '+all.length;bcls='badge-lose';}
+    else{badge='#'+rank+' of '+all.length;bcls='badge-mid';}
+  }
+
+  // Build bars
+  let bars = '';
+  all.forEach((a,i)=>{
+    const pct = (a.p/mx*100).toFixed(1);
+    const diff = ((a.p-pps.total)/pps.total*100);
+    let bCls,dCls,dTxt;
+    if(a.pps){bCls='bar-pps';dCls='diff-pps';dTxt='you';}
+    else if(diff<0){bCls='bar-cheaper';dCls='diff-cheaper';dTxt=diff.toFixed(0)+'%';}
+    else{bCls='bar-more';dCls='diff-more';dTxt='+'+diff.toFixed(0)+'%';}
+    bars += `<div class="comp-row">
+      <div class="comp-rank">${i+1}</div>
+      <div class="comp-name ${a.pps?'is-pps':''}">${a.n}</div>
+      <div class="comp-bar-wrap"><div class="comp-bar ${bCls}" style="width:${pct}%"></div></div>
+      <div class="comp-price">$${a.p.toFixed(2)}</div>
+      <div class="comp-diff ${dCls}">${dTxt}</div>
+    </div>`;
+  });
+
+  const qNote = hasComps&&mq!==activeQty ? `<div class="comp-note">Showing competitor prices for ${mq.toLocaleString()} qty (closest match)</div>` : '';
+
+  document.getElementById('output').innerHTML = `
+    <div class="price-panel">
+      <div class="price-hero">
+        <div class="price-label">Your Price</div>
+        <div class="price-total">$${pps.total.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+      </div>
+      <div class="price-stats">
+        <div class="price-stat"><div class="price-stat-label">Per Unit</div><div class="price-stat-val">$${pps.unit.toFixed(2)}</div></div>
+        <div class="price-stat"><div class="price-stat-label">Qty</div><div class="price-stat-val">${activeQty.toLocaleString()}</div></div>
+        <div class="price-stat"><div class="price-stat-label">Markup</div><div class="price-stat-val">${pps.mk.toFixed(1)}x</div></div>
+      </div>
+      ${hasComps ? `
+      <div class="comp-section">
+        <div class="comp-title">
+          <span>Competitor Comparison</span>
+          ${badge?`<span class="badge ${bcls}">${badge}</span>`:''}
+        </div>
+        ${bars}
+        ${qNote}
+        ${cb?`<div class="comp-note">Baseline: ${cb.spec}</div>`:''}
+      </div>` : '<div class="comp-section"><div class="comp-note">No competitor data at this quantity</div></div>'}
+    </div>`;
+}
+
+// Init
+buildQtyTabs();
+calc();
 </script>
-
 </body>
 </html>
