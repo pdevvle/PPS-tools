@@ -18,6 +18,7 @@ reports/*.html
 reports/*.csv
 reports/*.json
 reports/*.png
+data/latest_pricing.*
 .pytest_cache/
 htmlcov/
 .coverage
