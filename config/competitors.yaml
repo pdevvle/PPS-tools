@@ -1,0 +1,76 @@
+competitors:
+  vistaprint:
+    display_name: "Vistaprint"
+    base_url: "https://www.vistaprint.com"
+    is_dynamic: true
+    notes: "Heavy JS pricing calculator; static scraping gets base prices only"
+    pricing_urls:
+      business_cards: "https://www.vistaprint.com/business-cards"
+      flyers: "https://www.vistaprint.com/flyers"
+      postcards: "https://www.vistaprint.com/postcards"
+      brochures: "https://www.vistaprint.com/brochures"
+
+  gotprint:
+    display_name: "GotPrint"
+    base_url: "https://www.gotprint.com"
+    is_dynamic: false
+    notes: "More traditional order forms; pricing often in HTML option tags"
+    pricing_urls:
+      business_cards: "https://www.gotprint.com/products/business-cards/order"
+      flyers: "https://www.gotprint.com/products/flyers/order"
+      postcards: "https://www.gotprint.com/products/postcards/order"
+      brochures: "https://www.gotprint.com/products/brochures/order"
+
+  uprinting:
+    display_name: "UPrinting"
+    base_url: "https://www.uprinting.com"
+    is_dynamic: true
+    notes: "Custom product builder is fully JS-driven"
+    pricing_urls:
+      business_cards: "https://www.uprinting.com/business-cards-printing.html"
+      flyers: "https://www.uprinting.com/flyer-printing.html"
+      postcards: "https://www.uprinting.com/postcard-printing.html"
+      brochures: "https://www.uprinting.com/brochure-printing.html"
+
+  printplace:
+    display_name: "PrintPlace"
+    base_url: "https://www.printplace.com"
+    is_dynamic: false
+    notes: "Budget-friendly; bulk discount focus"
+    pricing_urls:
+      business_cards: "https://www.printplace.com/products/business-cards"
+      flyers: "https://www.printplace.com/products/flyers"
+      postcards: "https://www.printplace.com/products/postcards"
+      brochures: "https://www.printplace.com/products/brochures"
+
+  psprint:
+    display_name: "PsPrint"
+    base_url: "https://www.psprint.com"
+    is_dynamic: false
+    notes: "Budget-friendly with good design tools"
+    pricing_urls:
+      business_cards: "https://www.psprint.com/business-cards"
+      flyers: "https://www.psprint.com/flyers"
+      postcards: "https://www.psprint.com/postcards"
+      brochures: "https://www.psprint.com/brochures"
+
+  moo:
+    display_name: "MOO"
+    base_url: "https://www.moo.com"
+    is_dynamic: true
+    notes: "Premium positioning; unique card options"
+    pricing_urls:
+      business_cards: "https://www.moo.com/us/business-cards"
+      postcards: "https://www.moo.com/us/postcards"
+      flyers: "https://www.moo.com/us/flyers"
+
+  overnightprints:
+    display_name: "Overnight Prints"
+    base_url: "https://www.overnightprints.com"
+    is_dynamic: false
+    notes: "Fast turnaround positioning"
+    pricing_urls:
+      business_cards: "https://www.overnightprints.com/business-cards"
+      flyers: "https://www.overnightprints.com/flyers"
+      postcards: "https://www.overnightprints.com/postcards"
+      brochures: "https://www.overnightprints.com/brochures"

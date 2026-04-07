@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; padding: 20px; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        h1 { color: #1a237e; margin-bottom: 20px; font-size: 1.8em; }
+        h2 { color: #283593; margin: 0 0 15px; font-size: 1.2em; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 20px; margin-bottom: 20px; }
+        .card { background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .card-full { grid-column: 1 / -1; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+        th, td { padding: 6px 10px; text-align: right; border-bottom: 1px solid #e0e0e0; }
+        th { background: #e8eaf6; color: #1a237e; }
+        td:first-child, th:first-child { text-align: left; }
+        .cheaper { color: #2e7d32; }
+        .expensive { color: #c62828; }
+        .trend-up { color: #c62828; }
+        .trend-down { color: #2e7d32; }
+        .trend-stable { color: #f57f17; }
+        .chart-container { text-align: center; }
+        .chart-container img { max-width: 100%; height: auto; }
+        .stat-value { font-size: 2em; font-weight: bold; color: #1a237e; }
+        .stat-label { color: #666; font-size: 0.9em; }
+        .position-bar { height: 8px; background: #e0e0e0; border-radius: 4px; margin: 4px 0; }
+        .position-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, #4CAF50, #8BC34A); }
+        .generated { color: #999; font-size: 0.85em; margin-top: 20px; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>{{ title }}</h1>
+
+        <div class="grid">
+            {% if position_summary %}
+            <div class="card">
+                <h2>Competitive Position</h2>
+                {% for comp, diff in position_summary.avg_diff_pct.items() %}
+                <div style="margin-bottom: 12px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                        <span>vs {{ comp }}</span>
+                        <span class="{{ 'cheaper' if diff > 0 else 'expensive' if diff < 0 else '' }}">
+                            {{ "{:+.1f}".format(diff) }}%
+                        </span>
+                    </div>
+                    <div class="position-bar">
+                        <div class="position-fill" style="width: {{ [100, [0, 50 + diff / 2]|max]|min }}%;"></div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="card">
+                <h2>Quick Stats</h2>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; text-align: center;">
+                    <div>
+                        <div class="stat-value">{{ position_summary.cheapest_at|length }}</div>
+                        <div class="stat-label">Tiers where PPS is cheapest</div>
+                    </div>
+                    <div>
+                        <div class="stat-value">{{ position_summary.most_expensive_at|length }}</div>
+                        <div class="stat-label">Tiers where PPS is most expensive</div>
+                    </div>
+                    <div>
+                        <div class="stat-value">{{ competitors|length }}</div>
+                        <div class="stat-label">Competitors tracked</div>
+                    </div>
+                    <div>
+                        <div class="stat-value">{{ comparison_rows|length }}</div>
+                        <div class="stat-label">Price points</div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if charts.comparison %}
+            <div class="card card-full">
+                <h2>Latest Price Comparison</h2>
+                <div class="chart-container">
+                    <img src="{{ charts.comparison }}" alt="Price Comparison">
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="card card-full">
+                <h2>Price Data</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Product</th>
+                            <th>Qty</th>
+                            <th>PPS</th>
+                            {% for comp in competitors %}
+                            <th>{{ comp }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in comparison_rows %}
+                        <tr>
+                            <td>{{ row.product }}</td>
+                            <td>{{ "{:,}".format(row.quantity) }}</td>
+                            <td>{{ "${:.2f}".format(row.own_price) if row.own_price else "-" }}</td>
+                            {% for comp in competitors %}
+                            {% set price = row.competitor_prices.get(comp) %}
+                            {% if price %}
+                                {% set diff = row.price_diff_pct(comp) %}
+                                <td class="{{ 'cheaper' if diff and diff > 5 else 'expensive' if diff and diff < -5 else '' }}">
+                                    ${{ "{:.2f}".format(price) }}
+                                </td>
+                            {% else %}
+                            <td>-</td>
+                            {% endif %}
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            {% if trend_summaries %}
+            <div class="card card-full">
+                <h2>Price Trends</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Competitor</th>
+                            <th>Product</th>
+                            <th>Qty</th>
+                            <th>Direction</th>
+                            <th>Change</th>
+                            <th>Current Price</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for s in trend_summaries %}
+                        <tr>
+                            <td>{{ s.competitor }}</td>
+                            <td>{{ s.product }}</td>
+                            <td>{{ "{:,}".format(s.quantity) }}</td>
+                            <td class="trend-{{ s.direction }}">
+                                {{ s.direction }}
+                            </td>
+                            <td class="trend-{{ s.direction }}">
+                                {{ "{:+.1f}".format(s.change_pct) }}%
+                            </td>
+                            <td>${{ "{:.2f}".format(s.last_price) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+        </div>
+
+        <p class="generated">Generated by PPS-Tools</p>
+    </div>
+</body>
+</html>

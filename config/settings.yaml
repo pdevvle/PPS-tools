@@ -1,0 +1,21 @@
+scraping:
+  delay_between_requests: 2.0
+  max_retries: 3
+  request_timeout: 30
+  respect_robots_txt: true
+  user_agents:
+    - "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    - "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    - "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+storage:
+  database_path: "pps_pricing.db"
+
+reporting:
+  output_dir: "reports"
+  chart_dpi: 150
+  chart_style: "seaborn-v0_8-whitegrid"
+
+discovery:
+  default_engine: "google"
+  max_results_per_query: 5

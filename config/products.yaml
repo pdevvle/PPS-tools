@@ -1,0 +1,99 @@
+products:
+  business_cards:
+    display_name: "Business Cards"
+    category: "cards"
+    common_quantities: [100, 250, 500, 1000, 2500, 5000]
+    default_specs:
+      size: "3.5x2"
+      paper_type: "14pt"
+      color_mode: "full_color"
+      sides: "double"
+      finish: "none"
+
+  flyers:
+    display_name: "Flyers"
+    category: "marketing"
+    common_quantities: [100, 250, 500, 1000, 2500, 5000, 10000]
+    default_specs:
+      size: "8.5x11"
+      paper_type: "100lb_gloss"
+      color_mode: "full_color"
+      sides: "single"
+      finish: "none"
+
+  postcards:
+    display_name: "Postcards"
+    category: "marketing"
+    common_quantities: [100, 250, 500, 1000, 2500, 5000]
+    default_specs:
+      size: "4x6"
+      paper_type: "14pt"
+      color_mode: "full_color"
+      sides: "double"
+      finish: "none"
+
+  brochures:
+    display_name: "Brochures"
+    category: "marketing"
+    common_quantities: [100, 250, 500, 1000, 2500]
+    default_specs:
+      size: "8.5x11"
+      paper_type: "100lb_gloss"
+      color_mode: "full_color"
+      sides: "double"
+      finish: "tri_fold"
+
+  booklets:
+    display_name: "Booklets"
+    category: "marketing"
+    common_quantities: [25, 50, 100, 250, 500]
+    default_specs:
+      size: "8.5x11"
+      paper_type: "80lb_gloss"
+      color_mode: "full_color"
+      sides: "double"
+      finish: "saddle_stitch"
+
+  presentation_folders:
+    display_name: "Presentation Folders"
+    category: "stationery"
+    common_quantities: [10, 25, 50, 100, 250]
+    default_specs:
+      size: "9x12"
+      paper_type: "14pt"
+      color_mode: "full_color"
+      sides: "double"
+      finish: "none"
+
+  door_hangers:
+    display_name: "Door Hangers"
+    category: "marketing"
+    common_quantities: [100, 250, 500, 1000, 2500]
+    default_specs:
+      size: "4.25x11"
+      paper_type: "14pt"
+      color_mode: "full_color"
+      sides: "double"
+      finish: "none"
+
+  notepads:
+    display_name: "Notepads"
+    category: "stationery"
+    common_quantities: [25, 50, 100, 250]
+    default_specs:
+      size: "5.5x8.5"
+      paper_type: "70lb_uncoated"
+      color_mode: "full_color"
+      sides: "single"
+      finish: "none"
+
+  letterhead:
+    display_name: "Letterhead"
+    category: "stationery"
+    common_quantities: [100, 250, 500, 1000]
+    default_specs:
+      size: "8.5x11"
+      paper_type: "70lb_uncoated"
+      color_mode: "full_color"
+      sides: "single"
+      finish: "none"
