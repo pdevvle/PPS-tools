@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PPS Pricing Comparison</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; padding: 20px; }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  .subtitle { color: #666; font-size: 13px; margin-bottom: 20px; }
+  .controls { background: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 20px; }
+  .controls h2 { font-size: 15px; margin-bottom: 14px; color: #555; text-transform: uppercase; letter-spacing: 0.5px; }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
+  .field { flex: 1; min-width: 180px; }
+  .field label { display: block; font-size: 12px; font-weight: 600; color: #777; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.3px; }
+  .field select, .field input { width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; background: #fafafa; }
+  .field select:focus, .field input:focus { outline: none; border-color: #4a90d9; box-shadow: 0 0 0 2px rgba(74,144,217,0.2); }
+  #calcBtn { background: #2563eb; color: #fff; border: none; padding: 10px 28px; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 4px; }
+  #calcBtn:hover { background: #1d4ed8; }
+
+  .results { background: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  .results h2 { font-size: 15px; margin-bottom: 14px; color: #555; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; padding: 8px 10px; border-bottom: 2px solid #e5e5e5; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #888; }
+  td { padding: 8px 10px; border-bottom: 1px solid #f0f0f0; }
+  tr:hover { background: #f8fafc; }
+  .price { text-align: right; font-variant-numeric: tabular-nums; }
+  .pps-col { font-weight: 700; color: #2563eb; }
+  .cheapest { background: #ecfdf5; color: #065f46; font-weight: 600; }
+  .expensive { background: #fef2f2; color: #991b1b; }
+  .pos { text-align: center; font-size: 12px; font-weight: 600; }
+  .pos-1 { color: #059669; }
+  .pos-last { color: #dc2626; }
+  .pos-mid { color: #d97706; }
+  .no-data { color: #ccc; text-align: right; }
+  .summary { margin-top: 16px; padding: 14px; background: #f8fafc; border-radius: 8px; font-size: 13px; line-height: 1.6; }
+  .summary strong { color: #2563eb; }
+  .empty { text-align: center; padding: 40px; color: #aaa; }
+</style>
+</head>
+<body>
+
+<h1>PPS Pricing Comparison</h1>
+<p class="subtitle">Calculate your price and compare against competitors instantly</p>
+
+<div class="controls">
+  <h2>Configuration</h2>
+  <div class="row">
+    <div class="field">
+      <label>Product Type</label>
+      <select id="productType">
+        <option value="brochure">Brochure</option>
+        <option value="flat">Flat Print / Flyer</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Fold Type</label>
+      <select id="foldType">
+        <option value="trifold">Trifold (3 Panel)</option>
+        <option value="bifold">Bifold (2 Panel)</option>
+        <option value="accordion3">Accordion (3 Panel)</option>
+        <option value="gatefold">Gate Fold (3 Panel)</option>
+        <option value="accordion4">Accordion (4 Panel)</option>
+        <option value="rollfold">Roll Fold (4 Panel)</option>
+        <option value="doublegate">Double Gate Fold (4 Panel)</option>
+        <option value="doubleparallel">Double Parallel Fold (4 Panel)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Size (Unfolded)</label>
+      <select id="size">
+        <option value="8.5x11">8.5 x 11</option>
+        <option value="8.5x14">8.5 x 14</option>
+        <option value="11x17">11 x 17</option>
+        <option value="6x9">6 x 9</option>
+        <option value="5.5x8.5">5.5 x 8.5</option>
+        <option value="4x6">4 x 6</option>
+        <option value="4.25x5.5">4.25 x 5.5</option>
+        <option value="3.5x5">3.5 x 5</option>
+      </select>
+    </div>
+  </div>
+  <div class="row">
+    <div class="field">
+      <label>Paper</label>
+      <select id="paper">
+        <optgroup label="Text Weight">
+          <option value="0.001">70lb Uncoated Opaque Text ($0.060/sht)</option>
+          <option value="0.002">80lb Matte Text ($0.069/sht)</option>
+          <option value="0.003" selected>100lb Gloss Text ($0.085/sht)</option>
+          <option value="2.001">50lb Offset Smooth Opaque ($0.039/sht)</option>
+          <option value="2.002">60lb Offset Smooth Opaque ($0.042/sht)</option>
+          <option value="2.003">80lb Offset Smooth Opaque ($0.056/sht)</option>
+          <option value="2.004">80lb Gloss Factory Coated ($0.053/sht)</option>
+          <option value="2.005">100lb Matte Factory Coated ($0.070/sht)</option>
+        </optgroup>
+        <optgroup label="Cardstock">
+          <option value="0.01">80lb Opaque Uncoated ($0.092/sht)</option>
+          <option value="0.02">80lb Matte Cardstock ($0.112/sht)</option>
+          <option value="0.03">100lb Gloss Cardstock ($0.132/sht)</option>
+          <option value="1.01">14pt Gloss C1S ($0.162/sht)</option>
+          <option value="1.02">16pt Coated C2S ($0.192/sht)</option>
+        </optgroup>
+      </select>
+    </div>
+    <div class="field">
+      <label>Front Color</label>
+      <select id="frontColor">
+        <option value="full_color">Full Color</option>
+        <option value="bw">Greyscale</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Back Color</label>
+      <select id="backColor">
+        <option value="full_color">Full Color</option>
+        <option value="bw">Greyscale</option>
+      </select>
+    </div>
+  </div>
+  <div class="row">
+    <div class="field">
+      <label>Quantities (comma-separated)</label>
+      <input type="text" id="quantities" value="25, 50, 100, 250, 500, 1000, 2500">
+    </div>
+    <div class="field" style="flex:0; min-width: auto; display: flex; align-items: flex-end;">
+      <button id="calcBtn" onclick="calculate()">Calculate</button>
+    </div>
+  </div>
+</div>
+
+<div class="results" id="resultsPanel">
+  <p class="empty">Choose your options above and click Calculate</p>
+</div>
+
+<script>
+// ── Paper data (from pps-config-admin.php) ──
+const ALL_PAPERS = [
+  {label:"70lb Uncoated Opaque Text", val:0.001, price:0.06, factory:false, coatable:false},
+  {label:"80lb Matte Text", val:0.002, price:0.069, factory:false, coatable:false},
+  {label:"100lb Gloss Text", val:0.003, price:0.085, factory:false, coatable:true},
+  {label:"50lb Offset Smooth Opaque", val:2.001, price:0.039, factory:true, coatable:false},
+  {label:"60lb Offset Smooth Opaque", val:2.002, price:0.042, factory:true, coatable:false},
+  {label:"80lb Offset Smooth Opaque", val:2.003, price:0.056, factory:true, coatable:false},
+  {label:"80lb Gloss Factory Coated", val:2.004, price:0.0525, factory:true, coatable:true},
+  {label:"100lb Matte Factory Coated", val:2.005, price:0.070, factory:true, coatable:true},
+  {label:"80lb Opaque Uncoated", val:0.01, price:0.0919, factory:false, coatable:false},
+  {label:"80lb Matte Cardstock", val:0.02, price:0.1119, factory:false, coatable:true},
+  {label:"100lb Gloss Cardstock", val:0.03, price:0.1319, factory:false, coatable:true},
+  {label:"14pt Gloss C1S", val:1.01, price:0.1619, factory:false, coatable:true},
+  {label:"16pt Coated C2S", val:1.02, price:0.1919, factory:false, coatable:true},
+];
+
+const INV_NC = [0.001, 0.002, 0.003];
+const INV_CS = [0.01, 0.02, 0.03, 1.01, 1.02];
+
+// ── Production cost factors ──
+const PCF = {
+  printing_fullcolor_cost: 0.05,
+  printing_black_cost: 0.01,
+  labor_press_hr: 35,
+  labor_bindery_hr: 35,
+  labor_cutting_hr: 45,
+  press_printsperhour: 600,
+  bindery_morgana_impressionperhour: 750,
+  cutterbasefee: 7.5,
+  backend_maximummarkup: 9,
+  backend_minimummarkup: 1.5,
+  easydiscount_max: 1500,
+  easydiscount_factor: 0.05,
+  non_inventory_fee: 35,
+  sets_surcharge: 20,
+  cutter_stackheight_inches: 3,
+  cutter_cyclesperhour: 200,
+};
+
+// ── Fold definitions ──
+const FOLDS = {
+  flat:            {label:"Flat - No Folding", panels:1, folds:0},
+  bifold:          {label:"Bifold (2 Panel)", panels:2, folds:1},
+  trifold:         {label:"Trifold (3 Panel)", panels:3, folds:2},
+  accordion3:      {label:"Accordion (3 Panel)", panels:3, folds:2},
+  gatefold:        {label:"Gate Fold (3 Panel)", panels:3, folds:2},
+  accordion4:      {label:"Accordion (4 Panel)", panels:4, folds:3},
+  rollfold:        {label:"Roll Fold (4 Panel)", panels:4, folds:3},
+  doublegate:      {label:"Double Gate Fold (4 Panel)", panels:4, folds:3},
+  doubleparallel:  {label:"Double Parallel Fold (4 Panel)", panels:4, folds:3},
+};
+
+// ── Size -> sheets per parent (13x19) ──
+const SIZES = {
+  "8.5x11":  {spp:2},
+  "8.5x14":  {spp:1},
+  "11x17":   {spp:1},
+  "6x9":     {spp:4},
+  "5.5x8.5": {spp:4},
+  "4x6":     {spp:8},
+  "4.25x5.5":{spp:8},
+  "3.5x5":   {spp:8},
+};
+
+// ── Competitor prices (from database) ──
+const COMP_PRICES = {
+  brochures: {
+    25:   {gotprint:32, overnightprints:40, printplace:35, psprint:42, uprinting:38, vistaprint:46},
+    50:   {gotprint:42, overnightprints:55, printplace:48, psprint:58, uprinting:50, vistaprint:72},
+    100:  {gotprint:62, overnightprints:78, printplace:68, psprint:82, uprinting:72, vistaprint:110},
+    250:  {gotprint:100, overnightprints:135, printplace:115, psprint:145, uprinting:125, vistaprint:190},
+    500:  {gotprint:160, overnightprints:210, printplace:180, psprint:230, uprinting:195, vistaprint:310},
+    1000: {gotprint:270, overnightprints:360, printplace:310, psprint:400, uprinting:340, vistaprint:520},
+    2500: {gotprint:540, overnightprints:730, printplace:620, psprint:810, uprinting:690, vistaprint:1050},
+  },
+  flyers: {
+    100:  {gotprint:18, printplace:20, uprinting:19, vistaprint:24},
+    250:  {gotprint:28, printplace:32, uprinting:30, vistaprint:40},
+    500:  {gotprint:40, printplace:45, uprinting:42, vistaprint:60},
+    1000: {gotprint:60, printplace:65, uprinting:62, vistaprint:90},
+    5000: {gotprint:180, printplace:200, uprinting:190, vistaprint:250},
+  }
+};
+
+// ── Toggle fold dropdown based on product type ──
+document.getElementById('productType').addEventListener('change', function() {
+  const foldSel = document.getElementById('foldType');
+  if (this.value === 'flat') {
+    foldSel.value = '';
+    foldSel.disabled = true;
+  } else {
+    foldSel.disabled = false;
+    if (!foldSel.value) foldSel.value = 'trifold';
+  }
+});
+
+// ── Calculator (matches Python calculate_brochure_price) ──
+function calcPPS(qty, paperVal, sizeKey, foldKey, frontColor, backColor) {
+  const paper = ALL_PAPERS.find(p => p.val === paperVal);
+  if (!paper) return null;
+  const sz = SIZES[sizeKey] || SIZES["8.5x11"];
+  const fold = FOLDS[foldKey] || FOLDS["flat"];
+  const isFlat = foldKey === "flat";
+  const spp = sz.spp;
+
+  const parentSheets = Math.ceil(qty / spp);
+
+  const paperCostRaw = paper.price * parentSheets;
+  const frontCostRaw = (frontColor === "bw" ? PCF.printing_black_cost : PCF.printing_fullcolor_cost) * parentSheets;
+  const backCostRaw  = (backColor === "bw"  ? PCF.printing_black_cost : PCF.printing_fullcolor_cost) * parentSheets;
+  const printCostRaw = frontCostRaw + backCostRaw;
+
+  // Markup
+  const dL = parentSheets > 0 ? (0.6 * Math.log(parentSheets)) - 0.1447 : 0;
+  const mk = Math.max(PCF.backend_maximummarkup - dL, PCF.backend_minimummarkup);
+
+  const P = {};
+  P.paper = paperCostRaw * mk;
+  P.printing = printCostRaw * mk;
+  P.press = (parentSheets / PCF.press_printsperhour) * PCF.labor_press_hr;
+
+  const cutsPerSheet = Math.max(1, spp - 1) + fold.folds;
+  const stacks = Math.ceil(parentSheets / PCF.cutter_stackheight_inches);
+  P.cutting = ((stacks * cutsPerSheet) / PCF.cutter_cyclesperhour) * PCF.labor_cutting_hr + PCF.cutterbasefee;
+
+  if (!isFlat) {
+    P.folding = (qty / PCF.bindery_morgana_impressionperhour) * PCF.labor_bindery_hr + (PCF.labor_bindery_hr / 3);
+  } else {
+    P.folding = 0;
+  }
+
+  // Non-inventory fee
+  const isInv = INV_NC.includes(paper.val) || INV_CS.includes(paper.val);
+  P.nonInv = isInv ? 0 : PCF.non_inventory_fee;
+
+  // Easy discount
+  const isStandard = spp >= 2;
+  if (isStandard && isFlat) {
+    P.discEasy = -Math.min((P.paper + P.printing) * PCF.easydiscount_factor, PCF.easydiscount_max / 10);
+  } else if (isStandard) {
+    P.discEasy = -Math.min(P.press + P.cutting + P.folding, PCF.easydiscount_max / 10);
+  } else {
+    P.discEasy = 0;
+  }
+
+  const total = Object.values(P).reduce((a, b) => a + b, 0);
+  return { total: Math.round(total * 100) / 100, perUnit: total / qty, markup: mk, components: P };
+}
+
+// ── Main calculate function ──
+function calculate() {
+  const productType = document.getElementById('productType').value;
+  const foldKey = productType === 'flat' ? 'flat' : document.getElementById('foldType').value;
+  const sizeKey = document.getElementById('size').value;
+  const paperVal = parseFloat(document.getElementById('paper').value);
+  const frontColor = document.getElementById('frontColor').value;
+  const backColor = document.getElementById('backColor').value;
+  const qtys = document.getElementById('quantities').value.split(',').map(s => parseInt(s.trim())).filter(n => n > 0);
+
+  const compProduct = productType === 'flat' ? 'flyers' : 'brochures';
+  const compData = COMP_PRICES[compProduct] || {};
+
+  // Get all competitor names
+  const allComps = new Set();
+  Object.values(compData).forEach(qp => Object.keys(qp).forEach(c => allComps.add(c)));
+  const competitors = [...allComps].sort();
+
+  // Calculate each quantity
+  const rows = [];
+  for (const qty of qtys) {
+    const pps = calcPPS(qty, paperVal, sizeKey, foldKey, frontColor, backColor);
+    if (!pps) continue;
+
+    const compPrices = compData[qty] || {};
+    const allPrices = {PPS: pps.total, ...compPrices};
+    const ranked = Object.entries(allPrices).sort((a, b) => a[1] - b[1]);
+    const position = ranked.findIndex(([name]) => name === 'PPS') + 1;
+
+    rows.push({ qty, pps, compPrices, position, total: ranked.length });
+  }
+
+  // Build table
+  const panel = document.getElementById('resultsPanel');
+  const paperLabel = ALL_PAPERS.find(p => p.val === paperVal)?.label || '';
+  const foldLabel = FOLDS[foldKey]?.label || 'Flat';
+
+  let html = `<h2>${foldLabel} &mdash; ${sizeKey} &mdash; ${paperLabel}</h2>`;
+  html += '<table><thead><tr>';
+  html += '<th>Qty</th><th class="price">PPS Price</th><th class="price">Per Unit</th>';
+  competitors.forEach(c => {
+    const display = c.charAt(0).toUpperCase() + c.slice(1);
+    html += `<th class="price">${display}</th>`;
+  });
+  html += '<th class="pos">Position</th></tr></thead><tbody>';
+
+  let cheapCount = 0;
+  let expCount = 0;
+
+  for (const row of rows) {
+    html += '<tr>';
+    html += `<td><strong>${row.qty.toLocaleString()}</strong></td>`;
+    html += `<td class="price pps-col">$${row.pps.total.toFixed(2)}</td>`;
+    html += `<td class="price pps-col">$${row.pps.perUnit.toFixed(4)}</td>`;
+
+    for (const c of competitors) {
+      if (c in row.compPrices) {
+        const cp = row.compPrices[c];
+        const cls = cp < row.pps.total ? 'cheapest' : (cp > row.pps.total ? 'expensive' : '');
+        html += `<td class="price ${cls}">$${cp.toFixed(2)}</td>`;
+      } else {
+        html += '<td class="no-data">&mdash;</td>';
+      }
+    }
+
+    let posClass = 'pos-mid';
+    let posLabel = `#${row.position} of ${row.total}`;
+    if (row.position === 1) { posClass = 'pos-1'; posLabel += ' (cheapest)'; cheapCount++; }
+    else if (row.position === row.total) { posClass = 'pos-last'; posLabel += ' (most expensive)'; expCount++; }
+    html += `<td class="pos ${posClass}">${posLabel}</td>`;
+    html += '</tr>';
+  }
+
+  html += '</tbody></table>';
+
+  // Summary
+  html += '<div class="summary">';
+  html += `<strong>PPS is cheapest at ${cheapCount} of ${rows.length} quantity tiers.</strong>`;
+  if (expCount > 0) html += ` Most expensive at ${expCount} tier(s).`;
+
+  const crossover = rows.find((r, i) => i > 0 && r.position > 1 && rows[i-1].position === 1);
+  if (crossover) {
+    html += `<br>Crossover point: PPS loses price advantage between ${rows[rows.indexOf(crossover)-1].qty.toLocaleString()} and ${crossover.qty.toLocaleString()} units.`;
+  }
+  html += '</div>';
+
+  panel.innerHTML = html;
+}
+
+// Auto-calculate on load
+calculate();
+</script>
+
+</body>
+</html>
