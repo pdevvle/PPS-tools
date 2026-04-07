@@ -544,23 +544,107 @@ def export_own_pricing_json(results: list, output_path: Path):
     return len(own_prices)
 
 
+def get_competitor_prices(product: str) -> dict[int, dict[str, float]]:
+    """Fetch competitor prices from the database, keyed by quantity.
+
+    Returns {quantity: {competitor_name: total_price, ...}, ...}
+    """
+    try:
+        from pps_tools.storage.queries import get_latest_prices
+    except ImportError:
+        return {}
+
+    prices: dict[int, dict[str, float]] = {}
+    for pp in get_latest_prices(product=product):
+        prices.setdefault(pp.quantity, {})[pp.competitor] = pp.total_price
+    return prices
+
+
+def print_comparison(results: list):
+    """Print PPS pricing with competitor comparison for each configuration."""
+    # Group results by config
+    configs: dict[str, list] = {}
+    for r in results:
+        configs.setdefault(r["config_name"], []).append(r)
+
+    # Pre-fetch competitor prices for each product type we need
+    comp_cache: dict[str, dict[int, dict[str, float]]] = {}
+    for r in results:
+        prod = r["product"]
+        if prod not in comp_cache:
+            comp_cache[prod] = get_competitor_prices(prod)
+
+    print(f"\n{'='*100}")
+    print("PPS Brochure & Flat Pricing vs Competitors")
+    print(f"{'='*100}")
+
+    for config_name, rows in configs.items():
+        product = rows[0]["product"]
+        comp_by_qty = comp_cache.get(product, {})
+
+        # Collect all competitor names across quantities
+        all_competitors = sorted({
+            name for qty_prices in comp_by_qty.values() for name in qty_prices
+        })
+
+        print(f"\n  {config_name}")
+        print(f"  Product category: {product}")
+
+        if all_competitors:
+            # Build header
+            comp_headers = [f"{c[:10]:>10}" for c in all_competitors]
+            header = f"  {'Qty':>6}  {'PPS':>10}  " + "  ".join(comp_headers) + "   Position"
+            print(f"  {'─'*len(header)}")
+            print(header)
+            print(f"  {'─'*len(header)}")
+
+            for r in rows:
+                qty = r["quantity"]
+                pps = r["total_price"]
+                comp_prices = comp_by_qty.get(qty, {})
+
+                # Format competitor columns
+                cols = []
+                for c in all_competitors:
+                    if c in comp_prices:
+                        cp = comp_prices[c]
+                        diff = ((cp - pps) / pps) * 100 if pps > 0 else 0
+                        if diff > 0:
+                            cols.append(f"${cp:>8.0f}  ")
+                        else:
+                            cols.append(f"${cp:>8.0f}* ")
+                    else:
+                        cols.append(f"{'--':>10} ")
+
+                # Determine position
+                all_prices = {"PPS": pps}
+                all_prices.update(comp_prices)
+                ranked = sorted(all_prices.items(), key=lambda x: x[1])
+                position = next(i for i, (name, _) in enumerate(ranked, 1) if name == "PPS")
+                total = len(ranked)
+
+                if position == 1:
+                    pos_str = f"#1 of {total} (cheapest)"
+                elif position == total:
+                    pos_str = f"#{position} of {total} (most expensive)"
+                else:
+                    pos_str = f"#{position} of {total}"
+
+                print(f"  {qty:>6,}  ${pps:>9.2f}  " + "".join(cols) + f"  {pos_str}")
+        else:
+            # No competitor data - just show PPS prices
+            print(f"  {'─'*50}")
+            print(f"  {'Qty':>6}  {'Total':>10}  {'Per Unit':>10}  {'Markup':>7}")
+            print(f"  {'─'*50}")
+            for r in rows:
+                print(f"  {r['quantity']:>6,}  ${r['total_price']:>9.2f}  ${r['per_unit']:>9.4f}  {r['markup']:>6.2f}x")
+
+    print(f"\n  * = competitor is cheaper than PPS")
+
+
 if __name__ == "__main__":
     results = generate_brochure_pricing()
-
-    print(f"\n{'='*80}")
-    print("PPS Brochure & Flat Pricing (from WCPA brochure calculator)")
-    print(f"{'='*80}\n")
-
-    current_config = None
-    for r in results:
-        if r["config_name"] != current_config:
-            current_config = r["config_name"]
-            print(f"\n  {current_config}")
-            print(f"  {'─'*60}")
-            print(f"  {'Qty':>6}  {'Total':>10}  {'Per Unit':>10}  {'Markup':>7}")
-            print(f"  {'─'*60}")
-
-        print(f"  {r['quantity']:>6,}  ${r['total_price']:>9.2f}  ${r['per_unit']:>9.4f}  {r['markup']:>6.2f}x")
+    print_comparison(results)
 
     # Export for import
     output = Path("data/pps_own_brochure_pricing.json")
