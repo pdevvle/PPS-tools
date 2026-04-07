@@ -8,6 +8,7 @@ from pps_tools.commands.fetch import fetch
 from pps_tools.commands.compare import compare
 from pps_tools.commands.report import report
 from pps_tools.commands.export import export
+from pps_tools.commands.import_data import import_group
 
 
 @click.group()
@@ -36,6 +37,7 @@ main.add_command(fetch)
 main.add_command(compare)
 main.add_command(report)
 main.add_command(export)
+main.add_command(import_group, "import")
 
 
 if __name__ == "__main__":

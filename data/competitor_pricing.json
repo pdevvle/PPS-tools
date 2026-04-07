@@ -1,0 +1,82 @@
+[
+  {"competitor": "vistaprint", "product": "business_cards", "quantity": 100, "total_price": 17.00, "paper_type": "14pt", "size": "3.5x2", "color_mode": "full_color", "sides": "double", "raw_text": "vistaprint.com standard cards"},
+  {"competitor": "vistaprint", "product": "business_cards", "quantity": 250, "total_price": 30.00, "paper_type": "14pt", "size": "3.5x2", "color_mode": "full_color", "sides": "double"},
+  {"competitor": "vistaprint", "product": "business_cards", "quantity": 500, "total_price": 42.00, "paper_type": "14pt", "size": "3.5x2", "color_mode": "full_color", "sides": "double"},
+  {"competitor": "vistaprint", "product": "business_cards", "quantity": 1000, "total_price": 65.00, "paper_type": "14pt", "size": "3.5x2", "color_mode": "full_color", "sides": "double"},
+  {"competitor": "vistaprint", "product": "business_cards", "quantity": 2500, "total_price": 120.00, "paper_type": "14pt", "size": "3.5x2", "color_mode": "full_color", "sides": "double"},
+
+  {"competitor": "gotprint", "product": "business_cards", "quantity": 100, "total_price": 9.80, "paper_type": "14pt", "size": "3.5x2", "color_mode": "full_color", "sides": "double"},
+  {"competitor": "gotprint", "product": "business_cards", "quantity": 250, "total_price": 14.50, "paper_type": "14pt", "size": "3.5x2", "color_mode": "full_color", "sides": "double"},
+  {"competitor": "gotprint", "product": "business_cards", "quantity": 500, "total_price": 22.00, "paper_type": "14pt", "size": "3.5x2", "color_mode": "full_color", "sides": "double"},
+  {"competitor": "gotprint", "product": "business_cards", "quantity": 1000, "total_price": 30.00, "paper_type": "14pt", "size": "3.5x2", "color_mode": "full_color", "sides": "double"},
+  {"competitor": "gotprint", "product": "business_cards", "quantity": 2500, "total_price": 55.00, "paper_type": "14pt", "size": "3.5x2", "color_mode": "full_color", "sides": "double"},
+
+  {"competitor": "moo", "product": "business_cards", "quantity": 50, "total_price": 19.99, "paper_type": "16pt", "size": "3.5x2", "color_mode": "full_color", "sides": "double"},
+  {"competitor": "moo", "product": "business_cards", "quantity": 100, "total_price": 29.99, "paper_type": "16pt", "size": "3.5x2", "color_mode": "full_color", "sides": "double"},
+  {"competitor": "moo", "product": "business_cards", "quantity": 250, "total_price": 59.99, "paper_type": "16pt", "size": "3.5x2", "color_mode": "full_color", "sides": "double"},
+  {"competitor": "moo", "product": "business_cards", "quantity": 400, "total_price": 89.99, "paper_type": "16pt", "size": "3.5x2", "color_mode": "full_color", "sides": "double"},
+
+  {"competitor": "uprinting", "product": "business_cards", "quantity": 100, "total_price": 12.50, "paper_type": "14pt", "size": "3.5x2", "color_mode": "full_color", "sides": "double"},
+  {"competitor": "uprinting", "product": "business_cards", "quantity": 250, "total_price": 18.75, "paper_type": "14pt", "size": "3.5x2", "color_mode": "full_color", "sides": "double"},
+  {"competitor": "uprinting", "product": "business_cards", "quantity": 500, "total_price": 28.00, "paper_type": "14pt", "size": "3.5x2", "color_mode": "full_color", "sides": "double"},
+  {"competitor": "uprinting", "product": "business_cards", "quantity": 1000, "total_price": 40.00, "paper_type": "14pt", "size": "3.5x2", "color_mode": "full_color", "sides": "double"},
+  {"competitor": "uprinting", "product": "business_cards", "quantity": 2500, "total_price": 72.00, "paper_type": "14pt", "size": "3.5x2", "color_mode": "full_color", "sides": "double"},
+
+  {"competitor": "printplace", "product": "business_cards", "quantity": 100, "total_price": 15.00, "paper_type": "14pt", "size": "3.5x2", "color_mode": "full_color", "sides": "double"},
+  {"competitor": "printplace", "product": "business_cards", "quantity": 250, "total_price": 22.00, "paper_type": "14pt", "size": "3.5x2", "color_mode": "full_color", "sides": "double"},
+  {"competitor": "printplace", "product": "business_cards", "quantity": 500, "total_price": 32.00, "paper_type": "14pt", "size": "3.5x2", "color_mode": "full_color", "sides": "double"},
+  {"competitor": "printplace", "product": "business_cards", "quantity": 1000, "total_price": 45.00, "paper_type": "14pt", "size": "3.5x2", "color_mode": "full_color", "sides": "double"},
+  {"competitor": "printplace", "product": "business_cards", "quantity": 2500, "total_price": 80.00, "paper_type": "14pt", "size": "3.5x2", "color_mode": "full_color", "sides": "double"},
+
+  {"competitor": "psprint", "product": "business_cards", "quantity": 100, "total_price": 22.00, "paper_type": "14pt", "size": "3.5x2", "color_mode": "full_color", "sides": "double"},
+  {"competitor": "psprint", "product": "business_cards", "quantity": 250, "total_price": 23.70, "paper_type": "14pt", "size": "3.5x2", "color_mode": "full_color", "sides": "double"},
+  {"competitor": "psprint", "product": "business_cards", "quantity": 500, "total_price": 36.00, "paper_type": "14pt", "size": "3.5x2", "color_mode": "full_color", "sides": "double"},
+  {"competitor": "psprint", "product": "business_cards", "quantity": 1000, "total_price": 55.00, "paper_type": "14pt", "size": "3.5x2", "color_mode": "full_color", "sides": "double"},
+  {"competitor": "psprint", "product": "business_cards", "quantity": 2500, "total_price": 95.00, "paper_type": "14pt", "size": "3.5x2", "color_mode": "full_color", "sides": "double"},
+
+  {"competitor": "overnightprints", "product": "business_cards", "quantity": 100, "total_price": 18.50, "paper_type": "14pt", "size": "3.5x2", "color_mode": "full_color", "sides": "double"},
+  {"competitor": "overnightprints", "product": "business_cards", "quantity": 250, "total_price": 28.00, "paper_type": "14pt", "size": "3.5x2", "color_mode": "full_color", "sides": "double"},
+  {"competitor": "overnightprints", "product": "business_cards", "quantity": 500, "total_price": 38.00, "paper_type": "14pt", "size": "3.5x2", "color_mode": "full_color", "sides": "double"},
+  {"competitor": "overnightprints", "product": "business_cards", "quantity": 1000, "total_price": 52.00, "paper_type": "14pt", "size": "3.5x2", "color_mode": "full_color", "sides": "double"},
+  {"competitor": "overnightprints", "product": "business_cards", "quantity": 2500, "total_price": 88.00, "paper_type": "14pt", "size": "3.5x2", "color_mode": "full_color", "sides": "double"},
+
+  {"competitor": "vistaprint", "product": "flyers", "quantity": 100, "total_price": 24.00, "paper_type": "100lb_gloss", "size": "8.5x11", "color_mode": "full_color", "sides": "single"},
+  {"competitor": "vistaprint", "product": "flyers", "quantity": 250, "total_price": 40.00, "paper_type": "100lb_gloss", "size": "8.5x11", "color_mode": "full_color", "sides": "single"},
+  {"competitor": "vistaprint", "product": "flyers", "quantity": 500, "total_price": 60.00, "paper_type": "100lb_gloss", "size": "8.5x11", "color_mode": "full_color", "sides": "single"},
+  {"competitor": "vistaprint", "product": "flyers", "quantity": 1000, "total_price": 90.00, "paper_type": "100lb_gloss", "size": "8.5x11", "color_mode": "full_color", "sides": "single"},
+  {"competitor": "vistaprint", "product": "flyers", "quantity": 5000, "total_price": 250.00, "paper_type": "100lb_gloss", "size": "8.5x11", "color_mode": "full_color", "sides": "single"},
+
+  {"competitor": "gotprint", "product": "flyers", "quantity": 100, "total_price": 18.00, "paper_type": "100lb_gloss", "size": "8.5x11", "color_mode": "full_color", "sides": "single"},
+  {"competitor": "gotprint", "product": "flyers", "quantity": 250, "total_price": 28.00, "paper_type": "100lb_gloss", "size": "8.5x11", "color_mode": "full_color", "sides": "single"},
+  {"competitor": "gotprint", "product": "flyers", "quantity": 500, "total_price": 40.00, "paper_type": "100lb_gloss", "size": "8.5x11", "color_mode": "full_color", "sides": "single"},
+  {"competitor": "gotprint", "product": "flyers", "quantity": 1000, "total_price": 60.00, "paper_type": "100lb_gloss", "size": "8.5x11", "color_mode": "full_color", "sides": "single"},
+  {"competitor": "gotprint", "product": "flyers", "quantity": 5000, "total_price": 180.00, "paper_type": "100lb_gloss", "size": "8.5x11", "color_mode": "full_color", "sides": "single"},
+
+  {"competitor": "printplace", "product": "flyers", "quantity": 100, "total_price": 20.00, "paper_type": "100lb_gloss", "size": "8.5x11", "color_mode": "full_color", "sides": "single"},
+  {"competitor": "printplace", "product": "flyers", "quantity": 250, "total_price": 32.00, "paper_type": "100lb_gloss", "size": "8.5x11", "color_mode": "full_color", "sides": "single"},
+  {"competitor": "printplace", "product": "flyers", "quantity": 500, "total_price": 45.00, "paper_type": "100lb_gloss", "size": "8.5x11", "color_mode": "full_color", "sides": "single"},
+  {"competitor": "printplace", "product": "flyers", "quantity": 1000, "total_price": 65.00, "paper_type": "100lb_gloss", "size": "8.5x11", "color_mode": "full_color", "sides": "single"},
+  {"competitor": "printplace", "product": "flyers", "quantity": 5000, "total_price": 200.00, "paper_type": "100lb_gloss", "size": "8.5x11", "color_mode": "full_color", "sides": "single"},
+  {"competitor": "printplace", "product": "flyers", "quantity": 10000, "total_price": 290.00, "paper_type": "100lb_gloss", "size": "8.5x11", "color_mode": "full_color", "sides": "single"},
+
+  {"competitor": "uprinting", "product": "flyers", "quantity": 100, "total_price": 19.00, "paper_type": "100lb_gloss", "size": "8.5x11", "color_mode": "full_color", "sides": "single"},
+  {"competitor": "uprinting", "product": "flyers", "quantity": 250, "total_price": 30.00, "paper_type": "100lb_gloss", "size": "8.5x11", "color_mode": "full_color", "sides": "single"},
+  {"competitor": "uprinting", "product": "flyers", "quantity": 500, "total_price": 42.00, "paper_type": "100lb_gloss", "size": "8.5x11", "color_mode": "full_color", "sides": "single"},
+  {"competitor": "uprinting", "product": "flyers", "quantity": 1000, "total_price": 62.00, "paper_type": "100lb_gloss", "size": "8.5x11", "color_mode": "full_color", "sides": "single"},
+  {"competitor": "uprinting", "product": "flyers", "quantity": 5000, "total_price": 190.00, "paper_type": "100lb_gloss", "size": "8.5x11", "color_mode": "full_color", "sides": "single"},
+
+  {"competitor": "vistaprint", "product": "postcards", "quantity": 100, "total_price": 20.00, "paper_type": "14pt", "size": "4x6", "color_mode": "full_color", "sides": "double"},
+  {"competitor": "vistaprint", "product": "postcards", "quantity": 250, "total_price": 35.00, "paper_type": "14pt", "size": "4x6", "color_mode": "full_color", "sides": "double"},
+  {"competitor": "vistaprint", "product": "postcards", "quantity": 500, "total_price": 52.00, "paper_type": "14pt", "size": "4x6", "color_mode": "full_color", "sides": "double"},
+  {"competitor": "vistaprint", "product": "postcards", "quantity": 1000, "total_price": 80.00, "paper_type": "14pt", "size": "4x6", "color_mode": "full_color", "sides": "double"},
+
+  {"competitor": "gotprint", "product": "postcards", "quantity": 100, "total_price": 14.00, "paper_type": "14pt", "size": "4x6", "color_mode": "full_color", "sides": "double"},
+  {"competitor": "gotprint", "product": "postcards", "quantity": 250, "total_price": 22.00, "paper_type": "14pt", "size": "4x6", "color_mode": "full_color", "sides": "double"},
+  {"competitor": "gotprint", "product": "postcards", "quantity": 500, "total_price": 32.00, "paper_type": "14pt", "size": "4x6", "color_mode": "full_color", "sides": "double"},
+  {"competitor": "gotprint", "product": "postcards", "quantity": 1000, "total_price": 48.00, "paper_type": "14pt", "size": "4x6", "color_mode": "full_color", "sides": "double"},
+
+  {"competitor": "printplace", "product": "postcards", "quantity": 100, "total_price": 16.00, "paper_type": "14pt", "size": "4x6", "color_mode": "full_color", "sides": "double"},
+  {"competitor": "printplace", "product": "postcards", "quantity": 250, "total_price": 25.00, "paper_type": "14pt", "size": "4x6", "color_mode": "full_color", "sides": "double"},
+  {"competitor": "printplace", "product": "postcards", "quantity": 500, "total_price": 36.00, "paper_type": "14pt", "size": "4x6", "color_mode": "full_color", "sides": "double"},
+  {"competitor": "printplace", "product": "postcards", "quantity": 1000, "total_price": 55.00, "paper_type": "14pt", "size": "4x6", "color_mode": "full_color", "sides": "double"}
+]
