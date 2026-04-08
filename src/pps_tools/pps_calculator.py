@@ -134,7 +134,7 @@ def calculate_booklet_price(
 
     # Markup: logarithmic curve from max down to min as volume increases
     if tS > 0:
-        dL = (1.1 * math.log(tS)) - 0.1447
+        dL = (0.9 * math.log(tS)) - 0.1447
     else:
         dL = 0
     mk = max(PCF["backend_maximummarkup"] - dL, PCF["backend_minimummarkup"])
@@ -323,7 +323,7 @@ BROCHURE_SIZES = {
 # Additional PCF values for brochure calc (from pps-config-admin.php)
 PCF_BROCHURE = {
     **PCF,
-    "cutter_stackheight_inches": 3,
+    "cutter_stackheight_sheets": 250,
     "cutter_cyclesperhour": 200,
     "labor_gw_hour": 35,
     "speed_gwperhr": 750,
@@ -375,7 +375,7 @@ def calculate_brochure_price(
 
     # Markup calculation (same log curve as booklet calc)
     if parent_sheets > 0:
-        dL = (1.1 * math.log(parent_sheets)) - 0.1447
+        dL = (0.9 * math.log(parent_sheets)) - 0.1447
     else:
         dL = 0
     mk = max(PCF_BROCHURE["backend_maximummarkup"] - dL, PCF_BROCHURE["backend_minimummarkup"])
@@ -389,12 +389,11 @@ def calculate_brochure_price(
     # Press labor
     P["press"] = (parent_sheets / PCF_BROCHURE["press_printsperhour"]) * PCF_BROCHURE["labor_press_hr"]
 
-    # Cutting labor: sheets / stack height -> stacks, stacks / cycles per hour -> hours
-    # Number of cuts depends on spp (how many pieces per parent sheet)
-    cuts_per_sheet = max(1, spp - 1) + fold_info["folds"]
-    stacks = math.ceil(parent_sheets / PCF_BROCHURE["cutter_stackheight_inches"])
+    # Cutting labor: ~250 sheets per lift, 4 cuts per up-value (trim out each piece)
+    cuts_per_stack = spp * 4
+    stacks = math.ceil(parent_sheets / PCF_BROCHURE["cutter_stackheight_sheets"])
     P["cutting"] = (
-        ((stacks * cuts_per_sheet) / PCF_BROCHURE["cutter_cyclesperhour"]) * PCF_BROCHURE["labor_cutting_hr"]
+        ((stacks * cuts_per_stack) / PCF_BROCHURE["cutter_cyclesperhour"]) * PCF_BROCHURE["labor_cutting_hr"]
         + PCF_BROCHURE["cutterbasefee"]
     )
 
