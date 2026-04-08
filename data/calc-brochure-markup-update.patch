@@ -1,5 +1,5 @@
 --- /tmp/calc-brochure.html	2026-04-08 08:43:55.075033249 +0000
-+++ /home/user/PPS-tools/.work-calc-brochure.html	2026-04-08 09:09:44.644526521 +0000
++++ /home/user/PPS-tools/data/calc-brochure.html	2026-04-08 09:28:39.054037511 +0000
 @@ -48,8 +48,8 @@
    press_printsperhour:600, bindery_morgana_impressionperhour:750,
    cutter_stackheight_inches:3.5, cutter_cyclesperhour:120,
@@ -53,3 +53,12 @@
    // Artwork
    const art = ART_OPTS.find(x => x.val === c.artwork) || ART_OPTS[0];
    const artWork = art.val >= 2;
+@@ -436,7 +433,7 @@
+     {l:"Vivid Print",v:P.vivid,g:"add"},{l:"UV Coating",v:P.coat,g:"add"},{l:"Bundling",v:P.bundle,g:"add"},
+     {l:"Perforation",v:P.perforation,g:"add"},{l:"Round Cornering",v:P.rc,g:"add"},
+     {l:"Fold Surcharge 1",v:P.diffFold1,g:"fee"},{l:"Fold Surcharge 2",v:P.diffFold2,g:"fee"},{l:"Fold Surcharge 3",v:P.diffFold3,g:"fee"},
+-    {l:"Base Cost",v:P.baseCost,g:"fee"},{l:"Non-Inventory",v:P.nonInv,g:"fee"},
++    {l:"Non-Inventory",v:P.nonInv,g:"fee"},
+     {l:"Artwork",v:P.artwork,g:"art"},{l:"Bleed",v:P.bleed,g:"art"},{l:"Proofing",v:P.proof,g:"art"},
+     {l:"BW Discount",v:P.discBW,g:"disc"},{l:"Easy Discount (Flat)",v:P.discEasyFlat,g:"disc"},{l:"Easy Discount",v:P.discEasy,g:"disc"},{l:"Cardstock Disc",v:P.cardstockDisc,g:"disc"},
+   ].filter(r => Math.abs(r.v) > 0.005);
