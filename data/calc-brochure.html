@@ -1,0 +1,2420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Brochure & Flat Printing Calculator</title>
+<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.26.9/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+<script src="https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin: 0; padding: 0; }
+  /* 3D Fold Preview CSS — from proven brochure-fold-previewer */
+  .fold-viewport{perspective:1800px;perspective-origin:50% 50%;display:flex;justify-content:center;align-items:center;position:relative;overflow:hidden;border-radius:8px;background:linear-gradient(135deg,#1a1d23,#2a2e36);border:1px solid rgba(255,255,255,.08);min-height:280px;width:100%}
+  .fold-scene{position:relative;transform-style:preserve-3d;transition:transform 1.4s cubic-bezier(.4,0,.2,1)}
+  .fold-panel-wrap{position:absolute;top:0;left:0;transform-style:preserve-3d}
+  .fold-hinge{position:absolute;top:0;transform-style:preserve-3d;transition:transform 1.4s cubic-bezier(.4,0,.2,1)}
+  .fold-face{position:absolute;top:0;left:0;backface-visibility:hidden;overflow:hidden}
+  .fold-face img{display:block}
+  .fold-face.ff{z-index:2}
+  .fold-face.fb{transform:rotateY(180deg);z-index:1}
+  @media(max-width:700px){
+    select,input[type="text"],input[type="number"]{font-size:16px!important;padding:10px!important;min-height:44px!important}
+  }
+</style>
+</head>
+<body>
+<div id="pps-calculator-root"></div>
+<script type="text/babel">
+// PRIORITY PRINT SERVICE — Brochure & Flat Printing Calculator v1
+const { useState, useEffect, useMemo, useRef, useCallback } = React;
+function useIsMobile(bp=700){const[m,s]=useState(window.innerWidth<=bp);useEffect(()=>{const h=()=>s(window.innerWidth<=bp);window.addEventListener("resize",h);return()=>window.removeEventListener("resize",h)},[bp]);return m}
+
+// ═══════════════════════════════════════════════════════════════
+// COLORS & CONSTANTS
+// ═══════════════════════════════════════════════════════════════
+const CC={bg:"#f5f5f7",white:"#fff",dark:"#1d2327",mid:"#555",light:"#999",border:"#e5e5e5",primary:"#007eff"};
+const CK={cyan:"#007eff",magenta:"#ec008c",yellow:"#f5a623",key:"#1d2327",cyanLight:"#e8f4ff",yellowLight:"#fef5e0",rushLight:"#f0fdf4",rush:"#6b8f2b",magentaLight:"#fdf2f8"};
+
+const _CFG = (window.PPS_CONFIG || {}).calc || {};
+const PCF = Object.assign({
+  printing_fullcolor_cost:0.05, printing_black_cost:0.01,
+  labor_press_hr:35, labor_bindery_hr:35, labor_cutting_hr:45,
+  labor_gw_hour:45, labor_gw_setup:35,
+  press_printsperhour:600, bindery_morgana_impressionperhour:750,
+  cutter_stackheight_inches:3.5, cutter_cyclesperhour:120,
+  cutterbasefee:7.5, sheetsturnaround:2500,
+  backend_maximummarkup:15.2, backend_minimummarkup:3.5,
+  easydiscount_factor:0.05, easydiscount_max:0,
+  uvcoaterimpressionsperhour:250, roundcornerperhour:75, bundlesperhour:50,
+  speed_gwperhr:500, addon_roundcornermaxdays:30,
+  art_newdesignmodifier:0.5, sheetsforlowcosthardcopyproof:1500,
+  minimum_turnaround_days:3, non_inventory_fee:45,
+  proof_hardcopy_cost:35, proof_digital_cost:10, bleed_minimum:15,
+  default_transit_days:4,
+  shop_timezone:"America/Phoenix", shop_cutoff_hour:14, free_shipping_buffer:1.5,
+  shippo_api_token:"", shippo_origin_zip:"85027",
+}, _CFG.pcf || {});
+
+// ═══════════════════════════════════════════════════════════════
+// DATA: SIZES, FOLDS, PAPERS, OPTIONS
+// ═══════════════════════════════════════════════════════════════
+const SIZE_PRESETS = _CFG.brochure_sizes || [
+  {label:"5.5×8.5",imp:4,long:8.5,short:5.5,easy:true},
+  {label:"6×9",imp:4,long:9,short:6,easy:true},
+  {label:"8.5×11",imp:2,long:11,short:8.5,easy:true},
+  {label:"8.5×14",imp:1,long:14,short:8.5,easy:true},
+  {label:"9×12",imp:2,long:12,short:9},
+  {label:"11×17",imp:1,long:17,short:11,easy:true},
+  {label:"12×18",imp:1,long:18,short:12},
+  {label:"11×25.5",imp:0.5,long:25.5,short:11},
+];
+
+const FOLD_TYPES = _CFG.fold_types || [
+  {label:"Flat — No Folding",val:"flat",panels:1},
+  {label:"Bifold (2 Panel)",val:"bifold",panels:2},
+  {label:"Trifold (3 Panel)",val:"trifold",panels:3},
+  {label:'Accordion / "Z" Fold (3 Panel)',val:"z3",panels:3},
+  {label:"Gate Fold (3 Panel)",val:"gate3",panels:3},
+  {label:"Accordion (4 Panel)",val:"accordion4",panels:4},
+  {label:"Roll Fold (4 Panel)",val:"roll4",panels:4},
+  {label:"Double Gate Fold (4 Panel)",val:"dgate4",panels:4},
+  {label:"Double Parallel Fold (4 Panel)",val:"dparallel4",panels:4},
+];
+
+// Panel labels per fold type — front (outside art) and back (inside art), left to right
+const PANEL_LABELS = {
+  bifold:    { front: ["Back","Front"], back: ["Inside Front","Inside Back"] },
+  trifold:   { front: ["Inside Flap","Back","Front"], back: ["Inside Left","Inside Center","Inside Right"] },
+  z3:        { front: ["Back","Center","Front"], back: ["Back Inside","Center Inside","Front Inside"] },
+  gate3:     { front: ["Left Flap","Front","Right Flap"], back: ["Inside Left","Inside Center","Inside Right"] },
+  accordion4:{ front: ["Back","Inside Right","Inside Left","Front"], back: ["Back Inside","Outside Right","Outside Left","Front Inside"] },
+  roll4:     { front: ["Innermost","Inner Flap","Back","Front"], back: ["Innermost Inside","Flap Inside","Inside Left","Inside Right"] },
+  dgate4:    { front: ["Left Flap","Left Center","Right Center","Right Flap"], back: ["Inside Left","Inside Left Center","Inside Right Center","Inside Right"] },
+  dparallel4:{ front: ["Inside Left","Back","Front","Inside Right"], back: ["Inside 1","Inside 2","Inside 3","Inside 4"] },
+};
+
+// Compute fold-line fractions accounting for flap offset (inner/tuck panels
+// shortened by 1/32" so they nest cleanly). Z-folds and bifolds don't nest.
+function getFoldFracs(foldType, panels, foldDim) {
+  const NOMINAL = { gate3: [0.25, 0.50, 0.25] };
+  const nomFracs = NOMINAL[foldType] || Array(panels).fill(1 / panels);
+  const widths = nomFracs.map(f => f * foldDim);
+  // Offset multipliers: negative = panel shortened, positive = panel widened; must sum to 0
+  const OFF = 1 / 32;
+  const OFFSETS = {
+    trifold:    [-1, 0, 1],
+    roll4:      [-2, -1, 0, 3],
+    gate3:      [-1, 2, -1],
+    dgate4:     [-1, 1, 1, -1],
+    dparallel4: [-1, 1, 1, -1],
+  };
+  const off = OFFSETS[foldType];
+  if (off) off.forEach((m, i) => { widths[i] += m * OFF; });
+  const fracs = [];
+  let cum = 0;
+  for (let i = 0; i < panels - 1; i++) { cum += widths[i]; fracs.push(cum / foldDim); }
+  return fracs;
+}
+
+const PAPERS_NC = _CFG.papers_nc || [
+  {label:"70lb Uncoated Opaque Text",val:0.001,days:0,price:0.06,oversizePrice:0.06,factory:false,coatable:false},
+  {label:"80lb Matte Text",val:0.002,days:0,price:0.069,oversizePrice:0.069,factory:false,coatable:false},
+  {label:"100lb Gloss Text",val:0.003,days:0,price:0.085,oversizePrice:0.085,factory:false,coatable:true},
+  {label:"50lb Offset Smooth Opaque",val:2.001,days:2,price:0.039,oversizePrice:0.039,factory:true,coatable:false},
+  {label:"60lb Offset Smooth Opaque",val:2.002,days:2,price:0.042,oversizePrice:0.042,factory:true,coatable:false},
+  {label:"80lb Offset Smooth Opaque",val:2.003,days:2,price:0.056,oversizePrice:0.056,factory:true,coatable:false},
+  {label:"80lb Gloss Factory Coated",val:2.004,days:2,price:0.0525,oversizePrice:0.0525,factory:true,coatable:true},
+  {label:"100lb Matte Factory Coated",val:2.005,days:2,price:0.070,oversizePrice:0.070,factory:true,coatable:true},
+];
+const PAPERS_CS = _CFG.papers_cs || [
+  {label:"80lb Opaque Uncoated",val:0.01,days:0,price:0.0919,oversizePrice:0.0919,factory:false,coatable:false},
+  {label:"80lb Matte Cardstock",val:0.02,days:0,price:0.1119,oversizePrice:0.1119,factory:false,coatable:true},
+  {label:"100lb Gloss Cardstock",val:0.03,days:0,price:0.1319,oversizePrice:0.1319,factory:false,coatable:true},
+  {label:"14pt Gloss C1S",val:1.01,days:1,price:0.1619,oversizePrice:0.1619,factory:false,coatable:true},
+  {label:"16pt Coated C2S",val:1.02,days:1,price:0.1919,oversizePrice:0.1919,factory:false,coatable:true},
+];
+const ALL_PAPERS=[...PAPERS_NC.map(p=>({...p,type:"noncardstock"})),...PAPERS_CS.map(p=>({...p,label:p.label+" (Cardstock)",type:"cardstock"}))];
+const INV_VALS=[0.001,0.002,0.003,0.01,0.02,0.03,1.01,1.02];
+
+const COATINGS=_CFG.coatings||[{label:"No Additional Coating",val:0,price:0},{label:"UV Gloss",val:750,price:0.03},{label:"UV Matte",val:510,price:0.04}];
+const COAT_SIDES=[{label:"Front Only",val:1},{label:"Both Sides",val:2}];
+const BUNDLING=_CFG.bundling||[{label:"No Bundling",val:0,price:500},{label:"Bundle in 25s",val:750,price:25},{label:"Bundle in 50s",val:1500,price:50},{label:"Bundle in 100s",val:3000,price:100}];
+const PERF_OPTS=_CFG.perf_opts||[{label:"No Perforation",val:0,price:0,count:0},{label:"1 Perforation Line",val:2000,price:0.01,count:1},{label:"2 Perforation Lines",val:1000,price:0.02,count:2}];
+const CORNERS=_CFG.corners||[{label:"No Round Cornering",val:0,price:0},{label:'¼" Round — Outside 2',val:216,price:0.2},{label:'⅜" Round — Outside 2',val:215,price:0.15},{label:'¼" Round — All 4',val:108,price:0.1},{label:'⅜" Round — All 4',val:107,price:0.075}];
+const ART_OPTS=_CFG.art_opts||[{label:"Upload Art with Order",val:0.01,price:0},{label:"Email Art After Order",val:0.02,price:0},{label:"Artwork already discussed",val:0.03,price:0},{label:"I have a design in Canva",val:0.04,price:0},{label:"Artwork needs edits",val:2.01,price:75},{label:"Design from scratch",val:4.01,price:75}];
+const BLEED_OPTS=_CFG.bleed_opts||[{label:"My artwork has proper bleeds",val:0,price:0},{label:"I don't have bleeds",val:1,price:0.5}];
+
+// Transit days
+const TRANSIT_DAYS = _CFG.transit_days || {AZ:1,CA:2,CO:2,ID:3,MT:3,NM:2,NV:2,OR:3,TX:3,UT:2,WA:3,WY:3,AL:4,AR:4,CT:5,DC:5,DE:5,FL:4,GA:4,HI:7,IA:4,IL:4,IN:4,KS:3,KY:4,LA:4,MA:5,MD:5,ME:6,MI:4,MN:4,MO:4,MS:4,NC:5,ND:4,NE:3,NH:6,NJ:5,NY:5,OH:4,OK:3,PA:5,RI:5,SC:5,SD:4,TN:4,VA:5,VT:6,WI:4,WV:5};
+const US_STATES = Object.keys(TRANSIT_DAYS).sort();
+const _PPS = window.PPS_CONFIG || {};
+const _ZONE_SEED = {"000":7,"001":7,"002":7,"003":7,"004":7,"005":7,"006":7,"007":7,"008":7,"009":7,"010":5,"011":5,"012":5,"013":5,"014":5,"015":5,"016":5,"017":5,"018":5,"019":5,"020":5,"021":5,"022":5,"023":5,"024":5,"025":5,"026":5,"027":5,"028":7,"029":7,"030":6,"031":6,"032":6,"033":6,"034":6,"035":6,"036":6,"037":6,"038":6,"039":6,"040":6,"041":6,"042":6,"043":6,"044":6,"045":6,"046":6,"047":6,"048":6,"049":6,"050":6,"051":6,"052":6,"053":6,"054":6,"055":6,"056":6,"057":6,"058":6,"059":6,"060":6,"061":6,"062":6,"063":6,"064":6,"065":6,"066":6,"067":6,"068":6,"069":6,"070":5,"071":5,"072":5,"073":5,"074":5,"075":5,"076":5,"077":5,"078":5,"079":5,"080":5,"081":5,"082":5,"083":5,"084":5,"085":5,"086":5,"087":5,"088":5,"089":5,"090":7,"091":7,"092":7,"093":7,"094":7,"095":7,"096":7,"097":7,"098":7,"099":7,"100":5,"101":5,"102":5,"103":5,"104":5,"105":5,"106":5,"107":5,"108":5,"109":5,"110":5,"111":5,"112":5,"113":5,"114":5,"115":5,"116":5,"117":5,"118":5,"119":5,"120":5,"121":5,"122":5,"123":5,"124":5,"125":5,"126":5,"127":5,"128":5,"129":5,"130":5,"131":5,"132":5,"133":5,"134":5,"135":5,"136":5,"137":5,"138":5,"139":5,"140":5,"141":5,"142":5,"143":5,"144":5,"145":5,"146":5,"147":5,"148":5,"149":5,"150":4,"151":4,"152":4,"153":4,"154":4,"155":4,"156":4,"157":4,"158":4,"159":4,"160":4,"161":4,"162":4,"163":4,"164":4,"165":4,"166":4,"167":4,"168":4,"169":4,"170":4,"171":4,"172":4,"173":4,"174":4,"175":4,"176":4,"177":4,"178":4,"179":4,"180":4,"181":4,"182":4,"183":4,"184":4,"185":4,"186":4,"187":4,"188":4,"189":4,"190":4,"191":4,"192":4,"193":4,"194":4,"195":4,"196":4,"197":6,"198":6,"199":6,"200":6,"201":6,"202":6,"203":6,"204":6,"205":6,"206":6,"207":6,"208":6,"209":6,"210":6,"211":6,"212":6,"213":6,"214":6,"215":6,"216":6,"217":6,"218":6,"219":6,"220":5,"221":5,"222":5,"223":5,"224":5,"225":5,"226":5,"227":5,"228":5,"229":5,"230":5,"231":5,"232":5,"233":5,"234":5,"235":5,"236":5,"237":5,"238":5,"239":5,"240":5,"241":5,"242":5,"243":5,"244":5,"245":5,"246":5,"247":4,"248":4,"249":4,"250":4,"251":4,"252":4,"253":4,"254":4,"255":4,"256":4,"257":4,"258":4,"259":4,"260":4,"261":4,"262":4,"263":4,"264":4,"265":4,"266":4,"267":4,"268":4,"269":7,"270":5,"271":5,"272":5,"273":5,"274":5,"275":5,"276":5,"277":5,"278":5,"279":5,"280":5,"281":5,"282":5,"283":5,"284":5,"285":5,"286":5,"287":5,"288":5,"289":5,"290":5,"291":5,"292":5,"293":5,"294":5,"295":5,"296":5,"297":5,"298":5,"299":5,"300":4,"301":4,"302":4,"303":4,"304":4,"305":4,"306":4,"307":4,"308":4,"309":4,"310":4,"311":4,"312":4,"313":4,"314":4,"315":4,"316":4,"317":4,"318":4,"319":4,"320":4,"321":4,"322":4,"323":4,"324":4,"325":4,"326":4,"327":4,"328":4,"329":4,"330":4,"331":4,"332":4,"333":4,"334":4,"335":4,"336":4,"337":4,"338":4,"339":4,"340":4,"341":4,"342":4,"343":4,"344":4,"345":4,"346":4,"347":4,"348":4,"349":4,"350":4,"351":4,"352":4,"353":4,"354":4,"355":4,"356":4,"357":4,"358":4,"359":4,"360":4,"361":4,"362":4,"363":4,"364":4,"365":4,"366":4,"367":4,"368":4,"369":4,"370":4,"371":4,"372":4,"373":4,"374":4,"375":4,"376":4,"377":4,"378":4,"379":4,"380":4,"381":4,"382":4,"383":4,"384":4,"385":4,"386":4,"387":4,"388":4,"389":4,"390":4,"391":4,"392":4,"393":4,"394":4,"395":4,"396":4,"397":4,"398":7,"399":7,"400":4,"401":4,"402":4,"403":4,"404":4,"405":4,"406":4,"407":4,"408":4,"409":4,"410":4,"411":4,"412":4,"413":4,"414":4,"415":4,"416":4,"417":4,"418":4,"419":4,"420":4,"421":4,"422":4,"423":4,"424":4,"425":4,"426":4,"427":4,"428":7,"429":7,"430":5,"431":5,"432":5,"433":5,"434":5,"435":5,"436":5,"437":5,"438":5,"439":5,"440":5,"441":5,"442":5,"443":5,"444":5,"445":5,"446":5,"447":5,"448":5,"449":5,"450":5,"451":5,"452":5,"453":5,"454":5,"455":5,"456":5,"457":5,"458":5,"459":7,"460":4,"461":4,"462":4,"463":4,"464":4,"465":4,"466":4,"467":4,"468":4,"469":4,"470":4,"471":4,"472":4,"473":4,"474":4,"475":4,"476":4,"477":4,"478":4,"479":4,"480":4,"481":4,"482":4,"483":4,"484":4,"485":4,"486":4,"487":4,"488":4,"489":4,"490":4,"491":4,"492":4,"493":4,"494":4,"495":4,"496":4,"497":4,"498":4,"499":4,"500":4,"501":4,"502":4,"503":4,"504":4,"505":4,"506":4,"507":4,"508":4,"509":4,"510":4,"511":4,"512":4,"513":4,"514":4,"515":4,"516":4,"517":4,"518":4,"519":4,"520":4,"521":4,"522":4,"523":4,"524":4,"525":4,"526":4,"527":4,"528":4,"529":7,"530":4,"531":4,"532":4,"533":4,"534":4,"535":4,"536":4,"537":4,"538":4,"539":4,"540":4,"541":4,"542":4,"543":4,"544":4,"545":4,"546":4,"547":4,"548":4,"549":4,"550":4,"551":4,"552":4,"553":4,"554":4,"555":4,"556":4,"557":4,"558":4,"559":4,"560":4,"561":4,"562":4,"563":4,"564":4,"565":4,"566":4,"567":4,"568":7,"569":7,"570":4,"571":4,"572":4,"573":4,"574":4,"575":4,"576":4,"577":4,"578":7,"579":7,"580":4,"581":4,"582":4,"583":4,"584":4,"585":4,"586":4,"587":4,"588":4,"589":7,"590":4,"591":4,"592":4,"593":4,"594":4,"595":4,"596":4,"597":4,"598":4,"599":4,"600":4,"601":4,"602":4,"603":4,"604":4,"605":4,"606":4,"607":4,"608":4,"609":4,"610":4,"611":4,"612":4,"613":4,"614":4,"615":4,"616":4,"617":4,"618":4,"619":4,"620":4,"621":4,"622":4,"623":4,"624":4,"625":4,"626":4,"627":4,"628":4,"629":4,"630":4,"631":4,"632":4,"633":4,"634":4,"635":4,"636":4,"637":4,"638":4,"639":4,"640":4,"641":4,"642":4,"643":4,"644":4,"645":4,"646":4,"647":4,"648":4,"649":4,"650":4,"651":4,"652":4,"653":4,"654":4,"655":4,"656":4,"657":4,"658":4,"659":7,"660":4,"661":4,"662":4,"663":4,"664":4,"665":4,"666":4,"667":4,"668":4,"669":4,"670":4,"671":4,"672":4,"673":4,"674":4,"675":4,"676":4,"677":4,"678":4,"679":4,"680":4,"681":4,"682":4,"683":4,"684":4,"685":4,"686":4,"687":4,"688":4,"689":4,"690":4,"691":4,"692":4,"693":4,"694":7,"695":7,"696":7,"697":7,"698":7,"699":7,"700":4,"701":4,"702":4,"703":4,"704":4,"705":4,"706":4,"707":4,"708":4,"709":4,"710":4,"711":4,"712":4,"713":4,"714":4,"715":7,"716":4,"717":4,"718":4,"719":4,"720":4,"721":4,"722":4,"723":4,"724":4,"725":4,"726":4,"727":4,"728":4,"729":4,"730":4,"731":4,"732":4,"733":4,"734":4,"735":4,"736":4,"737":4,"738":4,"739":4,"740":4,"741":4,"742":4,"743":4,"744":4,"745":4,"746":4,"747":4,"748":4,"749":4,"750":3,"751":3,"752":3,"753":3,"754":3,"755":3,"756":3,"757":3,"758":3,"759":3,"760":3,"761":3,"762":3,"763":3,"764":3,"765":3,"766":3,"767":3,"768":3,"769":3,"770":3,"771":3,"772":3,"773":3,"774":3,"775":3,"776":3,"777":3,"778":3,"779":3,"780":3,"781":3,"782":3,"783":3,"784":3,"785":3,"786":3,"787":3,"788":3,"789":3,"790":3,"791":3,"792":3,"793":3,"794":3,"795":3,"796":3,"797":3,"798":3,"799":3,"800":2,"801":2,"802":2,"803":2,"804":2,"805":2,"806":2,"807":2,"808":2,"809":2,"810":2,"811":2,"812":2,"813":2,"814":2,"815":2,"816":2,"817":7,"818":7,"819":7,"820":4,"821":4,"822":4,"823":4,"824":4,"825":4,"826":4,"827":4,"828":4,"829":4,"830":4,"831":4,"832":3,"833":3,"834":3,"835":3,"836":3,"837":3,"838":3,"839":7,"840":2,"841":2,"842":2,"843":2,"844":2,"845":2,"846":2,"847":2,"848":7,"849":7,"850":1,"851":1,"852":1,"853":1,"854":1,"855":1,"856":1,"857":1,"858":1,"859":1,"860":1,"861":1,"862":1,"863":1,"864":1,"865":1,"866":7,"867":7,"868":7,"869":7,"870":2,"871":2,"872":2,"873":2,"874":2,"875":2,"876":2,"877":2,"878":2,"879":2,"880":2,"881":2,"882":2,"883":2,"884":2,"885":7,"886":7,"887":7,"888":7,"889":2,"890":2,"891":2,"892":2,"893":2,"894":2,"895":2,"896":2,"897":2,"898":2,"899":7,"900":2,"901":2,"902":2,"903":2,"904":2,"905":2,"906":2,"907":2,"908":2,"909":2,"910":2,"911":2,"912":2,"913":2,"914":2,"915":2,"916":2,"917":2,"918":2,"919":2,"920":2,"921":2,"922":2,"923":2,"924":2,"925":2,"926":2,"927":2,"928":2,"929":2,"930":2,"931":2,"932":2,"933":2,"934":2,"935":2,"936":2,"937":2,"938":2,"939":2,"940":2,"941":2,"942":2,"943":2,"944":2,"945":2,"946":2,"947":2,"948":2,"949":2,"950":2,"951":2,"952":2,"953":2,"954":2,"955":2,"956":2,"957":2,"958":2,"959":2,"960":2,"961":2,"962":2,"963":2,"964":2,"965":2,"966":2,"967":7,"968":7,"969":7,"970":3,"971":3,"972":3,"973":3,"974":3,"975":3,"976":3,"977":3,"978":3,"979":3,"980":3,"981":3,"982":3,"983":3,"984":3,"985":3,"986":3,"987":3,"988":3,"989":3,"990":3,"991":3,"992":3,"993":3,"994":3,"995":7,"996":7,"997":7,"998":7,"999":7};
+const ZONE_MAP = _PPS.zoneMap || _ZONE_SEED;
+const HAS_ZONE_MAP = Object.keys(ZONE_MAP).length > 100;
+function getTransitDays(state, zip) {
+  if (HAS_ZONE_MAP && zip && zip.length >= 3) {
+    const pfx = zip.substring(0, 3);
+    if (ZONE_MAP[pfx]) return ZONE_MAP[pfx];
+  }
+  return TRANSIT_DAYS[state] || PCF.default_transit_days;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// UTILITY FUNCTIONS
+// ═══════════════════════════════════════════════════════════════
+function getShopToday() {
+  const now = new Date();
+  const opts = { timeZone: PCF.shop_timezone, hour: "numeric", hour12: false };
+  const shopHour = parseInt(new Intl.DateTimeFormat("en-US", opts).format(now));
+  const dateStr = new Intl.DateTimeFormat("en-US", { timeZone: PCF.shop_timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+  const [m, d, y] = dateStr.split("/");
+  const today = new Date(y, m - 1, d);
+  if (shopHour >= PCF.shop_cutoff_hour || today.getDay() === 0 || today.getDay() === 6) {
+    today.setDate(today.getDate() + 1);
+    while (today.getDay() === 0 || today.getDay() === 6) today.setDate(today.getDate() + 1);
+  }
+  return today;
+}
+function addBusinessDays(start, days) {
+  const d = new Date(start); let added = 0;
+  while (added < days) { d.setDate(d.getDate() + 1); if (d.getDay() !== 0 && d.getDay() !== 6) added++; }
+  return d;
+}
+function businessDaysBetween(a, b) {
+  let count = 0; const d = new Date(a);
+  while (d < b) { d.setDate(d.getDate() + 1); if (d.getDay() !== 0 && d.getDay() !== 6) count++; }
+  return count;
+}
+function fmtDate(d) { return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }); }
+function toYMD(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
+const SHOP_CLOSURES = (_CFG.pcf || {}).closures || [];
+function isBusinessDay(d) {
+  const dow = d.getDay();
+  if (dow === 0 || dow === 6) return false;
+  const mmdd = String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+  const ymd = d.toISOString().split("T")[0];
+  for (const c of SHOP_CLOSURES) { if (c === mmdd || c === ymd) return false; }
+  return true;
+}
+const DNAMES=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const MNAMES=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+// ═══════════════════════════════════════════════════════════════
+// IMPOSITION CALCULATION
+// ═══════════════════════════════════════════════════════════════
+function calcBrochureImp(longEdge, shortEdge) {
+  const r1 = 18.5 / longEdge;
+  const across = r1 < 0.5 ? 0 : r1 < 1 ? 0.5 : r1 < 1.48 ? 1 : r1 < 3 ? 2 : r1 < 4 ? 3 : r1 < 5 ? 4 : r1 < 6 ? 5 : r1 < 7 ? 6 : r1 < 8 ? 7 : 8;
+  const r2 = 12.5 / shortEdge;
+  const down = r2 < 2 ? 1 : r2 < 3 ? 2 : r2 < 4 ? 3 : 4;
+  return across * down;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PRICING ENGINE
+// ═══════════════════════════════════════════════════════════════
+function calculate(c) {
+  const errors = [];
+  let imp, longE, shortE;
+  if (c.sizeMode === "preset") {
+    const preset = SIZE_PRESETS.find(s => s.label === c.sizeLabel);
+    if (!preset) return { error: ["Select a size"] };
+    imp = preset.imp; longE = preset.long; shortE = preset.short;
+  } else {
+    longE = Math.max(c.longEdge, c.shortEdge);
+    shortE = Math.min(c.longEdge, c.shortEdge);
+    if (longE < 2 || shortE < 2) return { error: ["Minimum dimension is 2 inches"] };
+    if (longE > 27 || shortE > 12.5) return { error: ["Maximum size: 27×12.5 inches flat"] };
+    imp = calcBrochureImp(longE, shortE);
+    if (imp <= 0) return { error: ["Size too large for press sheet"] };
+  }
+
+  const qty = c.qty;
+  if (qty < 1) return { error: ["Enter quantity"] };
+  const fold = FOLD_TYPES.find(f => f.val === c.foldType) || FOLD_TYPES[0];
+  const panels = fold.panels;
+  const pressSheets = qty / imp;
+  const paper = c.paper;
+  const sides = c.sides;
+
+  // Folded dimension validation
+  if (panels > 1) {
+    const foldDim = c.foldDir === "short" ? shortE : longE;
+    const panelSize = foldDim / panels;
+    if (panelSize < 2) errors.push(`Folded panel too small (${panelSize.toFixed(1)}"). Min 2" per panel.`);
+    if (c.foldDir === "short" && longE > 13) errors.push("Long edge exceeds 13\" folder throat when folding short side.");
+  }
+  if (errors.length) return { error: errors };
+
+  // Markup
+  const dL = 1.85 * Math.log(pressSheets) - 0.5;
+  const mk = Math.max(PCF.backend_maximummarkup - dL, PCF.backend_minimummarkup);
+
+  // Approximate thickness
+  const approxThickness = (paper.price / 10) * qty;
+
+  const P = {};
+
+  // Paper
+  P.paper = (paper.price * pressSheets) * mk;
+
+  // Printing — markup applied uniformly to all printing costs
+  if (c.frontColor === "color") {
+    P.frontPrint = ((PCF.printing_black_cost + PCF.printing_fullcolor_cost) * pressSheets) * mk;
+  } else {
+    P.frontPrint = (PCF.printing_black_cost * pressSheets) * mk;
+  }
+  P.backPrint = 0;
+  if (sides === 2) {
+    if (c.backColor === "color") {
+      P.backPrint = ((PCF.printing_black_cost + PCF.printing_fullcolor_cost) * pressSheets) * mk;
+    } else {
+      P.backPrint = (PCF.printing_black_cost * pressSheets) * mk;
+    }
+  }
+
+  // Press labor
+  P.press = (pressSheets / PCF.press_printsperhour) * PCF.labor_press_hr;
+
+  // Cutting labor
+  P.cutting = ((((approxThickness / PCF.cutter_stackheight_inches) * imp) / PCF.cutter_cyclesperhour) * PCF.labor_cutting_hr) + PCF.cutterbasefee;
+
+  // Folding labor
+  P.folding = fold.val !== "flat" ? ((qty / PCF.bindery_morgana_impressionperhour) * PCF.labor_bindery_hr) + (PCF.labor_bindery_hr / 3) : 0;
+
+  // Vivid
+  P.vivid = c.vivid ? Math.ceil(P.press) : 0;
+
+  // Coating
+  const coat = COATINGS.find(x => x.val === c.coating) || COATINGS[0];
+  P.coat = 0;
+  if (coat.val > 0 && paper.coatable) {
+    const cs = c.coatSides || 1;
+    P.coat = PCF.labor_bindery_hr + Math.ceil(((pressSheets * coat.price * cs) * mk) + ((pressSheets / PCF.uvcoaterimpressionsperhour) * PCF.labor_bindery_hr));
+  }
+
+  // Bundling
+  const bund = BUNDLING.find(x => x.val === c.bundling) || BUNDLING[0];
+  P.bundle = (bund.val > 0 && qty >= 100) ? Math.ceil(((qty / bund.price) * mk) * (PCF.labor_bindery_hr / PCF.bundlesperhour) + 7) : 0;
+
+  // Perforation
+  const perf = PERF_OPTS.find(x => x.val === c.perforation) || PERF_OPTS[0];
+  P.perforation = 0;
+  if (perf.val > 0) {
+    P.perforation = Math.ceil(((((qty * perf.price) / PCF.speed_gwperhr) * PCF.labor_gw_hour) * mk) + PCF.labor_gw_setup);
+  }
+
+  // Round cornering (flat only)
+  const rc = CORNERS.find(x => x.val === c.roundCorner) || CORNERS[0];
+  P.rc = 0;
+  if (rc.val > 0 && fold.val === "flat") {
+    P.rc = Math.floor(((approxThickness / rc.price) / PCF.roundcornerperhour) * PCF.labor_bindery_hr) + (PCF.labor_bindery_hr / 2);
+  }
+
+  // Difficult fold surcharges (stack)
+  const foldLabor = (qty / PCF.bindery_morgana_impressionperhour) * PCF.labor_bindery_hr;
+  // Tier 1: accordion4/roll4/dgate4, OR small sizes (long<9) with 3+ panel folds
+  const tier1Folds = ["accordion4","roll4","dgate4"];
+  const smallSizeFold = longE < 9 && fold.val !== "flat" && fold.val !== "bifold";
+  const smallPresetFold = ["5.5×8.5","6×9"].some(s => c.sizeLabel?.startsWith(s)) && fold.val !== "flat" && fold.val !== "bifold";
+  P.diffFold1 = (tier1Folds.includes(fold.val) || smallSizeFold || smallPresetFold) ? foldLabor + (PCF.labor_bindery_hr / 2) : 0;
+  // Tier 2: Roll fold specifically (stacks with tier 1)
+  P.diffFold2 = fold.val === "roll4" ? foldLabor : 0;
+  // Tier 3: narrow sheets (short < 5") with any fold, OR folding the short side
+  P.diffFold3 = fold.val !== "flat" && (shortE < 5 || c.foldDir === "short") ? foldLabor : 0;
+
+  // Artwork
+  const art = ART_OPTS.find(x => x.val === c.artwork) || ART_OPTS[0];
+  const artWork = art.val >= 2;
+  const ndc = art.val >= 4 ? ((art.price * sides) * PCF.art_newdesignmodifier) + 15 : 0;
+  const aec = (art.val >= 2 && art.val < 4) ? art.price : 0;
+  P.artwork = ndc + aec;
+
+  // Bleed
+  const bld = BLEED_OPTS.find(x => x.val === c.bleed) || BLEED_OPTS[0];
+  P.bleed = (!artWork && bld.val > 0) ? Math.max(bld.price * sides, PCF.bleed_minimum) : 0;
+
+  // Proofing
+  P.proof = 0;
+  if (c.proof > 0) {
+    const sf = (PCF.sheetsforlowcosthardcopyproof / pressSheets) > 1 ? 1 : (1500 / pressSheets);
+    P.proof = (c.proof >= 3 ? PCF.proof_hardcopy_cost : PCF.proof_digital_cost) * sf;
+  }
+
+  // Non-inventory surcharge
+  P.nonInv = INV_VALS.includes(paper.val) ? 0 : PCF.non_inventory_fee;
+
+  // Easy discounts — preset OR custom dims matching standard sizes
+  const stdLongs = [8.5, 9, 11, 14, 17];
+  const stdShorts = [5.5, 6, 8.5, 11];
+  const isEasySize = SIZE_PRESETS.some(s => s.label === c.sizeLabel && s.easy)
+    || (c.sizeMode === "custom" && stdLongs.includes(longE) && stdShorts.includes(shortE));
+  const isEasyFold = ["flat","bifold","trifold","z3"].includes(fold.val);
+  const costSummary = P.paper + P.frontPrint + P.backPrint + P.cutting + P.folding + P.perforation + P.rc;
+  P.discEasyFlat = (fold.val === "flat" && isEasySize) ? -Math.min(costSummary * PCF.easydiscount_factor, PCF.easydiscount_max / 10) : 0;
+  P.discEasy = (fold.val !== "flat" && isEasyFold && isEasySize) ? -Math.min(P.press + P.cutting + P.folding, PCF.easydiscount_max / 10) : 0;
+
+  // BW discount
+  const allBW = c.frontColor === "bw" && (sides === 1 || c.backColor === "bw");
+  P.discBW = allBW ? -(P.press * 0.3) : 0;
+
+  // Cardstock discount — specific cardstock values only
+  const csDiscVals = [0.01, 0.02, 0.03, 1.01, 1.02, 2.021, 2.022, 2.023, 2.024, 2.025, 2.01, 3.03, 3.01, 3.04, 3.02];
+  P.cardstockDisc = csDiscVals.includes(paper.val) ? -(0.04 * pressSheets) : 0;
+
+  const total = Object.values(P).reduce((s, v) => s + v, 0);
+
+  // Turnaround
+  const paperDays = paper.days != null ? paper.days : Math.floor(paper.val || 0);
+  const vividDays = c.vivid ? Math.floor(pressSheets / 2500) : 0;
+  const coatDays = (coat.val > 0 && paper.coatable) ? Math.ceil(pressSheets / (coat.val / (c.coatSides || 1))) : 0;
+  const bundleDays = (bund.val > 0 && qty >= 100) ? Math.floor(approxThickness / bund.val) : 0;
+  const perfDays = (perf.val > 0) ? Math.ceil(pressSheets / perf.val) : 0;
+  const rcDays = (rc.val > 0 && fold.val === "flat") ? Math.floor(Math.min(pressSheets / rc.val, PCF.addon_roundcornermaxdays)) : 0;
+  const artDays = art.val >= 4 ? Math.ceil(art.val) : 0;
+  const proofDays = c.proof >= 3 ? Math.ceil(paperDays + 3.01) : 0;
+  const baseDays = Math.floor(pressSheets / PCF.sheetsturnaround);
+  const days = Math.max(PCF.minimum_turnaround_days, baseDays + paperDays + vividDays + coatDays + bundleDays + perfDays + rcDays + artDays + proofDays);
+
+  // Turnaround impact per option (for UI badges)
+  const ti = {
+    paper: paperDays,
+    vivid: vividDays,
+    coating: coatDays,
+    bundling: bundleDays,
+    perforation: perfDays,
+    roundCorner: rcDays,
+    artDesign: artDays,
+    artEdits: (art.val >= 2 && art.val < 4) ? 1 : 0,
+    proof: proofDays,
+  };
+
+  // Shipping & Rush
+  const transitDays = getTransitDays(c.shipState, c.shipZip);
+  const productionBizDays = days;
+  const bufferedProdDays = productionBizDays * 2;
+  const freeDeliveryBizDays = bufferedProdDays + transitDays;
+  const earliestBizDays = productionBizDays + 1;
+  const shopToday = getShopToday();
+  const freeDeliveryDate = addBusinessDays(shopToday, freeDeliveryBizDays);
+  const earliestDate = addBusinessDays(shopToday, earliestBizDays);
+
+  let rushMultiplier = 1, rushCost = 0, bizDaysToDate = freeDeliveryBizDays, needByValid = false, tooSoon = false, needByPast = false;
+  if (c.needByDate) {
+    const nbd = new Date(c.needByDate + "T00:00:00");
+    if (nbd <= shopToday) { needByPast = true; }
+    else {
+      bizDaysToDate = businessDaysBetween(shopToday, nbd);
+      needByValid = true;
+      if (bizDaysToDate < earliestBizDays) { tooSoon = true; }
+      else if (bizDaysToDate < freeDeliveryBizDays) {
+        rushMultiplier = freeDeliveryBizDays / bizDaysToDate;
+        rushCost = Math.max(0, (total * rushMultiplier) - total);
+      }
+    }
+  }
+  const grandTotal = total + rushCost;
+  const effectiveDeliveryBiz = (needByValid && !tooSoon) ? bizDaysToDate : freeDeliveryBizDays;
+  const effectiveTransit = Math.min(transitDays, Math.max(1, effectiveDeliveryBiz - productionBizDays));
+  const prodStartBiz = Math.max(0, effectiveDeliveryBiz - effectiveTransit - productionBizDays);
+  const productionStartDate = addBusinessDays(shopToday, prodStartBiz);
+  const mustShipBiz = Math.max(0, effectiveDeliveryBiz - effectiveTransit);
+  const mustShipDate = addBusinessDays(shopToday, mustShipBiz);
+
+  // Cost breakdown
+  const bd = [
+    {l:"Paper",v:P.paper,g:"mat"},{l:"Front Print",v:P.frontPrint,g:"mat"},{l:"Back Print",v:P.backPrint,g:"mat"},
+    {l:"Press",v:P.press,g:"lab"},{l:"Cutting",v:P.cutting,g:"lab"},{l:"Folding",v:P.folding,g:"lab"},
+    {l:"Vivid Print",v:P.vivid,g:"add"},{l:"UV Coating",v:P.coat,g:"add"},{l:"Bundling",v:P.bundle,g:"add"},
+    {l:"Perforation",v:P.perforation,g:"add"},{l:"Round Cornering",v:P.rc,g:"add"},
+    {l:"Fold Surcharge 1",v:P.diffFold1,g:"fee"},{l:"Fold Surcharge 2",v:P.diffFold2,g:"fee"},{l:"Fold Surcharge 3",v:P.diffFold3,g:"fee"},
+    {l:"Base Cost",v:P.baseCost,g:"fee"},{l:"Non-Inventory",v:P.nonInv,g:"fee"},
+    {l:"Artwork",v:P.artwork,g:"art"},{l:"Bleed",v:P.bleed,g:"art"},{l:"Proofing",v:P.proof,g:"art"},
+    {l:"BW Discount",v:P.discBW,g:"disc"},{l:"Easy Discount (Flat)",v:P.discEasyFlat,g:"disc"},{l:"Easy Discount",v:P.discEasy,g:"disc"},{l:"Cardstock Disc",v:P.cardstockDisc,g:"disc"},
+  ].filter(r => Math.abs(r.v) > 0.005);
+
+  const gC={mat:CK.cyan,lab:CK.key,add:CK.yellow,art:CK.magenta,fee:"#c25050",disc:CK.cyan};
+  const gL={mat:"Materials & Ink",lab:"Production Labor",add:"Addons",art:"Artwork & Proofing",fee:"Fees & Surcharges",disc:"Discounts"};
+  const grouped=Object.entries(gL).map(([k,label])=>({label,val:bd.filter(r=>r.g===k).reduce((s,r)=>s+r.v,0),c:gC[k]})).filter(g=>Math.abs(g.val)>0.005);
+
+  const perUnit = qty > 0 ? grandTotal / qty : 0;
+
+  return {
+    total: Math.round(grandTotal * 100) / 100, baseTotal: Math.round(total * 100) / 100,
+    perUnit: Math.round(perUnit * 100) / 100, days, qty: qty, bd, grouped,
+    imp, mk, fold, panels, pressSheets, longE, shortE, approxThickness,
+    coatOK: paper.coatable, q100: qty >= 100, ti,
+    shipping: {
+      transitDays, effectiveTransit, freeDeliveryBizDays, freeDeliveryDate: fmtDate(freeDeliveryDate), freeDeliveryYMD: toYMD(freeDeliveryDate),
+      earliestBizDays, earliestDate: fmtDate(earliestDate), earliestYMD: toYMD(earliestDate), shopToday: fmtDate(shopToday),
+      bizDaysToDate, rushMultiplier, rushCost: Math.round(rushCost * 100) / 100,
+      needByValid, needByPast, tooSoon, productionBizDays, bufferedProdDays,
+      productionStartDate: fmtDate(productionStartDate), productionStartYMD: toYMD(productionStartDate),
+      mustShipDate: fmtDate(mustShipDate), mustShipYMD: toYMD(mustShipDate),
+    },
+    debug: { pressSheets, imp, qty, mk, dL, approxThickness, fold: fold.label, panels, longE, shortE, paperDays, baseDays, days, P },
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+// DOWNLOADABLE BROCHURE TEMPLATE (jsPDF)
+// ═══════════════════════════════════════════════════════════════
+
+function drawDashedLine(pdf, x1, y1, x2, y2, dashLen, gapLen) {
+  var dx = x2 - x1, dy = y2 - y1;
+  var len = Math.sqrt(dx * dx + dy * dy);
+  if (len === 0) return;
+  var ux = dx / len, uy = dy / len;
+  var pos = 0, drawing = true;
+  while (pos < len) {
+    var segLen = drawing ? dashLen : gapLen;
+    if (pos + segLen > len) segLen = len - pos;
+    if (drawing) pdf.line(x1 + ux * pos, y1 + uy * pos, x1 + ux * (pos + segLen), y1 + uy * (pos + segLen));
+    pos += segLen; drawing = !drawing;
+  }
+}
+function drawDashedRect(pdf, x, y, w, h, dashLen, gapLen) {
+  drawDashedLine(pdf, x, y, x + w, y, dashLen, gapLen);
+  drawDashedLine(pdf, x + w, y, x + w, y + h, dashLen, gapLen);
+  drawDashedLine(pdf, x + w, y + h, x, y + h, dashLen, gapLen);
+  drawDashedLine(pdf, x, y + h, x, y, dashLen, gapLen);
+}
+
+function generateBrochureTemplate(longE, shortE, foldType, panels, foldDir, sizeLabel, perfCount, perfDir, perfPositions) {
+  try {
+    if (!window.jspdf) { alert("PDF library not loaded. Please refresh."); return; }
+    const { jsPDF } = window.jspdf;
+    const bleed = 0.125, safety = 0.125;
+    const trimW = longE, trimH = shortE;
+    const docW = trimW + bleed * 2;
+    const docH = trimH + bleed * 2;
+    const pdf = new jsPDF({ orientation: docW > docH ? "l" : "p", unit: "in", format: [docW, docH] });
+
+    for (let pg = 0; pg < 2; pg++) {
+      if (pg > 0) pdf.addPage([docW, docH], docW > docH ? "l" : "p");
+      const label = pg === 0 ? "Front / Outside" : "Back / Inside";
+
+      // Light grey bleed zone background
+      pdf.setFillColor(240, 240, 240);
+      pdf.rect(0, 0, docW, docH, "F");
+
+      // White trim area
+      pdf.setFillColor(255, 255, 255);
+      pdf.rect(bleed, bleed, trimW, trimH, "F");
+
+      // Bleed line — red solid at document edge
+      pdf.setDrawColor(229, 62, 62);
+      pdf.setLineWidth(0.012);
+      pdf.rect(0.006, 0.006, docW - 0.012, docH - 0.012, "S");
+
+      // Trim line — black dashed
+      pdf.setDrawColor(30, 30, 30);
+      pdf.setLineWidth(0.01);
+      drawDashedRect(pdf, bleed, bleed, trimW, trimH, 0.08, 0.05);
+
+      // Safety line — green dashed
+      pdf.setDrawColor(56, 161, 105);
+      pdf.setLineWidth(0.008);
+      drawDashedRect(pdf, bleed + safety, bleed + safety, trimW - safety * 2, trimH - safety * 2, 0.05, 0.03);
+
+      // Fold lines — orange dashed, with flap offset for nesting folds
+      if (panels > 1) {
+        pdf.setDrawColor(245, 166, 35);
+        pdf.setLineWidth(0.01);
+        const foldingLong = foldDir === "long";
+        const tplFoldDim = foldingLong ? trimW : trimH;
+        const tplFracs = getFoldFracs(foldType, panels, tplFoldDim);
+        for (let i = 0; i < tplFracs.length; i++) {
+          const frac = tplFracs[i];
+          if (foldingLong) {
+            const x = bleed + trimW * frac;
+            drawDashedLine(pdf, x, bleed + 0.1, x, bleed + trimH - 0.1, 0.08, 0.04);
+            pdf.setFontSize(6); pdf.setTextColor(245, 166, 35);
+            pdf.text("FOLD " + (i + 1), x + 0.04, bleed + 0.25);
+          } else {
+            const y = bleed + trimH * frac;
+            drawDashedLine(pdf, bleed + 0.1, y, bleed + trimW - 0.1, y, 0.08, 0.04);
+            pdf.setFontSize(6); pdf.setTextColor(245, 166, 35);
+            pdf.text("FOLD " + (i + 1), bleed + 0.15, y - 0.04);
+          }
+        }
+      }
+
+      // Perf lines (purple dashed)
+      if (perfCount > 0 && perfPositions) {
+        pdf.setDrawColor(139, 92, 246);
+        pdf.setLineWidth(0.01);
+        const perfVertical2 = perfDir === "length" ? (foldDir === "long") : (foldDir !== "long");
+        for (let i = 0; i < Math.min(perfCount, perfPositions.length); i++) {
+          const frac = perfPositions[i] / 100;
+          if (perfVertical2) {
+            const x = bleed + trimW * frac;
+            drawDashedLine(pdf, x, bleed + 0.1, x, bleed + trimH - 0.1, 0.08, 0.04);
+            pdf.setFontSize(6); pdf.setTextColor(139, 92, 246);
+            pdf.text("PERF " + (i + 1), x + 0.04, bleed + trimH - 0.15);
+          } else {
+            const y = bleed + trimH * frac;
+            drawDashedLine(pdf, bleed + 0.1, y, bleed + trimW - 0.1, y, 0.08, 0.04);
+            pdf.setFontSize(6); pdf.setTextColor(139, 92, 246);
+            pdf.text("PERF " + (i + 1), bleed + 0.15, y - 0.04);
+          }
+        }
+      }
+
+      // Panel labels
+      const panelCfg = PANEL_LABELS[foldType];
+      if (panelCfg && panels > 1) {
+        const labels = pg === 0 ? panelCfg.front : panelCfg.back;
+        const foldingLong2 = foldDir === "long";
+        const tplFoldDim2 = foldingLong2 ? trimW : trimH;
+        const tplEdges = [0, ...getFoldFracs(foldType, panels, tplFoldDim2), 1];
+        const tplCenters = Array.from({length: panels}, (_, i) => (tplEdges[i] + tplEdges[i + 1]) / 2);
+        pdf.setFontSize(8); pdf.setTextColor(180, 140, 60);
+        for (let p = 0; p < labels.length; p++) {
+          const cx = foldingLong2
+            ? bleed + trimW * tplCenters[p]
+            : bleed + trimW / 2;
+          const cy = foldingLong2
+            ? bleed + trimH / 2 + 0.15
+            : bleed + trimH * tplCenters[p];
+          pdf.text(labels[p], cx, cy, { align: "center" });
+        }
+      }
+
+      // Text watermark — tiled "PriorityPrintService.com"
+      var tileSize = Math.min(trimW * 0.2, 1.2);
+      var tileStep = tileSize * 1.6;
+      var safeL = bleed + safety, safeT = bleed + safety;
+      var safeW = trimW - safety * 2, safeH = trimH - safety * 2;
+      var cols = Math.floor(safeW / tileStep), rows = Math.floor(safeH / tileStep);
+      var gridW = cols * tileStep, gridH = rows * tileStep;
+      var offX = safeL + (safeW - gridW) / 2, offY = safeT + (safeH - gridH) / 2;
+      pdf.setFontSize(tileSize * 3.5);
+      pdf.setTextColor(230, 230, 230);
+      for (var row = 0; row < rows; row++) {
+        for (var col = 0; col < cols; col++) {
+          pdf.text("PriorityPrintService.com", offX + col * tileStep + tileStep / 2, offY + row * tileStep + tileStep / 2, { align: "center" });
+        }
+      }
+
+      // Page label
+      var cx = docW / 2;
+      pdf.setFontSize(10); pdf.setTextColor(170, 170, 170);
+      pdf.text(label, cx, docH / 2 - 0.1, { align: "center" });
+
+      // Dimensions
+      pdf.setFontSize(7); pdf.setTextColor(190, 190, 190);
+      pdf.text("Trim: " + trimW + '" \u00d7 ' + trimH + '"  |  With bleeds: ' + docW.toFixed(3) + '" \u00d7 ' + docH.toFixed(3) + '"', cx, docH / 2 + 0.12, { align: "center" });
+      if (panels > 1) {
+        var foldDim = foldDir === "long" ? trimW : trimH;
+        var staticDim = foldDir === "long" ? trimH : trimW;
+        pdf.text("Folded: " + staticDim.toFixed(1) + '" \u00d7 ' + (foldDim / panels).toFixed(1) + '"  (' + panels + ' panels)', cx, docH / 2 + 0.3, { align: "center" });
+      }
+
+      // URL
+      pdf.setFontSize(7); pdf.setTextColor(150, 150, 150);
+      pdf.text("priorityprintservice.com", cx, docH - bleed - 0.08, { align: "center" });
+
+      // Legend on first page
+      if (pg === 0) {
+        var lx = bleed + safety + 0.1;
+        var ly = docH - bleed - 0.42;
+        pdf.setFontSize(6);
+        pdf.setTextColor(229, 62, 62);
+        pdf.text("\u2014 Bleed (extend backgrounds to this edge)", lx, ly - 0.24);
+        pdf.setTextColor(30, 30, 30);
+        pdf.text("- - Trim (cut line)", lx, ly - 0.16);
+        pdf.setTextColor(56, 161, 105);
+        pdf.text("- - Safety (keep text inside)", lx, ly - 0.08);
+        if (panels > 1) { pdf.setTextColor(245, 166, 35); pdf.text("- - Fold lines", lx, ly); }
+        if (perfCount > 0) { pdf.setTextColor(139, 92, 246); pdf.text("- - Perf lines", lx, ly + 0.08); }
+      }
+    }
+
+    var safeName = (sizeLabel || (longE + "x" + shortE)).replace(/[^a-zA-Z0-9._-]/g, "_");
+    var foldName = foldType === "flat" ? "flat" : foldType;
+    pdf.save("PPS_Brochure_Template_" + safeName + "_" + foldName + ".pdf");
+  } catch (e) {
+    console.error("Template generation failed:", e);
+    alert("Template generation failed: " + e.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 3D FOLD RENDERER — Proven engine from brochure-fold-previewer.html
+// Uses vanilla DOM via useRef to preserve exact anti-clipping math
+// ═══════════════════════════════════════════════════════════════
+
+// Fold type mapping: our calculator values → previewer fold keys
+const FOLD_KEY_MAP = {
+  bifold: "half-fold", trifold: "tri-fold", z3: "accordion-3",
+  gate3: "gate-fold", accordion4: "accordion-4", roll4: "roll-fold",
+  dgate4: "double-gate", dparallel4: "accordion-4",
+};
+
+// Verified fold configurations with anti-clipping translateZ factors
+const FOLDS_3D = {
+  "half-fold": { n:2, mode:"nested", views:[
+    {label:"Front (Open)",sc:[8,-6,0,0],f:[0]},
+    {label:"Half Fold",sc:[20,-30,60,0],f:[-175]},
+    {label:"Back (Open)",sc:[8,174,0,0],f:[0]}]},
+  "accordion-3": { n:3, mode:"nested", views:[
+    {label:"Front (Open)",sc:[8,-6,0,0],f:[0,0]},
+    {label:"Accordion Fold",sc:[20,-35,60,0],f:[-175,168]},
+    {label:"Back (Open)",sc:[8,174,0,0],f:[0,0]}]},
+  "accordion-4": { n:4, mode:"nested", views:[
+    {label:"Front (Open)",sc:[8,-4,0,0],f:[0,0,0]},
+    {label:"Accordion Fold",sc:[20,-35,100,0],f:[-175,168,-162]},
+    {label:"Back (Open)",sc:[8,174,0,0],f:[0,0,0]}]},
+  "tri-fold": { n:3, mode:"trifold", views:[
+    {label:"Inside (Open)",sc:[8,-6,0,0],f:[0,0],tz:[0,0]},
+    {label:"Right Tucks In",sc:[20,-35,50,0],f:[0,-179],tz:[0,0]},
+    {label:"Tri-Fold",sc:[20,-25,60,0],f:[175,-179],tzf_tf:[0.04,0]},
+    {label:"Outside (Open)",sc:[8,174,0,0],f:[0,0],tz:[0,0]}]},
+  "gate-fold": { n:4, mode:"gate3", views:[
+    {label:"Front (Open)",sc:[8,-6,0,0],g:[0,0]},
+    {label:"Gate Fold",sc:[20,-25,30,0],g:[175,-175]},
+    {label:"Back (Open)",sc:[8,174,0,0],g:[0,0]}]},
+  "double-gate": { n:4, mode:"dgate", views:[
+    {label:"Inside (Open)",sc:[8,-5,0,0],dg:[0,0,0],tzf:[0,0,0]},
+    {label:"Flaps In",sc:[20,-30,50,0],dg:[178,-178,0],tzf:[0.04,0.04,0]},
+    {label:"Double Gate Fold",sc:[20,-25,80,0],dg:[178,-178,-178],tzf:[0.04,0.04,0.18]},
+    {label:"Outside (Open)",sc:[8,174,0,0],dg:[0,0,0],tzf:[0,0,0]}]},
+  "roll-fold": { n:4, mode:"nested", views:[
+    {label:"Front (Open)",sc:[8,-4,0,0],f:[0,0,0],tzf:[0,0,0]},
+    {label:"Panel 3 Tucks",sc:[20,-30,80,0],f:[0,0,-179],tzf:[0,0,0.02]},
+    {label:"Panel 2+3 Fold",sc:[20,-30,90,0],f:[0,-178,-179],tzf:[0,0.05,0.02]},
+    {label:"Roll Fold",sc:[20,-30,100,0],f:[-176,-178,-179],tzf:[0.1,0.05,0.02]},
+    {label:"Back (Open)",sc:[8,174,0,0],f:[0,0,0],tzf:[0,0,0]}]},
+};
+
+// Sanitize src for innerHTML injection — only allow data: URIs
+function safeSrc(src) { return src && src.startsWith("data:") ? src : ""; }
+
+// Panel face builder — maps artwork onto front/back of each panel
+// Wrap image in a positioned div — crops to trim area like the proof modal
+// rW/rH = rendered image size in px (mapped 1:1 to physical inches), centered in iW×iH
+function foldImgWrap(src, iW, iH, ml, mt, rW, rH) {
+  if (!src) return "";
+  var imgStyle;
+  if (rW && rH) {
+    // Crop mode: render at physical-inch scale, centered, overflow clipped
+    var ox = (iW - rW) / 2, oy = (iH - rH) / 2;
+    imgStyle = "width:" + rW.toFixed(1) + "px;height:" + rH.toFixed(1) + "px;position:absolute;left:" + ox.toFixed(1) + "px;top:" + oy.toFixed(1) + "px;display:block";
+  } else {
+    imgStyle = "width:100%;height:100%;object-fit:contain;display:block";
+  }
+  return '<div style="width:' + iW + 'px;height:' + iH + 'px;margin-left:' + ml + 'px;margin-top:' + mt + 'px;position:relative;overflow:hidden"><img src="' + safeSrc(src) + '" style="' + imgStyle + '"></div>';
+}
+
+function foldMkF(idx, n, pw, ph, iW, iH, isP, frontSrc, backSrc, swap, fRW, fRH, bRW, bRH) {
+  const bi = n - 1 - idx;
+  const fS = swap ? backSrc : frontSrc, bS = swap ? frontSrc : backSrc;
+  const frw = swap ? bRW : fRW, frh = swap ? bRH : fRH, brw = swap ? fRW : bRW, brh = swap ? fRH : bRH;
+  let fml=0, fmt=0, bml=0, bmt=0;
+  if (isP) { fmt = -ph*idx; bmt = -ph*bi; } else { fml = -pw*idx; bml = -pw*bi; }
+  return `<div class="fold-face ff" style="width:${pw}px;height:${ph}px;background:#fff">${foldImgWrap(fS,iW,iH,fml,fmt,frw,frh)}</div><div class="fold-face fb" style="width:${pw}px;height:${ph}px;background:#fff">${foldImgWrap(bS,iW,iH,bml,bmt,brw,brh)}</div>`;
+}
+
+// Gate face builder — source divided into quarters
+function foldMkFGate(startQ, spanQ, qw, qh, iW, iH, isP, totalQ, frontSrc, backSrc, fRW, fRH, bRW, bRH) {
+  const bStartQ = totalQ - startQ - spanQ;
+  const pw = isP ? qw : qw*spanQ, ph = isP ? qh*spanQ : qh;
+  const fml = isP ? 0 : -qw*startQ, fmt = isP ? -qh*startQ : 0;
+  const bml = isP ? 0 : -qw*bStartQ, bmt = isP ? -qh*bStartQ : 0;
+  return `<div class="fold-face ff" style="width:${pw}px;height:${ph}px;background:#fff">${foldImgWrap(frontSrc,iW,iH,fml,fmt,fRW,fRH)}</div><div class="fold-face fb" style="width:${pw}px;height:${ph}px;background:#fff">${foldImgWrap(backSrc,iW,iH,bml,bmt,bRW,bRH)}</div>`;
+}
+
+// Recursive nested builder (accordion, half, roll)
+function foldBuildNest(idx, n, pw, ph, iW, iH, isP, fSrc, bSrc, fRW, fRH, bRW, bRH) {
+  const last = idx === n-1;
+  let h = `<div class="fold-panel-wrap" style="left:0;top:0;width:${pw}px;height:${ph}px">`;
+  h += foldMkF(idx, n, pw, ph, iW, iH, isP, fSrc, bSrc, false, fRW, fRH, bRW, bRH);
+  if (!last) {
+    const hp = isP ? `left:0;top:${ph}px;` : `left:${pw}px;top:0;`;
+    const og = isP ? "center top" : "left center";
+    h += `<div class="fold-hinge" id="fh${idx+1}" style="${hp}width:${pw}px;height:${ph}px;transform-origin:${og}">`;
+    h += foldBuildNest(idx+1, n, pw, ph, iW, iH, isP, fSrc, bSrc, fRW, fRH, bRW, bRH);
+    h += `</div>`;
+  }
+  h += `</div>`; return h;
+}
+
+// Tri-fold builder (center base, left/right hinges)
+function foldBuildTri(pw, ph, iW, iH, isP, n, fSrc, bSrc, fRW, fRH, bRW, bRH) {
+  let h = "";
+  if (isP) {
+    h += `<div class="fold-panel-wrap" style="left:0;top:${ph}px;width:${pw}px;height:${ph}px">`;
+    h += foldMkF(1,n,pw,ph,iW,iH,isP,fSrc,bSrc,true,fRW,fRH,bRW,bRH);
+    h += `<div class="fold-hinge" id="fhL" style="left:0;top:${-ph}px;width:${pw}px;height:${ph}px;transform-origin:center bottom"><div class="fold-panel-wrap" style="left:0;top:0;width:${pw}px;height:${ph}px">${foldMkF(0,n,pw,ph,iW,iH,isP,fSrc,bSrc,true,fRW,fRH,bRW,bRH)}</div></div>`;
+    h += `<div class="fold-hinge" id="fhR" style="left:0;top:${ph}px;width:${pw}px;height:${ph}px;transform-origin:center top"><div class="fold-panel-wrap" style="left:0;top:0;width:${pw}px;height:${ph}px">${foldMkF(2,n,pw,ph,iW,iH,isP,fSrc,bSrc,true,fRW,fRH,bRW,bRH)}</div></div>`;
+    h += `</div>`;
+  } else {
+    h += `<div class="fold-panel-wrap" style="left:${pw}px;top:0;width:${pw}px;height:${ph}px">`;
+    h += foldMkF(1,n,pw,ph,iW,iH,isP,fSrc,bSrc,true,fRW,fRH,bRW,bRH);
+    h += `<div class="fold-hinge" id="fhL" style="left:${-pw}px;top:0;width:${pw}px;height:${ph}px;transform-origin:right center"><div class="fold-panel-wrap" style="left:0;top:0;width:${pw}px;height:${ph}px">${foldMkF(0,n,pw,ph,iW,iH,isP,fSrc,bSrc,true,fRW,fRH,bRW,bRH)}</div></div>`;
+    h += `<div class="fold-hinge" id="fhR" style="left:${pw}px;top:0;width:${pw}px;height:${ph}px;transform-origin:left center"><div class="fold-panel-wrap" style="left:0;top:0;width:${pw}px;height:${ph}px">${foldMkF(2,n,pw,ph,iW,iH,isP,fSrc,bSrc,true,fRW,fRH,bRW,bRH)}</div></div>`;
+    h += `</div>`;
+  }
+  return h;
+}
+
+// Gate fold builder (25%+50%+25%)
+function foldBuildGate(qw, qh, iW, iH, isP, fSrc, bSrc, fRW, fRH, bRW, bRH) {
+  let h = "";
+  if (isP) {
+    const cH = qh*2;
+    h += `<div class="fold-hinge" id="fhGL" style="left:0;top:0;width:${qw}px;height:${qh}px;transform-origin:center bottom">${foldMkFGate(0,1,qw,qh,iW,iH,isP,4,fSrc,bSrc,fRW,fRH,bRW,bRH)}</div>`;
+    h += `<div class="fold-panel-wrap" style="left:0;top:${qh}px;width:${qw}px;height:${cH}px">${foldMkFGate(1,2,qw,qh,iW,iH,isP,4,fSrc,bSrc,fRW,fRH,bRW,bRH)}</div>`;
+    h += `<div class="fold-hinge" id="fhGR" style="left:0;top:${qh+cH}px;width:${qw}px;height:${qh}px;transform-origin:center top">${foldMkFGate(3,1,qw,qh,iW,iH,isP,4,fSrc,bSrc,fRW,fRH,bRW,bRH)}</div>`;
+  } else {
+    const cW = qw*2;
+    h += `<div class="fold-hinge" id="fhGL" style="left:0;top:0;width:${qw}px;height:${qh}px;transform-origin:right center">${foldMkFGate(0,1,qw,qh,iW,iH,isP,4,fSrc,bSrc,fRW,fRH,bRW,bRH)}</div>`;
+    h += `<div class="fold-panel-wrap" style="left:${qw}px;top:0;width:${cW}px;height:${qh}px">${foldMkFGate(1,2,qw,qh,iW,iH,isP,4,fSrc,bSrc,fRW,fRH,bRW,bRH)}</div>`;
+    h += `<div class="fold-hinge" id="fhGR" style="left:${qw+cW}px;top:0;width:${qw}px;height:${qh}px;transform-origin:left center">${foldMkFGate(3,1,qw,qh,iW,iH,isP,4,fSrc,bSrc,fRW,fRH,bRW,bRH)}</div>`;
+  }
+  return h;
+}
+
+// Double gate builder (4 equal panels, flaps fold in, center folds over)
+function foldBuildDGate(pw, ph, iW, iH, isP, n, fSrc, bSrc, fRW, fRH, bRW, bRH) {
+  let h = "";
+  if (isP) {
+    h += `<div class="fold-panel-wrap" style="left:0;top:0;width:${pw}px;height:${ph*2}px">`;
+    h += `<div class="fold-panel-wrap" style="left:0;top:${ph}px;width:${pw}px;height:${ph}px">${foldMkF(1,n,pw,ph,iW,iH,isP,fSrc,bSrc,true,fRW,fRH,bRW,bRH)}</div>`;
+    h += `<div class="fold-hinge" id="fhL" style="left:0;top:0;width:${pw}px;height:${ph}px;transform-origin:center bottom"><div class="fold-panel-wrap" style="left:0;top:0;width:${pw}px;height:${ph}px">${foldMkF(0,n,pw,ph,iW,iH,isP,fSrc,bSrc,true,fRW,fRH,bRW,bRH)}</div></div>`;
+    h += `<div class="fold-hinge" id="fhCtr" style="left:0;top:${ph*2}px;width:${pw}px;height:${ph*2}px;transform-origin:center top">`;
+    h += `<div class="fold-panel-wrap" style="left:0;top:0;width:${pw}px;height:${ph}px">${foldMkF(2,n,pw,ph,iW,iH,isP,fSrc,bSrc,true,fRW,fRH,bRW,bRH)}</div>`;
+    h += `<div class="fold-hinge" id="fhR" style="left:0;top:${ph}px;width:${pw}px;height:${ph}px;transform-origin:center top"><div class="fold-panel-wrap" style="left:0;top:0;width:${pw}px;height:${ph}px">${foldMkF(3,n,pw,ph,iW,iH,isP,fSrc,bSrc,true,fRW,fRH,bRW,bRH)}</div></div>`;
+    h += `</div></div>`;
+  } else {
+    h += `<div class="fold-panel-wrap" style="left:0;top:0;width:${pw*2}px;height:${ph}px">`;
+    h += `<div class="fold-panel-wrap" style="left:${pw}px;top:0;width:${pw}px;height:${ph}px">${foldMkF(1,n,pw,ph,iW,iH,isP,fSrc,bSrc,true,fRW,fRH,bRW,bRH)}</div>`;
+    h += `<div class="fold-hinge" id="fhL" style="left:0;top:0;width:${pw}px;height:${ph}px;transform-origin:right center"><div class="fold-panel-wrap" style="left:0;top:0;width:${pw}px;height:${ph}px">${foldMkF(0,n,pw,ph,iW,iH,isP,fSrc,bSrc,true,fRW,fRH,bRW,bRH)}</div></div>`;
+    h += `<div class="fold-hinge" id="fhCtr" style="left:${pw*2}px;top:0;width:${pw*2}px;height:${ph}px;transform-origin:left center">`;
+    h += `<div class="fold-panel-wrap" style="left:0;top:0;width:${pw}px;height:${ph}px">${foldMkF(2,n,pw,ph,iW,iH,isP,fSrc,bSrc,true,fRW,fRH,bRW,bRH)}</div>`;
+    h += `<div class="fold-hinge" id="fhR" style="left:${pw}px;top:0;width:${pw}px;height:${ph}px;transform-origin:left center"><div class="fold-panel-wrap" style="left:0;top:0;width:${pw}px;height:${ph}px">${foldMkF(3,n,pw,ph,iW,iH,isP,fSrc,bSrc,true,fRW,fRH,bRW,bRH)}</div></div>`;
+    h += `</div></div>`;
+  }
+  return h;
+}
+
+// Apply a view config to the scene DOM — sets all hinge transforms with anti-clipping translateZ
+function foldApplyView(sceneEl, foldKey, viewIdx, dirSign) {
+  const fold = FOLDS_3D[foldKey]; if (!fold) return;
+  const view = fold.views[viewIdx]; if (!view) return;
+  const s = dirSign || 1;
+  const isP = false; // landscape for now (could be extended)
+  let [rx, ry, tx, ty] = view.sc;
+  if (s < 0) ry = -ry;
+
+  sceneEl.style.transition = "transform 1.4s cubic-bezier(.4,0,.2,1)";
+  sceneEl.style.transform = `scale(1) rotateX(${rx}deg) rotateY(${ry}deg) translateX(${tx}px) translateY(${ty}px)`;
+
+  const $ = id => sceneEl.querySelector("#" + id);
+
+  if (fold.mode === "trifold") {
+    const [lA, rA] = view.f;
+    const tzf = view.tzf_tf || [0, 0];
+    const hL = $("fhL"), hR = $("fhR");
+    const pw = hL ? parseInt(hL.style.width) || 0 : 0;
+    if (hR) hR.style.transform = `${tzf[1]?`translateZ(${(tzf[1]*pw).toFixed(1)}px) `:""}rotateY(${rA*s}deg)`;
+    if (hL) hL.style.transform = `${tzf[0]?`translateZ(${(tzf[0]*pw).toFixed(1)}px) `:""}rotateY(${lA*s}deg)`;
+  } else if (fold.mode === "gate3") {
+    const [lA, rA] = view.g;
+    const gL = $("fhGL"), gR = $("fhGR");
+    if (gL) gL.style.transform = `rotateY(${lA*s}deg)`;
+    if (gR) gR.style.transform = `rotateY(${rA*s}deg)`;
+  } else if (fold.mode === "dgate") {
+    const [lA, rA, cA] = view.dg;
+    const tzf = view.tzf || [0, 0, 0];
+    const hL = $("fhL"), hR = $("fhR"), hC = $("fhCtr");
+    const pw = hL ? parseInt(hL.style.width) || 0 : 0;
+    if (hL) hL.style.transform = `${tzf[0]?`translateZ(${(tzf[0]*pw).toFixed(1)}px) `:""}rotateY(${lA*s}deg)`;
+    if (hR) hR.style.transform = `${tzf[1]?`translateZ(${(tzf[1]*pw).toFixed(1)}px) `:""}rotateY(${rA*s}deg)`;
+    if (hC) hC.style.transform = `${tzf[2]?`translateZ(${(tzf[2]*pw).toFixed(1)}px) `:""}rotateY(${cA*s}deg)`;
+  } else {
+    // Nested mode (accordion, half, roll)
+    const tzf = view.tzf;
+    view.f.forEach((a, i) => {
+      const h = $("fh" + (i + 1)); if (!h) return;
+      let tz = "";
+      if (tzf && tzf[i]) { const pw = parseInt(h.style.width) || 0; tz = `translateZ(${(tzf[i]*pw).toFixed(1)}px) `; }
+      h.style.transform = `${tz}rotateY(${a*s}deg)`;
+    });
+  }
+}
+
+// React component that renders the 3D fold scene
+function FoldRenderer({ foldKey, frontSrc, backSrc, frontDims, backDims, longEdge, shortEdge, viewIdx, foldDir, flipped, frontGray, backGray }) {
+  const sceneRef = useRef(null);
+  const fold = FOLDS_3D[foldKey];
+
+  const mob = useIsMobile();
+  const isP = false; // landscape
+  const maxDim = mob ? 260 : 400;
+  const nPanels = fold ? (fold.mode === "gate3" ? 4 : fold.n) : 1;
+  const pa = (longEdge / nPanels) / shortEdge;
+  const pw = Math.round(Math.min(maxDim / nPanels, (mob ? window.innerWidth - 80 : 700) / nPanels));
+  const ph = Math.round(pw / pa);
+  const iW = pw * nPanels;
+  const iH = ph;
+  const qw = fold && fold.mode === "gate3" ? iW / 4 : pw;
+
+  // Compute rendered image sizes — map art inches to trim pixels (1:1 physical scale)
+  const scale = iW / longEdge;
+  const fRW = frontDims ? frontDims.w * scale : null;
+  const fRH = frontDims ? frontDims.h * scale : null;
+  const bRW = backDims ? backDims.w * scale : null;
+  const bRH = backDims ? backDims.h * scale : null;
+
+  // Build scene HTML
+  useEffect(() => {
+    if (!sceneRef.current || !fold) return;
+    const fSrc = frontSrc || null, bSrc = backSrc || null;
+    let html = "";
+    // Roll fold: panels fold inward onto the back/inside, so swap art
+    const swapArt = foldKey === "roll-fold";
+    const sf = swapArt ? bSrc : fSrc, sb = swapArt ? fSrc : bSrc;
+    const sfrw = swapArt ? bRW : fRW, sfrh = swapArt ? bRH : fRH;
+    const sbrw = swapArt ? fRW : bRW, sbrh = swapArt ? fRH : bRH;
+    if (fold.mode === "nested") {
+      html = foldBuildNest(0, fold.n, pw, ph, iW, iH, isP, sf, sb, sfrw, sfrh, sbrw, sbrh);
+    }
+    else if (fold.mode === "trifold") html = foldBuildTri(pw, ph, iW, iH, isP, fold.n, fSrc, bSrc, fRW, fRH, bRW, bRH);
+    else if (fold.mode === "gate3") html = foldBuildGate(qw, ph, iW, iH, isP, fSrc, bSrc, fRW, fRH, bRW, bRH);
+    else if (fold.mode === "dgate") html = foldBuildDGate(pw, ph, iW, iH, isP, fold.n, fSrc, bSrc, fRW, fRH, bRW, bRH);
+    sceneRef.current.innerHTML = html;
+    // Apply greyscale filters — ff=front face, fb=back face
+    // For roll fold, art is swapped so ff shows back art and fb shows front art
+    var ffGray = swapArt ? backGray : frontGray;
+    var fbGray = swapArt ? frontGray : backGray;
+    sceneRef.current.querySelectorAll(".ff img").forEach(function(img) { img.style.filter = ffGray ? "grayscale(1)" : "none"; });
+    sceneRef.current.querySelectorAll(".fb img").forEach(function(img) { img.style.filter = fbGray ? "grayscale(1)" : "none"; });
+    setTimeout(() => { if (sceneRef.current) foldApplyView(sceneRef.current, foldKey, viewIdx || 0, flipped ? -1 : 1); }, 50);
+  }, [frontSrc, backSrc, foldKey, pw, ph, flipped, frontGray, backGray, fRW, fRH, bRW, bRH]);
+
+  // Apply view changes
+  useEffect(() => {
+    if (!sceneRef.current || !fold) return;
+    foldApplyView(sceneRef.current, foldKey, viewIdx || 0, flipped ? -1 : 1);
+  }, [viewIdx, foldDir, flipped]);
+
+  if (!fold) return <div style={{ padding: 40, textAlign: "center", color: "rgba(255,255,255,.4)" }}>Flat — no fold preview</div>;
+
+  return (
+    <div className="fold-viewport" style={{ minHeight: mob ? 220 : 350 }}>
+      <div ref={sceneRef} className="fold-scene"
+        style={{ transformStyle: "preserve-3d", position: "relative", width: iW, height: iH }} />
+    </div>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// SHEET PREVIEW — Upload + Proof for single-sheet products (brochures, flat printing)
+// ═══════════════════════════════════════════════════════════════
+
+function SheetPreview({ longEdge, shortEdge, foldType, foldDir, panels, perfCount, perfDir, perfPositions, onPerfPositions, frontColor, backColor, sides, onSizeOverride, onFoldChange, onFoldDirChange, sizeMode, onArtwork }) {
+  const mob = useIsMobile();
+  const hasIO = panels > 1 && foldType !== "z3";
+  const fLabel = hasIO ? "Front / Outside" : "Front";
+  const bLabel = hasIO ? "Back / Inside" : "Back";
+  const [frontArt, setFrontArt] = useState(null); // {dataUrl, file, dims:{w,h}}
+  const [backArt, setBackArt] = useState(null);
+  const [side, setSide] = useState("front"); // "front" | "back"
+  const [foldFlipped, setFoldFlipped] = useState(false);
+  const canFlip = panels > 1 && !["gate3","dgate4"].includes(foldType);
+  // Reset flip when fold type changes
+  const prevFoldType = useRef(foldType);
+  if (prevFoldType.current !== foldType) { prevFoldType.current = foldType; if (foldFlipped) setFoldFlipped(false); }
+  const [proofOpen, setProofOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewAngle, setPreviewAngle] = useState(0);
+  const [approved, setApproved] = useState(false);
+  const [dropHover, setDropHover] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [fileName, setFileName] = useState("");
+  const [fitMode, setFitMode] = useState("crop");
+  const [artScale, setArtScale] = useState(100);
+  const [rotateSteps, setRotateSteps] = useState(0);
+  const [draggingPerf, setDraggingPerf] = useState(null);
+  const [editingPerf, setEditingPerf] = useState(null); // index of perf being edited via text input
+  const [editPerfVal, setEditPerfVal] = useState("");
+  const proofContainerRef = useRef(null);
+  const fileRef = useRef(null);
+  const frontInputRef = useRef(null);
+  const backInputRef = useRef(null);
+  const rawFileRef = useRef(null);
+
+  // Clear approval when transforms change
+  const prevTransforms = useRef({ fitMode, artScale, rotateSteps });
+  useEffect(() => {
+    const prev = prevTransforms.current;
+    if (prev.fitMode !== fitMode || prev.artScale !== artScale || prev.rotateSteps !== rotateSteps) {
+      if (approved) setApproved(false);
+      prevTransforms.current = { fitMode, artScale, rotateSteps };
+    }
+  }, [fitMode, artScale, rotateSteps]);
+
+  // Rotate a dataUrl image by N steps of 90° clockwise
+  function rotateImageBySteps(dataUrl, steps) {
+    if (steps <= 0) return Promise.resolve(dataUrl);
+    return new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => {
+        const s = ((steps % 4) + 4) % 4;
+        const swap = s % 2 === 1;
+        const c = document.createElement("canvas");
+        c.width = swap ? img.naturalHeight : img.naturalWidth;
+        c.height = swap ? img.naturalWidth : img.naturalHeight;
+        const ctx = c.getContext("2d");
+        ctx.translate(c.width / 2, c.height / 2);
+        ctx.rotate((s * Math.PI) / 2);
+        ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
+        resolve(c.toDataURL("image/jpeg", 0.85));
+      };
+      img.onerror = () => resolve(dataUrl);
+      img.src = dataUrl;
+    });
+  }
+
+  // Effective art dimensions after rotation
+  const currentArtRaw = side === "front" ? frontArt : backArt;
+  const effectiveDims = useMemo(() => {
+    if (!currentArtRaw?.dims) return null;
+    const d = currentArtRaw.dims;
+    if (rotateSteps % 2 === 1) return { w: d.h, h: d.w };
+    return d;
+  }, [currentArtRaw, rotateSteps]);
+
+  // Rotated art dataUrl
+  const [rotatedUrl, setRotatedUrl] = useState(null);
+  useEffect(() => {
+    if (!currentArtRaw?.dataUrl) { setRotatedUrl(null); return; }
+    if (rotateSteps === 0) { setRotatedUrl(currentArtRaw.dataUrl); return; }
+    let cancelled = false;
+    rotateImageBySteps(currentArtRaw.dataUrl, rotateSteps).then(url => { if (!cancelled) setRotatedUrl(url); });
+    return () => { cancelled = true; };
+  }, [currentArtRaw?.dataUrl, rotateSteps]);
+
+  // FitToggle component
+  const FitToggle = () => (
+    <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", borderRadius: 6, overflow: "hidden", border: "1px solid rgba(255,255,255,.12)" }}>
+        {[{ v: "crop", l: "Crop" }, { v: "cover", l: "Fill" }, { v: "contain", l: "Fit" }, { v: "stretch", l: "Stretch" }, { v: "scale", l: "Scale" }].map(o => (
+          <button type="button" key={o.v} onClick={() => { setFitMode(o.v); if (o.v === "scale") setArtScale(100); }} style={{
+            padding: "6px 12px", fontSize: 10, fontWeight: 600, border: "none", cursor: "pointer", fontFamily: "inherit",
+            background: fitMode === o.v ? CK.cyan : "rgba(255,255,255,.06)",
+            color: fitMode === o.v ? "#000" : "rgba(255,255,255,.5)",
+          }}>{o.l}</button>
+        ))}
+        <button type="button" onClick={() => setRotateSteps(s => (s + 1) % 4)} style={{
+          padding: "6px 12px", fontSize: 10, fontWeight: 600, border: "none", borderLeft: "1px solid rgba(255,255,255,.08)", cursor: "pointer", fontFamily: "inherit",
+          background: rotateSteps > 0 ? CK.cyan : "rgba(255,255,255,.06)",
+          color: rotateSteps > 0 ? "#000" : "rgba(255,255,255,.5)",
+        }}>Rotate 90°{rotateSteps > 0 ? ` (${rotateSteps * 90}°)` : ""}</button>
+      </div>
+      {fitMode === "scale" && (
+        <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+          <div style={{ display: "flex", borderRadius: 6, overflow: "hidden", border: "1px solid rgba(255,255,255,.12)" }}>
+            <button type="button" onClick={() => setArtScale(s => Math.max(10, s - 1))} style={{ padding: "6px 10px", fontSize: 12, fontWeight: 600, border: "none", cursor: "pointer", fontFamily: "inherit", background: "rgba(255,255,255,.06)", color: "rgba(255,255,255,.5)" }}>−</button>
+            <button type="button" onClick={() => setArtScale(s => Math.min(300, s + 1))} style={{ padding: "6px 10px", fontSize: 12, fontWeight: 600, border: "none", cursor: "pointer", fontFamily: "inherit", background: "rgba(255,255,255,.06)", color: "rgba(255,255,255,.5)" }}>+</button>
+          </div>
+          <span style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,.4)", minWidth: 32, textAlign: "center" }}>{artScale}%</span>
+        </div>
+      )}
+      {fitMode === "stretch" && (
+        <button type="button" onClick={() => setFitMode("crop")} style={{ padding: "5px 12px", fontSize: 10, fontWeight: 700, border: "1px solid rgba(239,68,68,.4)", borderRadius: 4, cursor: "pointer", fontFamily: "inherit", background: "rgba(239,68,68,.12)", color: "#f87171" }}>Reset Stretch</button>
+      )}
+    </div>
+  );
+
+  const BLEED = 0.125;
+  const bleedW = longEdge + BLEED * 2;
+  const bleedH = shortEdge + BLEED * 2;
+  const bleedPctX = (BLEED / bleedW) * 100;
+  const bleedPctY = (BLEED / bleedH) * 100;
+  const safetyPctX = ((BLEED + 0.125) / bleedW) * 100;
+  const safetyPctY = ((BLEED + 0.125) / bleedH) * 100;
+
+  async function processFile(fileList) {
+    if (!fileList || !fileList.length) return;
+    const file = fileList[0];
+    setLoading(true);
+    setFileName(file.name);
+    rawFileRef.current = file;
+
+    try {
+      if (file.type === "application/pdf") {
+        const buf = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+        const renderPage = async (num) => {
+          const pg = await pdf.getPage(num);
+          const vp = pg.getViewport({ scale: 2 });
+          const c = document.createElement("canvas");
+          c.width = vp.width; c.height = vp.height;
+          await pg.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
+          const [x0, y0, x1, y1] = pg.view;
+          return { dataUrl: c.toDataURL("image/jpeg", 0.85), dims: { w: (x1 - x0) / 72, h: (y1 - y0) / 72 } };
+        };
+        const front = await renderPage(1);
+        setFrontArt({ ...front, file });
+        if (pdf.numPages >= 2) {
+          const back = await renderPage(2);
+          setBackArt({ ...back, file });
+        }
+      } else {
+        const dataUrl = await new Promise((res) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => res(null); r.readAsDataURL(file); });
+        if (!dataUrl) return;
+        const dims = await new Promise((res) => { const img = new Image(); img.onload = () => res({ w: img.naturalWidth / 300, h: img.naturalHeight / 300 }); img.onerror = () => res({ w: 0, h: 0 }); img.src = dataUrl; });
+        setFrontArt({ dataUrl, file, dims });
+      }
+      setApproved(false);
+      if (onArtwork) onArtwork({ type: "files", list: [file] });
+    } catch (e) { console.error("File processing failed:", e); }
+    setLoading(false);
+  }
+
+  function handleClear() {
+    setFrontArt(null); setBackArt(null); setFileName(""); setApproved(false);
+    rawFileRef.current = null;
+    if (onArtwork) onArtwork({ type: "none" });
+  }
+
+  const hasArt = !!frontArt;
+  const currentArt = side === "front" ? frontArt : backArt;
+
+  // Fold line positions as percentages, with flap offset for nesting folds
+  const foldLines = [];
+  const foldDim = foldDir === "long" ? longEdge : shortEdge;
+  const panelFracs = panels > 1 ? getFoldFracs(foldType, panels, foldDim) : [];
+  if (panels > 1) {
+    const foldingLong = foldDir === "long";
+    for (const frac of panelFracs) {
+      foldLines.push({ pct: frac * 100, vertical: foldingLong });
+    }
+  }
+
+
+  // Perf line positions — perfDir "length" crosses longEdge (vertical when foldDir=long)
+  const perfVertical = perfDir === "length" ? (foldDir === "long") : (foldDir !== "long");
+  const perfLines = (perfCount > 0 && perfPositions)
+    ? perfPositions.slice(0, perfCount).map((pct, i) => ({ pct, vertical: perfVertical, index: i }))
+    : [];
+
+  // Perf constraint: 1" from edge, 1" between perfs, snap to 1/8"
+  function clampPerfInches(inches, idx, trimDim, positions) {
+    var minIn = 1, maxIn = trimDim - 1;
+    // 1" away from the other perf line
+    for (var j = 0; j < positions.length; j++) {
+      if (j === idx) continue;
+      var otherIn = positions[j] / 100 * trimDim;
+      if (inches < otherIn) maxIn = Math.min(maxIn, otherIn - 1);
+      else minIn = Math.max(minIn, otherIn + 1);
+    }
+    var snapped = Math.round(Math.max(minIn, Math.min(maxIn, inches)) * 8) / 8;
+    return Math.max(minIn, Math.min(maxIn, snapped));
+  }
+
+  // Drag handler for perf lines
+  function handlePerfDrag(e) {
+    if (draggingPerf === null || !proofContainerRef.current) return;
+    var pl = perfLines[draggingPerf];
+    if (!pl) return;
+    var rect = proofContainerRef.current.getBoundingClientRect();
+    var trimDim = pl.vertical ? longEdge : shortEdge;
+    var bPct = pl.vertical ? bleedPctX : bleedPctY;
+    var trimSpan = 100 - bPct * 2;
+    var mouseRel = pl.vertical
+      ? ((e.clientX - rect.left) / rect.width * 100)
+      : ((e.clientY - rect.top) / rect.height * 100);
+    var rawInches = (mouseRel - bPct) / trimSpan * trimDim;
+    var clamped = clampPerfInches(rawInches, draggingPerf, trimDim, perfPositions);
+    var updated = perfPositions.slice();
+    updated[draggingPerf] = Math.round(clamped / trimDim * 1000) / 10;
+    onPerfPositions(updated);
+  }
+
+  // Commit typed perf value
+  function commitPerfEdit(idx) {
+    var v = parseFloat(editPerfVal);
+    if (isNaN(v)) { setEditingPerf(null); return; }
+    var trimDim = perfVertical ? longEdge : shortEdge;
+    var clamped = clampPerfInches(v, idx, trimDim, perfPositions);
+    var updated = perfPositions.slice();
+    updated[idx] = Math.round(clamped / trimDim * 1000) / 10;
+    onPerfPositions(updated);
+    setEditingPerf(null);
+  }
+
+  // Scale order size to match uploaded art dimensions
+  function handleMatchSize() {
+    if (!effectiveDims || !onSizeOverride) return;
+    var artW = effectiveDims.w, artH = effectiveDims.h;
+    if (!artW || !artH) return;
+    if (!confirm("This will change your brochure size to match the uploaded artwork dimensions. Continue?")) return;
+    var input = prompt(
+      "Artwork is " + artW.toFixed(2) + "\u2033 \u00d7 " + artH.toFixed(2) + "\u2033.\n\n" +
+      "How much of this size is bleed (per side)?\n\n" +
+      "Enter 0 if artwork has no bleeds.\n" +
+      "Standard print bleed is 0.125\u2033.",
+      "0.125"
+    );
+    if (input === null) return;
+    var bleedVal = parseFloat(input);
+    if (isNaN(bleedVal) || bleedVal < 0 || bleedVal >= Math.min(artW, artH) / 2) {
+      alert("Invalid bleed value.");
+      return;
+    }
+    var trimW = artW - bleedVal * 2;
+    var trimH = artH - bleedVal * 2;
+    onSizeOverride(trimW, trimH);
+  }
+
+  // Panel labels for current fold type + side, respecting flip
+  const panelCfg = PANEL_LABELS[foldType];
+  const panelLabels = useMemo(() => {
+    if (!panelCfg || panels <= 1) return [];
+    const labels = [...(side === "front" ? panelCfg.front : panelCfg.back)];
+    if (foldFlipped) labels.reverse();
+    return labels;
+  }, [foldType, panels, side, foldFlipped]);
+
+  return (
+    <div>
+      {/* Upload area */}
+      {!hasArt ? (
+        <div
+          onDragOver={e => { e.preventDefault(); setDropHover(true); }}
+          onDragLeave={() => setDropHover(false)}
+          onDrop={e => { e.preventDefault(); setDropHover(false); processFile(e.dataTransfer.files); }}
+          onClick={() => fileRef.current?.click()}
+          style={{
+            padding: mob ? "24px 16px" : "32px 20px", borderRadius: 8,
+            border: `2px dashed ${dropHover ? CK.cyan : CC.border}`,
+            background: dropHover ? CK.cyanLight : "#fafafa",
+            cursor: "pointer", textAlign: "center", transition: "all .15s",
+          }}>
+          <input ref={fileRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.tiff,.tif" onChange={e => processFile(e.target.files)} style={{ display: "none" }} />
+          <div style={{ fontSize: 28, marginBottom: 6 }}>📄</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: CC.dark }}>
+            {loading ? "Processing..." : "Drop your artwork here or click to upload"}
+          </div>
+          <div style={{ fontSize: 11, color: CC.light, marginTop: 4 }}>
+            PDF (page 1 = front, page 2 = back) or JPG/PNG for front side
+          </div>
+        </div>
+      ) : (
+        <div>
+          {/* File info + actions */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0" }}>
+            <div style={{ fontSize: 12, color: CC.mid }}>
+              <strong>{fileName}</strong>
+              {frontArt?.dims && <span style={{ color: CC.light, marginLeft: 6 }}>{frontArt.dims.w.toFixed(1)}" × {frontArt.dims.h.toFixed(1)}"</span>}
+            </div>
+            <button type="button" onClick={handleClear} style={{
+              padding: "3px 10px", fontSize: 10, fontWeight: 600, borderRadius: 4, cursor: "pointer", fontFamily: "inherit",
+              border: `1px solid ${CC.border}`, background: "#fff", color: CC.light,
+            }}>Remove uploads</button>
+          </div>
+
+          {/* Proof button + info */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+            <button type="button" onClick={() => setProofOpen(true)} style={{
+              padding: "10px 18px", fontSize: 13, fontWeight: 700, borderRadius: 6, cursor: "pointer", fontFamily: "inherit",
+              border: "none", display: "flex", alignItems: "center", gap: 6,
+              background: approved ? "linear-gradient(135deg, #22c55e 0%, #16a34a 100%)" : "linear-gradient(180deg, #fff 0%, #f7f7f8 100%)",
+              color: approved ? "#fff" : "#555", boxShadow: "0 1px 3px rgba(0,0,0,.08)",
+              border: `1px solid ${approved ? "#16a34a" : CC.border}`,
+            }}>
+              {approved ? "✓ Proof Approved" : "🔍 Proof"} {!approved && <span style={{ fontSize: 9, fontWeight: 700, background: "#fee2e2", color: "#dc2626", padding: "1px 6px", borderRadius: 4 }}>required</span>}
+            </button>
+            <div style={{ fontSize: 11, color: CC.light, lineHeight: 1.4 }}>Open proof to review bleed, trim, safety{panels > 1 ? ", fold lines" : ""} and approve artwork</div>
+          </div>
+
+          {/* Fold selection + 3D Preview */}
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
+            <div style={{ flex: 1 }}>
+              <Sel label="Fold Type" value={foldType} onChange={onFoldChange}>
+                {FOLD_TYPES.map(f => <option key={f.val} value={f.val}>{f.label}</option>)}
+              </Sel>
+            </div>
+            {panels > 1 && (
+              <button type="button" onClick={() => { setPreviewOpen(true); setPreviewAngle(0); }} style={{
+                padding: "10px 16px", fontSize: 12, fontWeight: 600, borderRadius: 6, cursor: "pointer", fontFamily: "inherit",
+                border: `1px solid ${CC.border}`, background: "linear-gradient(180deg, #fff 0%, #f7f7f8 100%)", color: "#555",
+                display: "flex", alignItems: "center", gap: 5, whiteSpace: "nowrap",
+              }}>📖 3D Preview</button>
+            )}
+          </div>
+          {panels > 1 && sizeMode === "custom" && (
+            <Pil label="Fold Direction" value={foldDir} onChange={onFoldDirChange} options={[
+              { t: `Fold Long Side (${longEdge}")`, v: "long" },
+              { t: `Fold Short Side (${shortEdge}")`, v: "short" },
+            ]} />
+          )}
+          {panels > 1 && (() => {
+            const foldDim2 = foldDir === "long" ? longEdge : shortEdge;
+            const staticDim2 = foldDir === "long" ? shortEdge : longEdge;
+            const panelSize2 = foldDim2 / panels;
+            const tooSmall2 = panelSize2 < 2;
+            const throatExceeded2 = foldDir === "short" && longEdge > 13;
+            return <>
+              <div style={{ marginTop: 8, padding: "8px 12px", background: tooSmall2 || throatExceeded2 ? "#fef2f2" : CK.cyanLight, borderRadius: 5, fontSize: 11, color: tooSmall2 || throatExceeded2 ? "#dc2626" : CC.mid, border: tooSmall2 || throatExceeded2 ? "1px solid #f5cccc" : "none" }}>
+                Folded size: <strong>{staticDim2.toFixed(1)}" × {panelSize2.toFixed(1)}"</strong> ({panels} panels)
+                {tooSmall2 && <span style={{marginLeft:8,fontWeight:700}}>— Panel too small (min 2")</span>}
+                {throatExceeded2 && <span style={{marginLeft:8,fontWeight:700}}>— Exceeds 13" folder throat</span>}
+              </div>
+              {sizeMode !== "custom" && <p style={{fontSize:10,color:CC.light,margin:"4px 0 0"}}>All folds assume the longest edge is being folded. Use custom size to fold the short edge.</p>}
+            </>;
+          })()}
+
+          {/* Individual side upload slots */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
+            {[{s:"front",label:fLabel,art:frontArt,setArt:setFrontArt,inputRef:frontInputRef},{s:"back",label:bLabel,art:backArt,setArt:setBackArt,inputRef:backInputRef}].map(({s,label,art,setArt,inputRef}) => {
+              const handleSlotFile = async (file) => {
+                if (!file) return;
+                const dataUrl = await new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => res(null); r.readAsDataURL(file); });
+                if (!dataUrl) return;
+                const dims = await new Promise(res => { const img = new Image(); img.onload = () => res({ w: img.naturalWidth / 300, h: img.naturalHeight / 300 }); img.onerror = () => res({ w: 0, h: 0 }); img.src = dataUrl; });
+                setArt({ dataUrl, file, dims });
+                setApproved(false);
+              };
+              return (
+                <div key={s} style={{ position: "relative" }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".5px", color: CC.mid, marginBottom: 4 }}>
+                    {label}
+                  </div>
+                  {art ? (
+                    <div style={{ position: "relative", borderRadius: 6, overflow: "hidden", border: `2px solid ${CC.border}`, cursor: "pointer" }}
+                      onClick={() => { setSide(s); setProofOpen(true); }}>
+                      <img src={art.dataUrl} style={{ width: "100%", display: "block", aspectRatio: `${longEdge}/${shortEdge}`, objectFit: "cover" }} />
+                      <div style={{ position: "absolute", top: 4, right: 4, display: "flex", gap: 3 }}>
+                        <button type="button" onClick={e => { e.stopPropagation(); inputRef.current?.click(); }} style={{
+                          width: 22, height: 22, borderRadius: 4, border: "none", background: "rgba(0,0,0,.6)", color: "#fff", fontSize: 11, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                        }} title="Replace">↻</button>
+                        <button type="button" onClick={e => { e.stopPropagation(); setArt(null); setApproved(false); }} style={{
+                          width: 22, height: 22, borderRadius: 4, border: "none", background: "rgba(0,0,0,.6)", color: "#fff", fontSize: 11, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                        }} title="Remove">✕</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div
+                      onDragOver={e => e.preventDefault()}
+                      onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) handleSlotFile(f); }}
+                      onClick={() => inputRef.current?.click()}
+                      style={{
+                        aspectRatio: `${longEdge}/${shortEdge}`, borderRadius: 6,
+                        border: `2px dashed ${CC.border}`, background: "#fafafa",
+                        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                        cursor: "pointer", transition: "all .15s",
+                      }}>
+                      <div style={{ fontSize: 20, marginBottom: 2 }}>+</div>
+                      <div style={{ fontSize: 10, color: CC.light }}>Drop or click</div>
+                    </div>
+                  )}
+                  <input ref={inputRef} type="file" accept=".jpg,.jpeg,.png,.tiff,.tif" onChange={e => { const f = e.target.files?.[0]; if (f) handleSlotFile(f); e.target.value = ""; }} style={{ display: "none" }} />
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Approval status */}
+          {approved ? (
+            <div style={{ marginTop: 8, padding: "6px 12px", background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 5, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "#166534" }}>✓ Artwork Approved</span>
+              <button type="button" onClick={() => setApproved(false)} style={{ fontSize: 10, fontWeight: 600, border: "1px solid #86efac", background: "#fff", color: "#16a34a", borderRadius: 4, padding: "2px 8px", cursor: "pointer", fontFamily: "inherit" }}>Review</button>
+            </div>
+          ) : (
+            <div style={{ marginTop: 8, padding: "6px 12px", background: "#fef2f2", border: "1px solid #f5cccc", borderRadius: 5, fontSize: 11, color: "#dc2626" }}>
+              Open the proof view to review and approve your artwork
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Proof Modal */}
+      {proofOpen && currentArt && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,.85)", display: "flex", flexDirection: "column" }}>
+          {/* Header */}
+          <div style={{ padding: "12px 20px", borderBottom: "1px solid rgba(255,255,255,.1)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>Artwork Proof — {side === "front" ? fLabel : bLabel}</div>
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,.4)" }}>{longEdge}" × {shortEdge}" flat{panels > 1 ? ` · ${panels} panels (${foldType})` : ""}</div>
+              </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                {canFlip && (
+                  <button type="button" onClick={() => setFoldFlipped(f => !f)} style={{
+                    padding: "5px 12px", fontSize: 11, fontWeight: 600, border: "1px solid rgba(255,255,255,.2)",
+                    borderRadius: 4, cursor: "pointer", fontFamily: "inherit",
+                    background: foldFlipped ? "#f59e0b" : "rgba(255,255,255,.06)",
+                    color: foldFlipped ? "#000" : "rgba(255,255,255,.5)",
+                  }}>Flip Fold</button>
+                )}
+                {backArt && (
+                  <div style={{ display: "flex", borderRadius: 4, overflow: "hidden", border: "1px solid rgba(255,255,255,.2)" }}>
+                    <button type="button" onClick={() => setSide("front")} style={{ padding: "5px 12px", fontSize: 11, fontWeight: 600, border: "none", cursor: "pointer", fontFamily: "inherit", background: side === "front" ? CK.cyan : "rgba(255,255,255,.06)", color: side === "front" ? "#fff" : "rgba(255,255,255,.5)" }}>Front</button>
+                    <button type="button" onClick={() => setSide("back")} style={{ padding: "5px 12px", fontSize: 11, fontWeight: 600, border: "none", cursor: "pointer", fontFamily: "inherit", background: side === "back" ? CK.cyan : "rgba(255,255,255,.06)", color: side === "back" ? "#fff" : "rgba(255,255,255,.5)" }}>Back</button>
+                  </div>
+                )}
+                <button type="button" onClick={() => { setApproved(true); setProofOpen(false); }} style={{
+                  padding: "5px 14px", fontSize: 11, fontWeight: 700, border: "none", borderRadius: 4, cursor: "pointer", fontFamily: "inherit",
+                  background: approved ? "linear-gradient(135deg, #22c55e 0%, #16a34a 100%)" : "rgba(255,255,255,.04)",
+                  color: approved ? "#fff" : "#ef4444", border: approved ? "none" : "2px solid #ef4444",
+                }}>{approved ? "✓ Approved" : "Approve Now"}</button>
+                <button type="button" onClick={() => setProofOpen(false)} style={{ background: "none", border: "1px solid rgba(255,255,255,.15)", color: "rgba(255,255,255,.5)", width: 32, height: 32, borderRadius: 8, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+              </div>
+            </div>
+            {/* Transform controls */}
+            <div style={{ marginTop: 8, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+              <FitToggle />
+              {onSizeOverride && effectiveDims && (
+                <button type="button" onClick={handleMatchSize} style={{
+                  padding: "3px 10px", fontSize: 10, fontWeight: 600, borderRadius: 4, cursor: "pointer", fontFamily: "inherit",
+                  border: "1px solid rgba(255,255,255,.2)", background: "rgba(255,255,255,.06)", color: "rgba(255,255,255,.5)",
+                }}>↔ Match size to art</button>
+              )}
+            </div>
+          </div>
+
+          {/* Proof view — bleed-inclusive container like saddle stitch */}
+          <div style={{ flex: 1, overflow: "auto", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+            <div ref={proofContainerRef} style={{ position: "relative", maxWidth: 800, width: "100%", aspectRatio: `${bleedW}/${bleedH}`, background: "#1a1d23", borderRadius: 4, overflow: "hidden", ...(draggingPerf !== null ? { touchAction: "none" } : {}) }}
+              onPointerMove={handlePerfDrag}
+              onPointerUp={() => setDraggingPerf(null)}
+            >
+              {/* Art with transforms — renders in full bleed container */}
+              {(() => {
+                const ed = effectiveDims;
+                const artSrc = rotatedUrl || currentArt.dataUrl;
+                const nativeW = ed ? ed.w / bleedW : 1;
+                const cropStyle = (mult) => ({
+                  width: `${nativeW * mult * 100}%`, height: "auto",
+                  position: "absolute", top: "50%", left: "50%",
+                  transform: "translate(-50%, -50%)", display: "block",
+                });
+                const sideColor = side === "front" ? frontColor : backColor;
+                const grayFilter = sideColor === "bw" ? "grayscale(1)" : "none";
+                return (
+                  <div style={{ position: "absolute", inset: 0, overflow: "hidden", background: "#2a2e36" }}>
+                    <img src={artSrc} style={{
+                      filter: grayFilter,
+                      ...(fitMode === "crop" ? cropStyle(1)
+                        : fitMode === "scale" ? cropStyle(artScale / 100)
+                        : fitMode === "stretch" ? { display: "block", width: "100%", height: "100%", objectFit: "fill", position: "absolute", inset: 0 }
+                        : { display: "block", width: "100%", height: "100%", objectFit: fitMode === "contain" ? "contain" : "cover" }
+                      )
+                    }} />
+                  </div>
+                );
+              })()}
+
+              {/* Bleed guide (red dashed) — at container edge */}
+              <div style={{ position: "absolute", inset: 0, border: "2.5px dashed #ef4444", pointerEvents: "none", zIndex: 1, opacity: 0.8 }} />
+              {/* Trim guide (white/light dashed) — inset by bleed */}
+              <div style={{ position: "absolute", top: `${bleedPctY}%`, left: `${bleedPctX}%`, right: `${bleedPctX}%`, bottom: `${bleedPctY}%`, border: "2.5px dashed #e2e8f0", pointerEvents: "none", zIndex: 1 }} />
+              {/* Safety guide (green dashed) — further inset */}
+              <div style={{ position: "absolute", top: `${safetyPctY}%`, left: `${safetyPctX}%`, right: `${safetyPctX}%`, bottom: `${safetyPctY}%`, border: "2.5px dashed #38a169", pointerEvents: "none", zIndex: 1 }} />
+
+              {/* Fold lines (orange dashed) */}
+              {foldLines.map((fl, i) => (
+                <div key={i} style={{
+                  position: "absolute", pointerEvents: "none", zIndex: 4,
+                  ...(fl.vertical
+                    ? { left: `${bleedPctX + (100 - bleedPctX * 2) * fl.pct / 100}%`, top: `${bleedPctY}%`, bottom: `${bleedPctY}%`, width: 2.5, background: "repeating-linear-gradient(to bottom, #f59e0b 0, #f59e0b 6px, transparent 6px, transparent 12px)" }
+                    : { top: `${bleedPctY + (100 - bleedPctY * 2) * fl.pct / 100}%`, left: `${bleedPctX}%`, right: `${bleedPctX}%`, height: 2.5, background: "repeating-linear-gradient(to right, #f59e0b 0, #f59e0b 6px, transparent 6px, transparent 12px)" }
+                  ),
+                }}>
+                  <span style={{
+                    position: "absolute", fontSize: 9, fontWeight: 700, color: "#f59e0b",
+                    background: "rgba(0,0,0,.5)", padding: "1px 4px", borderRadius: 2,
+                    ...(fl.vertical ? { top: 8, left: 4 } : { left: 8, top: 2 }),
+                  }}>Fold {i + 1}</span>
+                </div>
+              ))}
+
+              {/* Perf lines (purple dashed, draggable) */}
+              {perfLines.map((pl) => {
+                const bPct = pl.vertical ? bleedPctX : bleedPctY;
+                const pos = bPct + (100 - bPct * 2) * pl.pct / 100;
+                const trimDim = pl.vertical ? longEdge : shortEdge;
+                const inches = (pl.pct / 100 * trimDim);
+                const inchLabel = (Math.round(inches * 8) / 8).toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
+                const isDragging = draggingPerf === pl.index;
+                const isEditing = editingPerf === pl.index;
+                const hitW = mob ? 36 : 20;
+                return (
+                  <React.Fragment key={"perf" + pl.index}>
+                    {/* Visible line */}
+                    <div style={{
+                      position: "absolute", pointerEvents: "none", zIndex: 5,
+                      transition: isDragging ? "none" : "left .1s, top .1s",
+                      ...(pl.vertical
+                        ? { left: `${pos}%`, top: `${bleedPctY}%`, bottom: `${bleedPctY}%`, width: isDragging ? 3.5 : 2.5, background: "repeating-linear-gradient(to bottom, #8b5cf6 0, #8b5cf6 6px, transparent 6px, transparent 12px)", boxShadow: isDragging ? "0 0 6px rgba(139,92,246,.6)" : "none" }
+                        : { top: `${pos}%`, left: `${bleedPctX}%`, right: `${bleedPctX}%`, height: isDragging ? 3.5 : 2.5, background: "repeating-linear-gradient(to right, #8b5cf6 0, #8b5cf6 6px, transparent 6px, transparent 12px)", boxShadow: isDragging ? "0 0 6px rgba(139,92,246,.6)" : "none" }
+                      ),
+                    }}>
+                      {/* Tappable label — click to type a value */}
+                      {isEditing ? (
+                        <span style={{
+                          position: "absolute", zIndex: 8, pointerEvents: "auto",
+                          ...(pl.vertical ? { bottom: 8, left: 4 } : { right: 8, top: 2 }),
+                        }}>
+                          <input type="number" autoFocus step="0.125" min="1" max={trimDim - 1}
+                            value={editPerfVal}
+                            onChange={(e) => setEditPerfVal(e.target.value)}
+                            onBlur={() => commitPerfEdit(pl.index)}
+                            onKeyDown={(e) => { if (e.key === "Enter") commitPerfEdit(pl.index); if (e.key === "Escape") setEditingPerf(null); }}
+                            style={{
+                              width: 52, fontSize: 10, fontWeight: 700, color: "#8b5cf6",
+                              background: "rgba(0,0,0,.85)", border: "1px solid #8b5cf6",
+                              borderRadius: 3, padding: "2px 4px", outline: "none",
+                              textAlign: "center",
+                            }}
+                          />
+                        </span>
+                      ) : (
+                        <span
+                          onClick={() => { setEditingPerf(pl.index); setEditPerfVal(inchLabel); }}
+                          style={{
+                            position: "absolute", fontSize: 9, fontWeight: 700, color: "#8b5cf6",
+                            background: "rgba(0,0,0,.7)", padding: "1px 5px", borderRadius: 2, whiteSpace: "nowrap",
+                            cursor: "text", pointerEvents: "auto",
+                            ...(pl.vertical ? { bottom: 8, left: 4 } : { right: 8, top: 2 }),
+                          }}>Perf {pl.index + 1} · {inchLabel}"</span>
+                      )}
+                    </div>
+                    {/* Touch/mouse hit zone for dragging */}
+                    <div
+                      style={{
+                        position: "absolute", zIndex: 6, touchAction: "none",
+                        cursor: pl.vertical ? "col-resize" : "row-resize",
+                        ...(pl.vertical
+                          ? { left: `calc(${pos}% - ${hitW/2}px)`, top: `${bleedPctY}%`, bottom: `${bleedPctY}%`, width: hitW }
+                          : { top: `calc(${pos}% - ${hitW/2}px)`, left: `${bleedPctX}%`, right: `${bleedPctX}%`, height: hitW }
+                        ),
+                      }}
+                      onPointerDown={(e) => { if (editingPerf !== null) return; e.preventDefault(); setDraggingPerf(pl.index); e.target.setPointerCapture(e.pointerId); }}
+                    />
+                  </React.Fragment>
+                );
+              })}
+
+              {/* Panel labels */}
+              {panelLabels.length > 0 && panelLabels.map((label, i) => {
+                const foldingLong = foldDir === "long";
+                const trimL = bleedPctX, trimR = 100 - bleedPctX;
+                const trimT = bleedPctY, trimB = 100 - bleedPctY;
+                const trimW = trimR - trimL, trimH = trimB - trimT;
+                // Panel bounds from panelFracs (handles unequal gate fold panels)
+                const edges = [0, ...panelFracs, 1];
+                const pStart = edges[i], pEnd = edges[i + 1];
+                const left = foldingLong ? (trimL + trimW * pStart) : trimL;
+                const right = foldingLong ? (100 - trimL - trimW * pEnd) : (100 - trimR);
+                const top = foldingLong ? trimT : (trimT + trimH * pStart);
+                const bottom = foldingLong ? (100 - trimB) : (100 - trimT - trimH * pEnd);
+                return (
+                  <div key={"pl" + i} style={{
+                    position: "absolute", left: `${left}%`, right: `${right}%`, top: `${top}%`, bottom: `${bottom}%`,
+                    display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none", zIndex: 3,
+                  }}>
+                    <span style={{
+                      fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,.85)",
+                      background: "rgba(0,0,0,.55)", padding: "2px 8px", borderRadius: 3,
+                      whiteSpace: "nowrap", letterSpacing: ".02em",
+                    }}>{label}</span>
+                  </div>
+                );
+              })}
+
+              {/* Trim shadow overlay — darkens the bleed zone around the art */}
+              <div style={{ position: "absolute", top: `${bleedPctY}%`, left: `${bleedPctX}%`, right: `${bleedPctX}%`, bottom: `${bleedPctY}%`, boxShadow: "0 0 0 200px rgba(0,0,0,0.15)", pointerEvents: "none", zIndex: 0 }} />
+
+              {/* Legend */}
+              <div style={{ position: "absolute", bottom: 8, left: 8, display: "flex", gap: 10, fontSize: 9, zIndex: 3, background: "rgba(0,0,0,.6)", padding: "3px 8px", borderRadius: 3 }}>
+                <span style={{ color: "#ef4444", fontWeight: 600 }}>— Bleed</span>
+                <span style={{ color: "#e2e8f0", fontWeight: 600 }}>- - Trim</span>
+                <span style={{ color: "#38a169", fontWeight: 600 }}>- - Safety</span>
+                {foldLines.length > 0 && <span style={{ color: "#f59e0b", fontWeight: 600 }}>- - Fold</span>}
+                {perfLines.length > 0 && <span style={{ color: "#8b5cf6", fontWeight: 600 }}>- - Perf (drag)</span>}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Preview Modal — matches booklet previewer style */}
+      {previewOpen && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", flexDirection: "column", background: "linear-gradient(135deg,#1a1d23,#2a2e36)" }}>
+          {/* Header bar */}
+          <div style={{ padding: "10px 20px", background: "rgba(0,0,0,.3)", borderBottom: "1px solid rgba(255,255,255,.06)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>Book Preview</div>
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,.4)" }}>
+                {longEdge}" × {shortEdge}" {panels > 1 ? `· ${panels} panels` : "flat"}
+                {frontArt && !backArt && <span style={{ color: "#f59e0b", marginLeft: 6 }}>(back side blank)</span>}
+              </div>
+            </div>
+            <button type="button" onClick={() => setPreviewOpen(false)} style={{ background: "none", border: "1px solid rgba(255,255,255,.15)", color: "rgba(255,255,255,.5)", width: 32, height: 32, borderRadius: 8, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>✕</button>
+          </div>
+
+          {(() => {
+            const foldKey = FOLD_KEY_MAP[foldType];
+            const foldCfg = foldKey ? FOLDS_3D[foldKey] : null;
+
+            // Flat — show front/back artwork centered
+            if (!foldCfg) return (
+              <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+                <div style={{ maxWidth: 500, width: "100%", textAlign: "center" }}>
+                  {frontArt && <img src={frontArt.dataUrl} style={{ width: "100%", borderRadius: 6, border: "1px solid rgba(255,255,255,.1)", boxShadow: "0 8px 32px rgba(0,0,0,.4)" }} />}
+                  <div style={{ fontSize: 11, color: "rgba(255,255,255,.35)", marginTop: 10 }}>
+                    {longEdge}" × {shortEdge}" flat · {side === "front" ? fLabel : bLabel}
+                  </div>
+                  {backArt && (
+                    <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 10 }}>
+                      <button type="button" onClick={() => setSide("front")} style={{ padding: "5px 14px", fontSize: 11, fontWeight: 600, border: "none", borderRadius: 4, cursor: "pointer", fontFamily: "inherit", background: side === "front" ? CK.cyan : "rgba(255,255,255,.08)", color: side === "front" ? "#000" : "rgba(255,255,255,.5)" }}>Front</button>
+                      <button type="button" onClick={() => setSide("back")} style={{ padding: "5px 14px", fontSize: 11, fontWeight: 600, border: "none", borderRadius: 4, cursor: "pointer", fontFamily: "inherit", background: side === "back" ? CK.cyan : "rgba(255,255,255,.08)", color: side === "back" ? "#000" : "rgba(255,255,255,.5)" }}>Back</button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+
+            // Folded — 3D renderer with view buttons
+            return (
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+                {/* View step buttons */}
+                <div style={{ display: "flex", gap: 6, justifyContent: "center", padding: "10px 12px", flexWrap: "wrap", overflowX: "auto" }}>
+                  {foldCfg.views.map((v, i) => (
+                    <button key={i} type="button" onClick={() => setPreviewAngle(i)} style={{
+                      padding: "7px 16px", borderRadius: 6, cursor: "pointer", fontFamily: "inherit", fontSize: 11, fontWeight: 600,
+                      letterSpacing: ".03em", transition: "all .3s",
+                      background: previewAngle === i ? CK.cyan : "rgba(255,255,255,.06)",
+                      border: `1px solid ${previewAngle === i ? CK.cyan : "rgba(255,255,255,.1)"}`,
+                      color: previewAngle === i ? "#000" : "rgba(255,255,255,.45)",
+                      boxShadow: previewAngle === i ? "0 2px 12px rgba(0,174,239,.25)" : "none",
+                    }}>{v.label}</button>
+                  ))}
+                </div>
+                {/* 3D viewport — centered */}
+                <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 10px", overflow: "hidden" }}>
+                  <div style={{ width: "100%", maxWidth: 700, margin: "0 auto" }}>
+                    <FoldRenderer
+                      foldKey={foldKey}
+                      frontSrc={frontArt?.dataUrl}
+                      backSrc={backArt?.dataUrl}
+                      frontDims={frontArt?.dims}
+                      backDims={backArt?.dims}
+                      longEdge={longEdge}
+                      shortEdge={shortEdge}
+                      viewIdx={previewAngle}
+                      foldDir={foldDir}
+                      flipped={foldFlipped}
+                      frontGray={frontColor === "bw"}
+                      backGray={backColor === "bw"}
+                    />
+                  </div>
+                </div>
+                {/* Footer info */}
+                <div style={{ textAlign: "center", fontSize: 10, color: "rgba(255,255,255,.3)", padding: "8px 0 14px", borderTop: "1px solid rgba(255,255,255,.06)" }}>
+                  {longEdge}" × {shortEdge}" · {foldCfg.views[previewAngle]?.label || ""}
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// UI COMPONENTS
+// ═══════════════════════════════════════════════════════════════
+function Panel({ result, compact }) {
+  if (!result || result.error) {
+    const err = result?.error?.[0] || "Configure options";
+    return <div style={{ padding: compact ? "6px 10px" : "12px 18px", background: compact ? "transparent" : CC.white, borderRadius: 8, border: compact ? "none" : `1px solid ${CC.border}` }}><div style={{ color: CC.light, fontSize: compact ? 11 : 13 }}>{err}</div></div>;
+  }
+  const r = result;
+  const sh = r.shipping || {};
+  if (compact) {
+    return (
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+        <span style={{ fontSize: 20, fontWeight: 800, color: CC.dark }}>${r.total.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
+        <span style={{ fontSize: 11, color: CC.mid }}>${r.perUnit.toFixed(2)}/ea</span>
+        <span style={{ fontSize: 10, color: CC.light }}>{r.days}d</span>
+      </div>
+    );
+  }
+  return (
+    <div style={{ background: CC.white, borderRadius: 8, border: `1px solid ${CC.border}`, overflow: "hidden" }}>
+      <div style={{ padding: "14px 18px", borderBottom: `1px solid ${CC.border}` }}>
+        <div style={{ fontSize: 11, color: CC.light, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 2 }}>Estimated Total</div>
+        <div style={{ fontSize: 28, fontWeight: 800, color: CC.dark }}>${r.total.toLocaleString("en-US", { minimumFractionDigits: 2 })}</div>
+      </div>
+      <div style={{ display: "flex", borderBottom: `1px solid ${CC.border}` }}>
+        {[["Per Unit", "$" + r.perUnit.toFixed(2)], ["Qty", r.qty.toLocaleString()], ["Days", r.days + " biz"]].map(([l, v], i) => (
+          <div key={i} style={{ flex: 1, padding: "11px 8px", textAlign: "center", borderRight: i < 2 ? `1px solid ${CC.border}` : "none" }}>
+            <div style={{ fontSize: 9.5, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".5px", color: CC.light, marginBottom: 1 }}>{l}</div>
+            <div style={{ fontSize: 14.5, fontWeight: 700, color: CC.dark }}>{v}</div>
+          </div>
+        ))}
+      </div>
+      {sh.freeDeliveryDate && <div style={{ padding: "8px 18px", background: "#fafafa", fontSize: 11, color: CC.mid }}>
+        Free delivery est: <strong>{sh.freeDeliveryDate}</strong> ({sh.freeDeliveryBizDays} biz days)
+      </div>}
+      {r.grouped.length > 0 && <div style={{ padding: "10px 18px" }}>
+        {r.grouped.map((g, i) => (
+          <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", fontSize: 12 }}>
+            <span style={{ color: g.c, fontWeight: 500 }}>{g.label}</span>
+            <span style={{ fontWeight: 600, color: g.val < 0 ? "#16a34a" : CC.dark }}>{g.val < 0 ? "-" : ""}${Math.abs(g.val).toFixed(2)}</span>
+          </div>
+        ))}
+      </div>}
+    </div>
+  );
+}
+
+const Chev=()=><svg width="12" height="12" viewBox="0 0 12 12"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.5" fill="none"/></svg>;
+
+function Sel({label,value,onChange,children,disabled,note,badge,autoComplete,name}){
+  const m=useIsMobile();
+  return <div style={ST.f}>{label&&<label style={ST.lbl}>{label}{badge}</label>}<div style={{position:"relative"}}><select value={value} onChange={e=>onChange(e.target.value)} autoComplete={autoComplete} name={name} style={{...ST.sel,fontSize:m?16:15,padding:m?"10px 32px 10px 12px":"10px 32px 10px 12px",...(disabled?{opacity:.4,pointerEvents:"none"}:{})}} disabled={disabled}>{children}</select><span style={ST.selA}><Chev/></span></div>{note&&<p style={ST.note}>{note}</p>}</div>;
+}
+
+function TxtNum({label,value,onChange,min=1,max=99999}){
+  const[raw,setRaw]=useState(String(value));
+  useEffect(()=>setRaw(String(value)),[value]);
+  return <div style={ST.f}>{label&&<label style={ST.lbl}>{label}</label>}<input type="text" inputMode="decimal" value={raw} onChange={e=>{setRaw(e.target.value);const v=parseFloat(e.target.value);if(!isNaN(v)&&v>=min&&v<=max)onChange(v)}} onBlur={()=>{let v=parseFloat(raw);if(isNaN(v))v=min;v=Math.min(max,Math.max(min,v));onChange(v);setRaw(String(v))}} style={ST.inp}/></div>;
+}
+
+function Pil({label,options,value,onChange,disabled,badge}){
+  const m=useIsMobile();
+  return <div style={ST.f}>{label&&<label style={ST.lbl}>{label}{badge}</label>}<div style={ST.pills}>{options.map(o=><button type="button" key={String(o.v)} onClick={()=>!disabled&&onChange(o.v)} style={{...ST.pill,padding:m?"11px 10px":"9px 10px",...(value===o.v?(o.onStyle||ST.pillOn):{}),...(disabled?{opacity:.4,cursor:"default"}:{})}}>{o.t}</button>)}</div></div>;
+}
+
+function TurnBadge({days}){
+  if(!days || days < 0.5) return null;
+  const d = Math.round(days);
+  const label = d === 0 ? `+${days.toFixed(1)}d` : `+${d} day${d!==1?"s":""}`;
+  return <span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,fontWeight:600,color:CK.magenta,background:"#fdf2f8",padding:"1px 6px",borderRadius:8,marginLeft:6,whiteSpace:"nowrap",verticalAlign:"middle"}}>⏱ {label}</span>;
+}
+
+function Sec({title,open,onToggle,children,badge}){
+  const m=useIsMobile();
+  return <div style={ST.card}><button type="button" onClick={onToggle} style={{...ST.cardH,padding:m?"12px 14px":"14px 18px",fontSize:m?14:15}}><span style={{fontWeight:600,color:CC.dark,fontSize:"inherit"}}>{title}</span><div style={{display:"flex",alignItems:"center",gap:8}}>{badge&&<span style={{fontSize:11,fontWeight:700,color:CC.primary,background:CK.cyanLight,padding:"3px 9px",borderRadius:10}}>{badge}</span>}<span style={{color:CC.light,transition:"transform .2s",display:"flex",transform:open?"rotate(180deg)":"none"}}><Chev/></span></div></button>{open&&<div style={{padding:m?"12px 14px":"14px 18px",borderTop:`1px solid ${CC.border}`}}>{children}</div>}</div>;
+}
+
+function DatePicker({value, onChange, earliestDate, freeDate}) {
+  const [open, setOpen] = useState(false);
+  const now = new Date();
+  const [vYear, setVYear] = useState(now.getFullYear());
+  const [vMonth, setVMonth] = useState(now.getMonth());
+  const initRef = useRef(false);
+  const trigRef = useRef(null);
+  const dropRef = useRef(null);
+  const [pos, setPos] = useState({top:0,left:0,width:0});
+  const isMob = useIsMobile();
+  const earliest = earliestDate ? new Date(earliestDate + "T00:00:00") : null;
+  const free = freeDate ? new Date(freeDate + "T00:00:00") : null;
+  useEffect(()=>{ if(initRef.current)return; const target=free||earliest; if(target){initRef.current=true;setVYear(target.getFullYear());setVMonth(target.getMonth());} },[freeDate,earliestDate]);
+  useEffect(()=>{ if(open&&trigRef.current){ const r=trigRef.current.getBoundingClientRect(); const vw=window.innerWidth; const vh=window.innerHeight; const m=vw<700; if(m){const w=Math.min(vw-32,360);setPos({top:Math.max(16,vh*0.08),left:(vw-w)/2,width:w,modal:true})}else{let top=r.bottom+4;if(top+360>vh)top=Math.max(8,r.top-364);setPos({top,left:r.left,width:Math.max(r.width,300),modal:false})} } },[open]);
+  useEffect(()=>{ if(!open)return; const h=e=>{if(trigRef.current?.contains(e.target))return;if(dropRef.current?.contains(e.target))return;setOpen(false)}; document.addEventListener("mousedown",h); return()=>document.removeEventListener("mousedown",h); },[open]);
+  const navM=dir=>{let m=vMonth+dir,y=vYear;if(m<0){m=11;y--}else if(m>11){m=0;y++}setVMonth(m);setVYear(y)};
+  const first=new Date(vYear,vMonth,1),last=new Date(vYear,vMonth+1,0),pad=first.getDay();
+  const cells=[];for(let i=0;i<pad;i++)cells.push(null);for(let d=1;d<=last.getDate();d++)cells.push(new Date(vYear,vMonth,d));
+  const selected=value?toYMD(new Date(value+"T00:00:00")):null;
+  const pick=d=>{onChange(toYMD(d));setOpen(false)};
+  const clear=()=>{onChange("");setOpen(false)};
+  const displayVal=value?fmtDate(new Date(value+"T00:00:00")):"";
+  return(<>
+    <div ref={trigRef} onClick={()=>setOpen(!open)} style={{...ST.inp,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",minHeight:36}}>
+      <span style={{color:value?CC.dark:CC.light}}>{displayVal||"Select a date..."}</span>
+      <span style={{display:"flex",gap:4,alignItems:"center"}}>{value&&<span onClick={e=>{e.stopPropagation();clear()}} style={{color:CC.light,fontSize:14,cursor:"pointer",lineHeight:1}}>✕</span>}<Chev/></span>
+    </div>
+    {open&&ReactDOM.createPortal(<>
+      {pos.modal&&<div onClick={()=>setOpen(false)} style={{position:"fixed",inset:0,zIndex:99999,background:"rgba(0,0,0,.4)"}}/>}
+      <div ref={dropRef} style={{position:"fixed",top:pos.top,left:pos.left,width:pos.width||300,zIndex:100000,background:CC.white,borderRadius:isMob?12:6,border:`1px solid ${CC.border}`,boxShadow:isMob?"0 12px 40px rgba(0,0,0,.25)":"0 8px 24px rgba(0,0,0,.15)",padding:isMob?16:10,maxHeight:isMob?"80vh":"70vh",overflowY:"auto",fontFamily:"'Segoe UI','Helvetica Neue',Arial,sans-serif",boxSizing:"border-box"}}>
+        {isMob&&<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}><span style={{fontSize:14,fontWeight:700,color:CC.dark}}>Select Delivery Date</span><button type="button" onClick={()=>setOpen(false)} style={{background:"none",border:"none",fontSize:20,color:CC.light,cursor:"pointer",padding:"0 4px",lineHeight:1}}>✕</button></div>}
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+          <button type="button" onClick={()=>navM(-1)} style={{background:"none",border:`1px solid ${CC.border}`,borderRadius:3,padding:isMob?"6px 14px":"2px 8px",cursor:"pointer",color:CC.mid,fontFamily:"inherit",fontSize:isMob?16:14}}>◀</button>
+          <span style={{fontSize:isMob?14:12.5,fontWeight:700,color:CC.dark}}>{MNAMES[vMonth]} {vYear}</span>
+          <button type="button" onClick={()=>navM(1)} style={{background:"none",border:`1px solid ${CC.border}`,borderRadius:3,padding:isMob?"6px 14px":"2px 8px",cursor:"pointer",color:CC.mid,fontFamily:"inherit",fontSize:isMob?16:14}}>▶</button>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:isMob?2:1,marginBottom:2}}>{DNAMES.map(d=><div key={d} style={{textAlign:"center",fontSize:isMob?11:9.5,fontWeight:600,color:d==="Sun"||d==="Sat"?"#ccc":CC.light,padding:isMob?4:2}}>{d}</div>)}</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:isMob?2:1}}>
+          {cells.map((d,i)=>{if(!d)return<div key={`p${i}`}/>;const ymd=toYMD(d);const we=d.getDay()===0||d.getDay()===6;const closed=!isBusinessDay(d);const beforeEarliest=earliest&&d<earliest;const disabled=we||closed||beforeEarliest;const isSel=ymd===selected;const isFree=free&&ymd===toYMD(free);const isRush=!disabled&&earliest&&free&&d>=earliest&&d<free;const isPast=d<getShopToday();let bg="transparent",color=CC.dark,fw=400,bdr="1px solid transparent";if(isSel){bg=CK.cyan;color="#fff";fw=700;bdr=`1px solid ${CK.cyan}`}else if(disabled||isPast){bg="#f8f8f8";color="#d0d0d0"}else if(isFree){bg="#e8f5e3";color="#3a7124";fw=600;bdr="1px solid #b5d8a8"}else if(isRush){bg=CK.yellowLight;color=CK.yellow}return<div key={ymd} onClick={()=>!disabled&&!isPast&&pick(d)} style={{textAlign:"center",padding:isMob?"10px 2px":"5px 2px",borderRadius:isMob?4:3,fontSize:isMob?14:11.5,fontWeight:fw,background:bg,color,border:bdr,cursor:disabled||isPast?"default":"pointer",userSelect:"none"}}>{d.getDate()}</div>})}
+        </div>
+        <div style={{display:"flex",gap:isMob?12:10,marginTop:8,paddingTop:6,borderTop:`1px solid ${CC.border}`,flexWrap:"wrap"}}>
+          <span style={{fontSize:isMob?10:9,color:CC.light,display:"flex",alignItems:"center",gap:3}}><span style={{width:8,height:8,borderRadius:2,background:CK.yellowLight,border:`1px solid ${CK.yellow}44`}}/> Rush zone</span>
+          <span style={{fontSize:isMob?10:9,color:CC.light,display:"flex",alignItems:"center",gap:3}}><span style={{width:8,height:8,borderRadius:2,background:"#e8f5e3",border:"1px solid #b5d8a8"}}/> Free delivery</span>
+          <span style={{fontSize:isMob?10:9,color:CC.light,display:"flex",alignItems:"center",gap:3}}><span style={{width:8,height:8,borderRadius:2,background:"#f8f8f8"}}/> Unavailable</span>
+        </div>
+      </div>
+    </>,document.body)}
+  </>);
+}
+
+function RichTip({ children, tipKey, title, content, dark }) {
+  const tip = tipKey && (window.PPS_CONFIG || {}).tips ? (window.PPS_CONFIG.tips[tipKey] || null) : null;
+  const resolvedTitle = tip ? tip.title : title;
+  const resolvedContent = tip ? tip.content : content;
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const mob = useIsMobile();
+  useEffect(() => {
+    if (!open) return;
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", h); document.addEventListener("touchstart", h);
+    return () => { document.removeEventListener("mousedown", h); document.removeEventListener("touchstart", h); };
+  }, [open]);
+  useEffect(() => { if (open) document.body.style.overflow = mob ? "hidden" : ""; return () => { document.body.style.overflow = ""; }; }, [open, mob]);
+    const blocks = Array.isArray(resolvedContent) ? resolvedContent : [{ type: "text", value: resolvedContent || "" }];
+  return (
+    <span ref={ref} style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+      <span onClick={() => setOpen(o => !o)} style={{ cursor: "pointer", display: "inline-flex", alignItems: "center" }}>
+        {children}
+        <span style={{ marginLeft: 4, width: 16, height: 16, borderRadius: "50%", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700, background: dark ? "rgba(255,255,255,.15)" : CK.cyan+"22", color: dark ? "rgba(255,255,255,.6)" : CK.cyan, flexShrink: 0, border: `1px solid ${dark ? "rgba(255,255,255,.1)" : CK.cyan+"44"}` }}>?</span>
+      </span>
+      {open && <>
+        <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.4)", zIndex: 99999 }} />
+        <div style={{ position: "fixed", ...(mob ? { bottom: 0, left: 0, right: 0, borderRadius: "16px 16px 0 0", maxHeight: "80vh" } : { top: "50%", left: "50%", transform: "translate(-50%, -50%)", borderRadius: 12, maxHeight: "80vh", width: "min(420px, 90vw)" }), background: dark ? "#1a1d23" : "#fff", border: `1px solid ${dark ? "rgba(255,255,255,.1)" : "#ddd"}`, boxShadow: "0 16px 48px rgba(0,0,0,.25)", zIndex: 100000, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
+          <div style={{ padding: "14px 18px 10px", borderBottom: `1px solid ${dark ? "rgba(255,255,255,.08)" : "#eee"}`, display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, background: dark ? "#1a1d23" : "#fff", zIndex: 1 }}>
+            <span style={{ fontWeight: 700, fontSize: 14, color: dark ? "#fff" : CC.dark }}>{resolvedTitle || "Info"}</span>
+            <button type="button" onClick={() => setOpen(false)} style={{ background: "none", border: "none", fontSize: 18, color: dark ? "rgba(255,255,255,.4)" : CC.light, cursor: "pointer", padding: "0 4px" }}>✕</button>
+          </div>
+          <div style={{ padding: "12px 18px 18px" }}>
+            {blocks.map((b, i) => {
+              if (b.type === "text") return <p key={i} style={{ fontSize: 13, lineHeight: 1.6, color: dark ? "rgba(255,255,255,.7)" : CC.mid, margin: i === 0 ? 0 : "10px 0 0" }}>{b.value}</p>;
+              if (b.type === "image") return <img key={i} src={b.src} alt={b.alt || ""} loading="lazy" style={{ width: "100%", borderRadius: 6, marginTop: i === 0 ? 0 : 10, border: `1px solid ${dark ? "rgba(255,255,255,.1)" : "#eee"}` }} />;
+              if (b.type === "video") return <div key={i} style={{ marginTop: i === 0 ? 0 : 10, borderRadius: 6, overflow: "hidden" }}><video src={b.src} controls playsInline preload="metadata" style={{ width: "100%", display: "block" }} poster={b.poster} /></div>;
+              if (b.type === "youtube") return <div key={i} style={{ marginTop: i === 0 ? 0 : 10, borderRadius: 6, overflow: "hidden", position: "relative", paddingBottom: "56.25%", height: 0 }}><iframe src={b.src} title={b.alt || "Video"} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", border: "none" }} /></div>;
+              return null;
+            })}
+          </div>
+        </div>
+      </>}
+    </span>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// APP
+// ═══════════════════════════════════════════════════════════════
+function App() {
+  const mob = useIsMobile();
+  const [op, setOp] = useState({ s1: true, s2: true, s3: false, s4: false, s5: false });
+  const tog = k => setOp(p => ({ ...p, [k]: !p[k] }));
+  const [showDebug, setShowDebug] = useState(false);
+
+  // State
+  const [qty, setQty] = useState(250);
+  const [sizeMode, setSizeMode] = useState("preset");
+  const [sizeLabel, setSizeLabel] = useState("8.5×11");
+  const [longEdge, setLongEdge] = useState(11);
+  const [shortEdge, setShortEdge] = useState(8.5);
+  const [foldType, setFoldType] = useState("flat");
+  const [foldDir, setFoldDir] = useState("long");
+  const [frontColor, setFrontColor] = useState("color");
+  const [backColor, setBackColor] = useState("color");
+  const [sides, setSides] = useState(2);
+  const [paper, setPaper] = useState(PAPERS_NC[2] || PAPERS_NC[0]);
+  const [vivid, setVivid] = useState(false);
+  const [coating, setCoating] = useState(0);
+  const [coatSides, setCoatSides] = useState(1);
+  const [bundling, setBundling] = useState(0);
+  const [perforation, setPerforation] = useState(0);
+  const [perfDir, setPerfDir] = useState("length");
+  const [perfPositions, setPerfPositions] = useState([50]);
+  const [roundCorner, setRoundCorner] = useState(0);
+  const [artwork, setArtwork] = useState(0.01);
+  const [artEditPages, setArtEditPages] = useState(0);
+  const [bleed, setBleed] = useState(0);
+  const [proof, setProof] = useState(0);
+  const [proofAddrSame, setProofAddrSame] = useState(true);
+  const [proofAddr, setProofAddr] = useState({name:"",street:"",city:"",state:"",zip:""});
+  const [canvaLink, setCanvaLink] = useState("");
+  const [canvaInstructions, setCanvaInstructions] = useState("");
+  const [referenceFiles, setReferenceFiles] = useState([]);
+  const [shipState, setShipState] = useState("AZ");
+  const [shipAddr, setShipAddr] = useState({ name: "", company: "", street1: "", street2: "", city: "", zip: "" });
+  const [needByDate, setNeedByDate] = useState("");
+  const [shareCopied, setShareCopied] = useState(false);
+  const [mobPricing, setMobPricing] = useState(false);
+
+  const shipZip = shipAddr.zip || "";
+  const fold = FOLD_TYPES.find(f => f.val === foldType) || FOLD_TYPES[0];
+
+  const result = useMemo(() => calculate({
+    qty, sizeMode, sizeLabel, longEdge, shortEdge,
+    foldType, foldDir, frontColor, backColor, sides,
+    paper, vivid, coating, coatSides, bundling, perforation, perfDir, perfPositions, roundCorner,
+    artwork, bleed, proof, shipState, shipZip, needByDate,
+  }), [qty, sizeMode, sizeLabel, longEdge, shortEdge, foldType, foldDir, frontColor, backColor, sides, paper, vivid, coating, coatSides, bundling, perforation, perfDir, perfPositions, roundCorner, artwork, bleed, proof, shipState, shipZip, needByDate]);
+
+  const r = result || {};
+
+  // Quantity projection table
+  const projections = useMemo(() => {
+    if (!result || result.error) return null;
+    const baseConfig = {
+      qty, sizeMode, sizeLabel, longEdge, shortEdge,
+      foldType, foldDir, frontColor, backColor, sides,
+      paper, vivid, coating, coatSides, bundling, perforation, perfDir, perfPositions, roundCorner,
+      artwork, bleed, proof, shipState, shipZip,
+    };
+    const breakpoints = [25,50,100,250,500,1000,2500,5000].filter(q => q !== qty);
+    const qtys = [...breakpoints, qty].sort((a,b) => a - b);
+    return qtys.map(q => {
+      const projNeedBy = (result.shipping?.rushCost > 0) ? needByDate : null;
+      const pr = calculate({...baseConfig, qty: q, needByDate: projNeedBy});
+      if (!pr || pr.error) return {qty: q, total: null, perUnit: null, current: q === qty};
+      return {qty: q, total: pr.total, perUnit: pr.perUnit, current: q === qty};
+    });
+  }, [result, qty, sizeMode, sizeLabel, longEdge, shortEdge, foldType, foldDir, frontColor, backColor, sides, paper, vivid, coating, coatSides, bundling, perforation, perfDir, perfPositions, roundCorner, artwork, bleed, proof, shipState, shipZip, needByDate]);
+
+  const r2 = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 };
+  const r3 = { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 };
+  const preset = SIZE_PRESETS.find(s => s.label === sizeLabel);
+  const dimLong = sizeMode === "preset" ? (preset?.long || 11) : longEdge;
+  const dimShort = sizeMode === "preset" ? (preset?.short || 8.5) : shortEdge;
+
+  // Perf count + constraint logic
+  // The perf crosses one dimension: "length" → longEdge, "width" → shortEdge
+  const perfCrossDim = perfDir === "length" ? dimLong : dimShort;
+  // Max perfs: need 1" from each edge + 1" between each pair → n perfs need (n+1)" min
+  const maxPerfs = Math.max(0, Math.floor(perfCrossDim - 1)); // e.g. 2" → 1 perf, 4" → 2 perfs
+  const perfIdx = PERF_OPTS.findIndex(x => x.val === perforation);
+  const perfOpt = perfIdx >= 0 ? PERF_OPTS[perfIdx] : PERF_OPTS[0];
+  const rawPerfCount = perfOpt.count != null ? perfOpt.count : perfIdx;
+  const perfCount = Math.min(rawPerfCount, maxPerfs);
+  // Auto-downgrade if dimension too small for selected count
+  if (rawPerfCount > maxPerfs && perforation !== 0) {
+    var downgraded = PERF_OPTS.find(x => (x.count != null ? x.count : PERF_OPTS.indexOf(x)) === maxPerfs);
+    if (downgraded && downgraded.val !== perforation) setPerforation(downgraded.val);
+  }
+  const perfDefaults = (n) => n === 2 ? [33.3, 66.7] : [50];
+  if (dimShort > 14 && perfDir !== "length") setPerfDir("length");
+  const prevPerfKey = useRef(`${perfCount}-${perfDir}`);
+  if (prevPerfKey.current !== `${perfCount}-${perfDir}`) {
+    prevPerfKey.current = `${perfCount}-${perfDir}`;
+    setPerfPositions(perfDefaults(perfCount));
+  }
+
+  // Z-folds (accordion) show both art sides on outside, so no inside/outside distinction
+  const hasInsideOutside = fold.panels > 1 && foldType !== "z3";
+  const frontLabel = hasInsideOutside ? "Front / Outside" : "Front";
+  const backLabel = hasInsideOutside ? "Back / Inside" : "Back";
+
+  const buildShareUrl = () => {
+    const p = new URLSearchParams();
+    if (qty !== 100) p.set("qty", qty);
+    if (sizeMode !== "preset") p.set("sizemode", sizeMode);
+    if (sizeLabel !== "8.5×11") p.set("size", sizeLabel);
+    if (sizeMode === "custom") { p.set("long", longEdge); p.set("short", shortEdge); }
+    if (foldType !== "flat") p.set("fold", foldType);
+    if (foldDir !== "long") p.set("folddir", foldDir);
+    if (frontColor !== "color") p.set("color", frontColor);
+    if (backColor !== "color") p.set("backcolor", backColor);
+    if (sides !== 2) p.set("sides", sides);
+    if (paper.val !== PAPERS_NC[2]?.val) p.set("paper", paper.val);
+    if (vivid) p.set("vivid", "true");
+    if (coating > 0) p.set("coating", coating);
+    if (coatSides !== 1) p.set("coatsides", coatSides);
+    if (bundling > 0) p.set("bundling", bundling);
+    if (perforation !== 0) p.set("perf", perforation);
+    if (perfDir !== "length") p.set("perfdir", perfDir);
+    if (perfPositions.length && perfCount > 0) p.set("perfpos", perfPositions.slice(0, perfCount).join(","));
+    if (roundCorner > 0) p.set("corner", roundCorner);
+    if (shipState !== "AZ") p.set("state", shipState);
+    const base = window.location.origin + window.location.pathname;
+    const qs = p.toString();
+    return qs ? base + "?" + qs : base;
+  };
+
+  const handleShareLink = () => {
+    const url = buildShareUrl();
+    navigator.clipboard.writeText(url).then(() => {
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 2000);
+    }).catch(() => {
+      prompt("Copy this link:", url);
+    });
+  };
+
+  return (
+    <div style={{ minHeight: "100vh", background: CC.bg, fontFamily: "'Segoe UI','Helvetica Neue',Arial,sans-serif", color: CC.dark }}>
+      <style>{`@media(max-width:700px){.pps-sec-hdr{padding:12px 14px!important;font-size:13px!important}.pps-sec-body{padding:12px 14px!important}}`}</style>
+
+      <div style={{ maxWidth: 1180, margin: "0 auto", padding: mob ? "10px" : "20px 24px", display: "flex", gap: 20, alignItems: mob ? "stretch" : "flex-start", flexDirection: mob ? "column" : "row" }}>
+        <div style={{ flex: 1, minWidth: 0, paddingBottom: mob ? 80 : 0 }}>
+
+          {/* SECTION 1: Size & Quantity */}
+          <Sec title="Size, Quantity & Fold" open={op.s1} onToggle={() => tog("s1")}>
+            <div style={r2}>
+              <TxtNum label="Quantity" value={qty} onChange={v => setQty(Math.max(1, Math.round(v)))} min={1} />
+              <Pil label="Size" value={sizeMode} onChange={setSizeMode} options={[{ t: "Preset Sizes", v: "preset" }, { t: "Custom Size", v: "custom" }]} />
+            </div>
+            {sizeMode === "preset"
+              ? <Sel label="Flat/Unfolded Size" value={sizeLabel} onChange={setSizeLabel}>{SIZE_PRESETS.map(s => <option key={s.label} value={s.label}>{s.label}</option>)}</Sel>
+              : <div style={r2}>
+                  <TxtNum label="Long Edge (in)" value={longEdge} onChange={setLongEdge} min={2} max={27} />
+                  <TxtNum label="Short Edge (in)" value={shortEdge} onChange={setShortEdge} min={2} max={12.5} />
+                </div>
+            }
+            <div style={ST.hr} />
+            <Sel label="Fold Type" value={foldType} onChange={setFoldType}>
+              {FOLD_TYPES.map(f => <option key={f.val} value={f.val}>{f.label}</option>)}
+            </Sel>
+            {fold.panels > 1 && sizeMode === "custom" && (
+              <Pil label="Fold Direction" value={foldDir} onChange={setFoldDir} options={[
+                { t: `Fold Long Side (${dimLong}")`, v: "long" },
+                { t: `Fold Short Side (${dimShort}")`, v: "short" },
+              ]} />
+            )}
+            {fold.panels > 1 && (() => {
+              const foldDim = foldDir === "long" ? dimLong : dimShort;
+              const staticDim = foldDir === "long" ? dimShort : dimLong;
+              const panelSize = foldDim / fold.panels;
+              const tooSmall = panelSize < 2;
+              const throatExceeded = foldDir === "short" && dimLong > 13;
+              return <>
+                <div style={{ marginTop: 8, padding: "8px 12px", background: tooSmall || throatExceeded ? "#fef2f2" : CK.cyanLight, borderRadius: 5, fontSize: 11, color: tooSmall || throatExceeded ? "#dc2626" : CC.mid, border: tooSmall || throatExceeded ? "1px solid #f5cccc" : "none" }}>
+                  Folded size: <strong>{staticDim.toFixed(1)}" × {panelSize.toFixed(1)}"</strong> ({fold.panels} panels)
+                  {tooSmall && <span style={{marginLeft:8,fontWeight:700}}>— Panel too small (min 2")</span>}
+                  {throatExceeded && <span style={{marginLeft:8,fontWeight:700}}>— Exceeds 13" folder throat</span>}
+                </div>
+                {sizeMode !== "custom" && <p style={{fontSize:10,color:CC.light,margin:"4px 0 0"}}>All folds assume the longest edge is being folded. Use custom size to fold the short edge.</p>}
+                <p style={{fontSize:10,color:CC.light,margin:"4px 0 0"}}>You can preview the fold once artwork is uploaded.</p>
+              </>;
+            })()}
+          </Sec>
+
+          {/* SECTION 2: Printing & Paper */}
+          <Sec title="Printing & Paper" open={op.s2} onToggle={() => tog("s2")}>
+            <Pil label="Sides Printed" value={sides} onChange={v => setSides(Number(v))} options={[{ t: "Both Sides", v: 2 }, { t: "Front Only", v: 1 }]} />
+            <div style={{ ...r2, marginTop: 10 }}>
+              <Pil label={frontLabel + " Color"} value={frontColor} onChange={setFrontColor} options={[
+                { t: "Full Color", v: "color", onStyle: { background: "conic-gradient(from 45deg, #00aeef 0deg, #ec008c 90deg, #fff200 180deg, #231f20 270deg, #00aeef 360deg)", color: "#fff", fontWeight: 600, textShadow: "0 1px 4px rgba(0,0,0,.5)" } },
+                { t: "Greyscale", v: "bw", onStyle: { background: "linear-gradient(135deg, #888 0%, #444 50%, #999 100%)", color: "#fff", fontWeight: 600 } }
+              ]} />
+              {sides === 2 && <Pil label={backLabel + " Color"} value={backColor} onChange={setBackColor} options={[
+                { t: "Full Color", v: "color", onStyle: { background: "conic-gradient(from 45deg, #00aeef 0deg, #ec008c 90deg, #fff200 180deg, #231f20 270deg, #00aeef 360deg)", color: "#fff", fontWeight: 600, textShadow: "0 1px 4px rgba(0,0,0,.5)" } },
+                { t: "Greyscale", v: "bw", onStyle: { background: "linear-gradient(135deg, #888 0%, #444 50%, #999 100%)", color: "#fff", fontWeight: 600 } }
+              ]} />}
+            </div>
+            <div style={ST.hr} />
+            <Sel label="Paper" value={paper.val} onChange={v => { const f = ALL_PAPERS.find(p => String(p.val) === v); if (f) setPaper(f); }}>
+              {PAPERS_NC.map(p => <option key={p.val} value={p.val}>{p.label}</option>)}
+              <optgroup label="Cardstock">{PAPERS_CS.map(p => <option key={p.val} value={p.val}>{p.label}</option>)}</optgroup>
+            </Sel>
+          </Sec>
+
+          {/* SECTION 3: Addons */}
+          <Sec title="Finishing & Addons" open={op.s3} onToggle={() => tog("s3")}>
+            <Sel label="Fold Type" value={foldType} onChange={setFoldType}>
+              {FOLD_TYPES.map(f => <option key={f.val} value={f.val}>{f.label}</option>)}
+            </Sel>
+            <div style={ST.hr} />
+            <Pil label="Print Quality" value={vivid} onChange={v => setVivid(v === true || v === "true")} options={[{ t: "Standard", v: false }, { t: "Enhanced Vivid", v: true }]} />
+            <div style={ST.hr} />
+            {paper.coatable ? (
+              <>
+                <Sel label="Additional Coating" value={coating} onChange={v => setCoating(Number(v))}>
+                  {COATINGS.map(o => <option key={o.val} value={o.val}>{o.label}</option>)}
+                </Sel>
+                {coating > 0 && (
+                  <>
+                    <Pil label="Sides to Coat" value={coatSides} onChange={v => setCoatSides(Number(v))} options={
+                      paper.val === 1.01
+                        ? [{ t: "Front Only", v: 1 }]
+                        : COAT_SIDES.map(o => ({ t: o.label, v: o.val }))
+                    } />
+                    {paper.val === 1.01 && coatSides !== 1 && <p style={ST.err}>14pt C1S can only be coated on the front side.</p>}
+                  </>
+                )}
+              </>
+            ) : (
+              <div style={{...ST.f, opacity: 0.4}}><label style={ST.lbl}>Additional Coating</label><div style={{padding:"8px 12px",borderRadius:6,border:`1px solid ${CC.border}`,background:"#f5f5f5",fontSize:13,color:CC.light}}>Not available for this paper type</div></div>
+            )}
+            <div style={ST.hr} />
+            <Sel label="Bundling" value={bundling} onChange={v => setBundling(Number(v))}>
+              {BUNDLING.map(o => <option key={o.val} value={o.val}>{o.label}</option>)}
+            </Sel>
+            <Sel label="Perforation" value={perforation} onChange={v => setPerforation(Number(v))}
+              note={dimShort > 14 && perfCount > 0 ? `14" throat — ${dimShort}" perf only` : (perfCount > 0 && perfCrossDim < 4 ? `${perfCrossDim}" too short for 2 perfs` : undefined)}>
+              {PERF_OPTS.filter(o => {
+                var c = o.count != null ? o.count : PERF_OPTS.indexOf(o);
+                return c <= maxPerfs;
+              }).map(o => <option key={o.val} value={o.val}>{o.label}</option>)}
+            </Sel>
+            {perfCount > 0 && dimShort <= 14 && (
+              <Pil label="Perf Direction" value={perfDir} onChange={setPerfDir} options={[
+                { t: `${dimShort}" perf`, v: "length" },
+                { t: `${dimLong}" perf`, v: "width" },
+              ]} />
+            )}
+            {foldType === "flat" && (
+              <Sel label="Round Cornering" value={roundCorner} onChange={v => setRoundCorner(Number(v))}>
+                {CORNERS.map(o => <option key={o.val} value={o.val}>{o.label}</option>)}
+              </Sel>
+            )}
+          </Sec>
+
+          {/* SECTION 4: Artwork & Proofing */}
+          <Sec title="Artwork & Proofing" open={op.s4} onToggle={()=>tog("s4")}>
+
+            <Sel label="Artwork & Design" badge={<TurnBadge days={(r.ti?.artDesign||0)+(r.ti?.artEdits||0)}/>} value={artwork} onChange={v=>{setArtwork(Number(v)); if(Number(v)===0.04) setProof(proof===0?0.01:proof);}}>{ART_OPTS.map(o=><option key={o.val} value={o.val}>{o.label}</option>)}</Sel>
+
+            {artwork>=2&&artwork<4&&<TxtNum label="Pages Needing Edits" value={artEditPages} onChange={setArtEditPages} min={0}/>}
+
+            {artwork>=2 && (
+              <div style={{marginTop:8,padding:"12px 14px",borderRadius:6,background:"#f8f8fa",border:`1px solid ${CC.border}`}}>
+                <div style={{fontSize:12,fontWeight:700,color:CC.dark,marginBottom:4}}>📎 Upload Reference Files (optional)</div>
+                <div style={{fontSize:11,color:CC.mid,marginBottom:8,lineHeight:1.4}}>
+                  {artwork>=4 ? "Attach any reference materials, logos, content, or inspiration for your new design."
+                    : "Attach your artwork files or references for the pages needing edits."}
+                </div>
+                <label style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"10px",borderRadius:6,border:`2px dashed ${CC.border}`,cursor:"pointer",background:"#fff",fontSize:12,fontWeight:600,color:CC.mid}}>
+                  <span>Choose Files</span>
+                  <input type="file" multiple accept=".pdf,.ai,.psd,.tif,.tiff,.jpg,.jpeg,.png,.doc,.docx,.zip" onChange={e=>{
+                    const files=Array.from(e.target.files||[]);
+                    if(files.length) setReferenceFiles(prev=>[...prev,...files.map(f=>({name:f.name,size:f.size,file:f}))]);
+                    e.target.value="";
+                  }} style={{display:"none"}}/>
+                </label>
+                {referenceFiles.length>0&&(
+                  <div style={{marginTop:6,display:"flex",flexDirection:"column",gap:3}}>
+                    {referenceFiles.map((f,i)=>(
+                      <div key={i} style={{display:"flex",alignItems:"center",gap:6,fontSize:11,color:CC.mid,padding:"4px 8px",background:"#fff",borderRadius:4,border:`1px solid ${CC.border}`}}>
+                        <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.name}</span>
+                        <span style={{fontSize:10,color:CC.light,flexShrink:0}}>{(f.size/1024).toFixed(0)} KB</span>
+                        <button type="button" onClick={()=>setReferenceFiles(prev=>prev.filter((_,j)=>j!==i))} style={{border:"none",background:"none",cursor:"pointer",color:CC.light,fontSize:12,padding:"0 2px"}}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {artwork===0.01 && (
+              <div style={{marginTop:8}}>
+                <SheetPreview
+                  longEdge={dimLong} shortEdge={dimShort}
+                  foldType={foldType} foldDir={foldDir} panels={fold.panels}
+                  perfCount={perfCount} perfDir={perfDir}
+                  perfPositions={perfPositions} onPerfPositions={setPerfPositions}
+                  frontColor={frontColor} backColor={backColor} sides={sides}
+                  sizeMode={sizeMode}
+                  onFoldChange={setFoldType} onFoldDirChange={setFoldDir}
+                  onSizeOverride={(w, h) => {
+                    setSizeMode("custom");
+                    setSizeLabel("Custom Size");
+                    var long = Math.max(w, h), short = Math.min(w, h);
+                    setLongEdge(parseFloat(long.toFixed(3)));
+                    setShortEdge(parseFloat(short.toFixed(3)));
+                  }}
+                  onArtwork={(a) => {/* artFiles state if needed */}}
+                />
+              </div>
+            )}
+
+            {artwork===0.02 && (
+              <div style={{marginTop:8,padding:"12px 14px",background:"#f0f9ff",border:"1px solid #bae6fd",borderRadius:6,fontSize:12,color:CC.dark,lineHeight:1.6}}>
+                <div style={{fontWeight:700,marginBottom:4}}>📧 Email Your Artwork</div>
+                <div>Send your artwork or a link to your files to:</div>
+                <div style={{fontWeight:700,color:CC.primary,fontSize:14,margin:"6px 0"}}>office@priorityprintservice.com</div>
+                <div style={{fontSize:11,color:CC.mid}}>Include your order number in the subject line.</div>
+              </div>
+            )}
+
+            {artwork===0.03 && (
+              <div style={{marginTop:8,padding:"12px 14px",background:"#f0fdf4",border:"1px solid #86efac",borderRadius:6,fontSize:12,color:"#166534",lineHeight:1.6}}>
+                <div style={{fontWeight:700,marginBottom:4}}>✓ Artwork Previously Provided</div>
+                <div style={{fontSize:11,color:CC.mid}}>We'll proceed with the files on hand. Contact us if you need to make changes.</div>
+              </div>
+            )}
+
+            {artwork===0.04 && (
+              <div style={{marginTop:8,padding:"12px 14px",background:"#fefce8",border:"1px solid #fde68a",borderRadius:6}}>
+                <div style={{fontWeight:700,fontSize:12,marginBottom:8,color:"#854d0e"}}>🎨 Canva Design</div>
+                <div style={{fontSize:11,color:CC.mid,marginBottom:8,lineHeight:1.5}}>
+                  Share an <strong>editor link</strong> to your Canva design so we can download print-ready files.
+                </div>
+                <label style={{fontSize:11,fontWeight:600,color:CC.dark,display:"block",marginBottom:3}}>Canva Editor Link</label>
+                <input type="text" value={canvaLink} onChange={e=>setCanvaLink(e.target.value)} placeholder="https://www.canva.com/design/..." style={{...ST.inp,fontSize:13,marginBottom:8}}/>
+                <label style={{fontSize:11,fontWeight:600,color:CC.dark,display:"block",marginBottom:3}}>Special Instructions (optional)</label>
+                <textarea value={canvaInstructions} onChange={e=>setCanvaInstructions(e.target.value)} placeholder="Any notes about your design..." rows={3} style={{...ST.inp,fontSize:13,resize:"vertical",fontFamily:"inherit"}}/>
+                <div style={{fontSize:10,color:"#b45309",marginTop:6}}>* Canva designs require a digital or hardcopy proof before printing.</div>
+              </div>
+            )}
+
+            {/* Template download */}
+            <div style={{marginTop:10,padding:"10px 14px",background:"#f8f9fa",borderRadius:6,border:`1px solid ${CC.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{fontSize:12,fontWeight:600,color:CC.dark}}>Artwork Template</div>
+                <div style={{fontSize:10,color:CC.light,marginTop:1}}>
+                  {dimLong}" × {dimShort}" {fold.panels > 1 ? `· ${fold.panels} panels` : "flat"} · Bleed, trim, safety{fold.panels > 1 ? ", fold lines" : ""}
+                </div>
+              </div>
+              <button type="button" onClick={() => generateBrochureTemplate(dimLong, dimShort, foldType, fold.panels, foldDir, sizeLabel, perfCount, perfDir, perfPositions)} style={{
+                padding: "6px 14px", fontSize: 11, fontWeight: 600, borderRadius: 4, cursor: "pointer", fontFamily: "inherit",
+                border: `1px solid ${CK.cyan}`, background: CK.cyanLight, color: CK.cyan, whiteSpace: "nowrap",
+              }}>📐 Download Template</button>
+            </div>
+
+            <div style={{marginTop:10}}/>
+            <Sel label="Proofing" badge={<TurnBadge days={r.ti?.proof}/>} value={proof} onChange={v=>setProof(Number(v))}>
+              {artwork===0.01 && <option value={0}>Proof & Approve Online (included)</option>}
+              {artwork!==0.01 && artwork!==0.04 && <option value={0}>No Proof Needed</option>}
+              <option value={0.01}>{`Manual Digital Proof ($${PCF.proof_digital_cost})`}</option>
+              <option value={3.01}>{`Hardcopy Proof ($${PCF.proof_hardcopy_cost})`}</option>
+            </Sel>
+            {proof>=3 && (
+              <div style={{marginTop:8,padding:"10px 12px",borderRadius:6,background:"#fefce8",border:"1px solid #fde68a"}}>
+                <div style={{fontSize:11,fontWeight:700,color:"#854d0e",marginBottom:6}}>📮 Proof Shipping Address</div>
+                <div style={{display:"flex",gap:8,marginBottom:6}}>
+                  {[{v:true,l:"Same as shipping address"},{v:false,l:"Different address"}].map(o=>(
+                    <button type="button" key={String(o.v)} onClick={()=>setProofAddrSame(o.v)} style={{
+                      flex:1,padding:"6px 8px",fontSize:11,fontWeight:600,borderRadius:4,cursor:"pointer",fontFamily:"inherit",
+                      border:`1px solid ${proofAddrSame===o.v?"#d97706":"#fde68a"}`,
+                      background:proofAddrSame===o.v?"#fef3c7":"#fff",
+                      color:proofAddrSame===o.v?"#854d0e":CC.mid,
+                    }}>{o.l}</button>
+                  ))}
+                </div>
+                {!proofAddrSame && (
+                  <form autoComplete="on" onSubmit={e=>e.preventDefault()} style={{display:"grid",gap:6}}>
+                    <input type="text" name="proof-name" autoComplete="name" value={proofAddr.name} onChange={e=>setProofAddr(p=>({...p,name:e.target.value}))} placeholder="Full Name" style={{...ST.inp,fontSize:12,padding:"7px 10px"}}/>
+                    <input type="text" name="proof-address-line1" autoComplete="address-line1" value={proofAddr.street} onChange={e=>setProofAddr(p=>({...p,street:e.target.value}))} placeholder="Street Address" style={{...ST.inp,fontSize:12,padding:"7px 10px"}}/>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 80px 80px",gap:6}}>
+                      <input type="text" name="proof-address-level2" autoComplete="address-level2" value={proofAddr.city} onChange={e=>setProofAddr(p=>({...p,city:e.target.value}))} placeholder="City" style={{...ST.inp,fontSize:12,padding:"7px 10px"}}/>
+                      <input type="text" name="proof-address-level1" autoComplete="address-level1" value={proofAddr.state} onChange={e=>setProofAddr(p=>({...p,state:e.target.value}))} placeholder="State" maxLength={2} style={{...ST.inp,fontSize:12,padding:"7px 10px",textTransform:"uppercase"}}/>
+                      <input type="text" name="proof-postal-code" autoComplete="postal-code" value={proofAddr.zip} onChange={e=>setProofAddr(p=>({...p,zip:e.target.value}))} placeholder="ZIP" maxLength={10} style={{...ST.inp,fontSize:12,padding:"7px 10px"}}/>
+                    </div>
+                  </form>
+                )}
+              </div>
+            )}
+          </Sec>
+
+          {/* SECTION 5: Shipping & Delivery */}
+          <Sec title="Shipping & Delivery" open={op.s5} onToggle={()=>tog("s5")} badge={r.shipping?.rushCost>0?`+$${r.shipping.rushCost.toFixed(0)} rush`:null}>
+            <form autoComplete="on" onSubmit={e=>e.preventDefault()}>
+            <div style={{fontSize:11,fontWeight:600,color:CC.mid,textTransform:"uppercase",letterSpacing:".5px",marginBottom:8}}>Shipping Address</div>
+            <div style={r2}>
+              <div style={ST.f}><label style={ST.lbl}>Full Name</label><input type="text" name="shipping-name" autoComplete="shipping name" value={shipAddr.name} onChange={e=>setShipAddr(p=>({...p,name:e.target.value}))} placeholder="Full Name" style={ST.inp}/></div>
+              <div style={ST.f}><label style={ST.lbl}>Company <span style={{fontWeight:400,color:CC.light}}>(optional)</span></label><input type="text" name="shipping-organization" autoComplete="shipping organization" value={shipAddr.company} onChange={e=>setShipAddr(p=>({...p,company:e.target.value}))} placeholder="Company" style={ST.inp}/></div>
+            </div>
+            <div style={{...ST.f,marginTop:6}}><label style={ST.lbl}>Street Address</label><input type="text" name="shipping-address-line1" autoComplete="shipping address-line1" value={shipAddr.street1} onChange={e=>setShipAddr(p=>({...p,street1:e.target.value}))} placeholder="Street address" style={ST.inp}/></div>
+            <div style={{...ST.f,marginTop:6}}><label style={ST.lbl}>Address Line 2 <span style={{fontWeight:400,color:CC.light}}>(optional)</span></label><input type="text" name="shipping-address-line2" autoComplete="shipping address-line2" value={shipAddr.street2} onChange={e=>setShipAddr(p=>({...p,street2:e.target.value}))} placeholder="Apt, suite, unit, etc." style={ST.inp}/></div>
+            <div style={{...r3,marginTop:6}}>
+              <div style={ST.f}><label style={ST.lbl}>City</label><input type="text" name="shipping-address-level2" autoComplete="shipping address-level2" value={shipAddr.city} onChange={e=>setShipAddr(p=>({...p,city:e.target.value}))} placeholder="City" style={ST.inp}/></div>
+              <Sel label="State" value={shipState} onChange={setShipState} name="shipping-address-level1" autoComplete="shipping address-level1">
+                {US_STATES.map(st=><option key={st} value={st}>{st}</option>)}
+              </Sel>
+              <div style={ST.f}><label style={ST.lbl}>ZIP Code</label><input type="text" name="shipping-postal-code" autoComplete="shipping postal-code" value={shipAddr.zip} onChange={e=>setShipAddr(p=>({...p,zip:e.target.value.replace(/[^\d-]/g,"").slice(0,10)}))} placeholder="ZIP" maxLength={10} style={ST.inp}/></div>
+            </div>
+            </form>
+
+            {r.shipping&&<>
+              <div style={{marginTop:10,padding:mob?"8px 10px":"10px 14px",background:CK.cyanLight,borderRadius:5,border:`1px solid ${CK.cyan}33`}}>
+                <div style={{fontSize:10.5,fontWeight:600,textTransform:"uppercase",letterSpacing:".5px",color:CK.cyan,marginBottom:2}}>Free Delivery Estimate</div>
+                <div style={{fontSize:mob?14:15,fontWeight:700,color:CC.dark}}>{r.shipping.freeDeliveryDate}</div>
+                <div style={{fontSize:mob?10.5:11,color:CC.mid,marginTop:2}}>{r.shipping.freeDeliveryBizDays} business days</div>
+                <div style={{marginTop:6,paddingTop:6,borderTop:"1px solid #b3dff044",display:"flex",flexWrap:"wrap",gap:"2px 16px",fontSize:10.5}}>
+                  <span style={{color:CC.mid}}><span style={{fontWeight:600}}>Production starts:</span> {r.shipping.productionStartDate}</span>
+                  <span style={{color:CC.mid}}><span style={{fontWeight:600}}>Must ship by:</span> {r.shipping.mustShipDate}</span>
+                  <span style={{color: r.shipping.effectiveTransit < r.shipping.transitDays ? "#f59e0b" : CC.light}}>
+                    ({r.shipping.effectiveTransit}d {r.shipping.effectiveTransit < r.shipping.transitDays ? "overnight" : "ground"} transit)
+                  </span>
+                </div>
+                <div style={{fontSize:mob?9:10,color:CC.light,marginTop:4,paddingTop:4,borderTop:"1px solid #b3dff044"}}>
+                  {mob?<>{r.shipping.earliestDate} earliest</>:<>Earliest possible: <strong style={{color:CC.mid}}>{r.shipping.earliestDate}</strong> ({r.shipping.earliestBizDays} biz days) · Shop: {r.shipping.shopToday}</>}
+                </div>
+              </div>
+
+              <div style={ST.f}>
+                <label style={ST.lbl}>Need It Sooner? Pick a Date</label>
+                <DatePicker value={needByDate} onChange={setNeedByDate}
+                  earliestDate={r.shipping.earliestYMD} freeDate={r.shipping.freeDeliveryYMD}/>
+                {needByDate&&r.shipping.needByPast&&<p style={ST.err}>This date has passed — please select a future date</p>}
+                {needByDate&&!r.shipping.needByValid&&!r.shipping.needByPast&&<p style={ST.err}>Date must be in the future</p>}
+              </div>
+
+              {r.shipping.needByValid&&!r.shipping.tooSoon&&r.shipping.rushMultiplier>1&&(
+                <div style={{marginTop:10,padding:"10px 14px",background:CK.rushLight,borderRadius:5,border:`1px solid ${CK.rush}55`}}>
+                  <div style={{display:"flex",flexDirection:mob?"column":"row",justifyContent:"space-between",alignItems:mob?"flex-start":"baseline",gap:mob?6:0}}>
+                    <div>
+                      <div style={{fontSize:10.5,fontWeight:600,textTransform:"uppercase",letterSpacing:".5px",color:"#6b8f2b",marginBottom:2}}>Rush Surcharge</div>
+                      <div style={{fontSize:11,color:CC.mid}}>{r.shipping.bizDaysToDate} business days vs {r.shipping.freeDeliveryBizDays} free — {r.shipping.rushMultiplier.toFixed(2)}×</div>
+                    </div>
+                    <div style={{fontSize:mob?22:18,fontWeight:800,color:"#6b8f2b"}}>+${r.shipping.rushCost.toFixed(2)}</div>
+                  </div>
+                </div>
+              )}
+              {r.shipping.needByValid&&!r.shipping.tooSoon&&r.shipping.rushMultiplier<=1&&(
+                <div style={{marginTop:10,padding:"8px 14px",background:"#e8f5e3",borderRadius:5,border:"1px solid #b5d8a8"}}>
+                  <span style={{fontSize:12,color:"#3a7124",fontWeight:600}}>✓ No rush needed — your date is within free delivery window</span>
+                </div>
+              )}
+            </>}
+          </Sec>
+
+
+        </div>
+
+        {/* Desktop sidebar */}
+        {!mob && <div style={{ width: 320, flexShrink: 0, position: "sticky", top: 18 }}>
+          <Panel result={result} />
+          {projections && <div style={{...ST.pnl,marginTop:10,overflow:"hidden"}}>
+            <div style={{padding:"10px 18px",background:"#fafafa",borderBottom:`1px solid ${CC.border}`}}>
+              <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:"1px",color:CC.light}}>Quantity Pricing</div>
+            </div>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5}}>
+              <thead>
+                <tr style={{borderBottom:`1px solid ${CC.border}`}}>
+                  <th style={{padding:"7px 18px",textAlign:"left",fontSize:10,fontWeight:600,color:CC.light,textTransform:"uppercase",letterSpacing:".5px"}}>Qty</th>
+                  <th style={{padding:"7px 10px",textAlign:"right",fontSize:10,fontWeight:600,color:CC.light,textTransform:"uppercase",letterSpacing:".5px"}}>Unit</th>
+                  <th style={{padding:"7px 18px",textAlign:"right",fontSize:10,fontWeight:600,color:CC.light,textTransform:"uppercase",letterSpacing:".5px"}}>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {projections.map((p,i) => p.total !== null && (
+                  <tr key={i} style={{borderBottom:`1px solid ${CC.border}22`,background:p.current?"#f0f9ff":"transparent",cursor:p.current?"default":"pointer"}}
+                    onClick={() => {if(!p.current) setQty(p.qty)}}>
+                    <td style={{padding:"6px 18px",fontWeight:p.current?700:400,color:p.current?CK.cyan:CC.dark}}>
+                      {p.qty.toLocaleString()}{p.current&&<span style={{fontSize:9,color:CK.cyan,marginLeft:4}}>●</span>}
+                    </td>
+                    <td style={{padding:"6px 10px",textAlign:"right",color:CC.mid,fontWeight:500}}>${p.perUnit.toFixed(2)}</td>
+                    <td style={{padding:"6px 18px",textAlign:"right",fontWeight:p.current?700:500,color:p.current?CK.cyan:CC.dark}}>${p.total.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>}
+          <button type="button" onClick={handleShareLink} style={{ width: "100%", marginTop: 8, padding: "8px", borderRadius: 4, border: `1px solid ${shareCopied ? "#86efac" : "#ddd"}`, background: shareCopied ? "#f0fdf4" : "#fafafa", color: shareCopied ? "#16a34a" : CC.mid, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", transition: "all .2s" }}>
+            {shareCopied ? "✓ Link copied to clipboard" : "Share this configuration"}
+          </button>
+          <button type="button" onClick={() => setShowDebug(p => !p)} style={{ width: "100%", marginTop: 8, padding: "6px", borderRadius: 4, border: `1px solid ${showDebug ? "#555" : "#ddd"}`, background: showDebug ? "#1a1a1a" : "#fafafa", color: showDebug ? "#888" : "#bbb", fontSize: 10, fontWeight: 600, letterSpacing: ".5px", textTransform: "uppercase", cursor: "pointer", fontFamily: "inherit" }}>
+            {showDebug ? "▼ Hide" : "▶ Show"} Debug Panel
+          </button>
+          {showDebug && r.debug && (
+            <div style={{ ...ST.pnl, marginTop: 10, padding: 14, fontSize: 11 }}>
+              <div style={{ fontWeight: 700, marginBottom: 8, color: CC.mid }}>Debug</div>
+              {Object.entries(r.debug).map(([k, v]) => (
+                k !== "P" ? <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0" }}>
+                  <span style={{ color: CC.light }}>{k}</span>
+                  <span style={{ fontFamily: "monospace", color: CK.cyan }}>{typeof v === "number" ? (Number.isInteger(v) ? v : v.toFixed(4)) : String(v)}</span>
+                </div> : null
+              ))}
+              {r.debug.P && <details style={{ marginTop: 8 }}><summary style={{ cursor: "pointer", fontWeight: 600, color: CC.mid }}>Line Items</summary>
+                {Object.entries(r.debug.P).filter(([, v]) => Math.abs(v) > 0.005).map(([k, v]) => (
+                  <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0" }}>
+                    <span style={{ color: CC.light }}>{k}</span>
+                    <span style={{ fontFamily: "monospace", color: v < 0 ? "#16a34a" : CK.cyan }}>${v.toFixed(2)}</span>
+                  </div>
+                ))}
+              </details>}
+            </div>
+          )}
+        </div>}
+      </div>
+
+      {/* Mobile bottom bar */}
+      {mob && <>
+        {/* Slide-up panels: debug or qty pricing */}
+        {showDebug && r.debug && <div style={{ position: "fixed", bottom: 76, left: 0, right: 0, zIndex: 39, maxHeight: "60vh", overflowY: "auto", background: CC.white, borderTop: `1px solid ${CC.border}`, boxShadow: "0 -4px 16px rgba(0,0,0,.12)", padding: "10px" }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: CC.mid, marginBottom: 6 }}>DEBUG</div>
+          {Object.entries(r.debug).filter(([k]) => k !== "P").map(([k, v]) => (
+            <div key={k} style={{ display: "flex", justifyContent: "space-between", fontSize: 10, padding: "1px 0" }}>
+              <span style={{ color: CC.light }}>{k}</span>
+              <span style={{ fontFamily: "monospace", color: CK.cyan }}>{typeof v === "number" ? (Number.isInteger(v) ? v : v.toFixed(3)) : String(v)}</span>
+            </div>
+          ))}
+        </div>}
+        {mobPricing && projections && <div style={{ position: "fixed", bottom: 76, left: 0, right: 0, zIndex: 39, maxHeight: "60vh", overflowY: "auto", background: CC.white, borderTop: `1px solid ${CC.border}`, boxShadow: "0 -4px 16px rgba(0,0,0,.12)" }}>
+          <div style={{ padding: "8px 14px", background: "#fafafa", borderBottom: `1px solid ${CC.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: CC.light }}>Quantity Pricing</span>
+            <button type="button" onClick={handleShareLink} style={{ fontSize: 10, fontWeight: 600, color: shareCopied ? "#16a34a" : CK.cyan, background: "none", border: "none", cursor: "pointer", padding: "2px 6px", fontFamily: "inherit" }}>
+              {shareCopied ? "Copied!" : "Share Link"}
+            </button>
+          </div>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+            <thead>
+              <tr style={{ borderBottom: `1px solid ${CC.border}` }}>
+                <th style={{ padding: "6px 14px", textAlign: "left", fontSize: 9, fontWeight: 600, color: CC.light, textTransform: "uppercase", letterSpacing: ".5px" }}>Qty</th>
+                <th style={{ padding: "6px 10px", textAlign: "right", fontSize: 9, fontWeight: 600, color: CC.light, textTransform: "uppercase", letterSpacing: ".5px" }}>Unit</th>
+                <th style={{ padding: "6px 14px", textAlign: "right", fontSize: 9, fontWeight: 600, color: CC.light, textTransform: "uppercase", letterSpacing: ".5px" }}>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {projections.map((p, i) => p.total !== null && (
+                <tr key={i} style={{ borderBottom: `1px solid ${CC.border}22`, background: p.current ? "#f0f9ff" : "transparent" }}
+                  onClick={() => { if (!p.current) { setQty(p.qty); setMobPricing(false); } }}>
+                  <td style={{ padding: "7px 14px", fontWeight: p.current ? 700 : 400, color: p.current ? CK.cyan : CC.dark }}>
+                    {p.qty.toLocaleString()}{p.current && <span style={{ fontSize: 9, color: CK.cyan, marginLeft: 4 }}>&#9679;</span>}
+                  </td>
+                  <td style={{ padding: "7px 10px", textAlign: "right", color: CC.mid, fontWeight: 500 }}>${p.perUnit.toFixed(2)}</td>
+                  <td style={{ padding: "7px 14px", textAlign: "right", fontWeight: p.current ? 700 : 500, color: p.current ? CK.cyan : CC.dark }}>${p.total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>}
+        {/* Fixed bottom bar */}
+        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 40, background: CC.white, borderTop: `1px solid ${CC.border}`, boxShadow: "0 -4px 16px rgba(0,0,0,.08)", padding: "8px 10px", paddingBottom: "max(8px, env(safe-area-inset-bottom))" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ flex: 1, minWidth: 0, cursor: "pointer" }} onClick={() => { setMobPricing(p => !p); if (showDebug) setShowDebug(false); }}>
+              <Panel result={result} compact />
+              <div style={{ fontSize: 8, textAlign: "center", color: mobPricing ? CK.cyan : CC.light, marginTop: 2, letterSpacing: ".5px", textTransform: "uppercase", fontWeight: 600 }}>{mobPricing ? "▼ Hide Pricing" : "▲ Qty Pricing"}</div>
+            </div>
+            <button type="button" onClick={handleShareLink} style={{ flexShrink: 0, padding: "10px", borderRadius: 6, border: `1px solid ${shareCopied ? "#86efac" : CC.border}`, background: shareCopied ? "#f0fdf4" : "#fafafa", color: shareCopied ? "#16a34a" : CC.mid, fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", transition: "all .2s", lineHeight: 1 }} title="Share link">
+              {shareCopied ? "✓" : "🔗"}
+            </button>
+            <button type="button" onClick={() => { setShowDebug(p => !p); if (mobPricing) setMobPricing(false); }} style={{ flexShrink: 0, padding: "10px", borderRadius: 6, border: `1px solid ${showDebug ? "#555" : CC.border}`, background: showDebug ? "#1a1a1a" : "#fafafa", color: showDebug ? "#888" : CC.light, fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", lineHeight: 1 }} title="Debug">
+              {showDebug ? "✕" : "⚙"}
+            </button>
+            <button type="button" style={{ flexShrink: 0, padding: "12px 16px", borderRadius: 6, border: "none", background: result?.error ? CC.light : CK.cyan, color: "#fff", fontSize: 14, fontWeight: 700, cursor: result?.error ? "default" : "pointer", fontFamily: "inherit", opacity: result?.error ? .5 : 1 }} disabled={!!result?.error}>Add to Order</button>
+          </div>
+        </div>
+      </>}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// STYLES
+// ═══════════════════════════════════════════════════════════════
+const ST = {
+  f:{marginTop:10},
+  lbl:{display:"block",fontSize:13,fontWeight:600,color:CC.mid,marginBottom:5},
+  sel:{width:"100%",padding:"10px 32px 10px 12px",borderRadius:6,border:`1px solid ${CC.border}`,background:"linear-gradient(180deg, #fff 0%, #f9f9fa 100%)",fontSize:15,color:CC.dark,fontFamily:"inherit",appearance:"none",cursor:"pointer",outline:"none",boxShadow:"0 1px 3px rgba(0,0,0,.04)"},
+  selA:{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",color:CC.light,pointerEvents:"none"},
+  inp:{width:"100%",padding:"10px 12px",borderRadius:6,border:`1px solid ${CC.border}`,background:"linear-gradient(180deg, #fff 0%, #f9f9fa 100%)",fontSize:15,color:CC.dark,fontFamily:"inherit",outline:"none",boxSizing:"border-box",boxShadow:"0 1px 3px rgba(0,0,0,.04)"},
+  pills:{display:"flex",borderRadius:6,border:`1px solid ${CC.border}`,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,.06)"},
+  pill:{flex:1,padding:"9px 10px",fontSize:14,fontWeight:500,fontFamily:"inherit",border:"none",borderRight:`1px solid ${CC.border}`,background:`linear-gradient(180deg, #fff 0%, #f7f7f8 100%)`,color:"#555",cursor:"pointer",transition:"all .15s",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"inset 0 1px 0 rgba(255,255,255,.8), inset 0 -1px 0 rgba(0,0,0,.04)"},
+  pillOn:{background:`linear-gradient(135deg, ${CK.cyan} 0%, #0070e6 40%, #3d9cff 50%, #0070e6 60%, #005cc8 100%)`,color:"#fff",fontWeight:600,boxShadow:"inset 0 1px 0 rgba(255,255,255,.25), inset 0 -1px 0 rgba(0,0,0,.15), 0 1px 3px rgba(0,126,255,.2)"},
+  row2:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12},
+  row3:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12},
+  hr:{height:1,background:"#eee",margin:"14px 0 4px"},
+  note:{fontSize:12,color:CC.light,margin:"4px 0 0"},
+  err:{color:"#dc2626",fontSize:13,margin:"8px 0 0",padding:"8px 10px",background:"#fef2f2",borderRadius:4,border:"1px solid #f5cccc"},
+  card:{background:CC.white,borderRadius:6,border:`1px solid ${CC.border}`,overflow:"hidden",marginBottom:10},
+  cardH:{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 18px",background:"#fafafa",border:"none",borderBottom:"1px solid #eee",cursor:"pointer",fontFamily:"inherit",fontSize:15},
+  pnl:{background:CC.white,borderRadius:6,border:`1px solid ${CC.border}`,overflow:"hidden"},
+};
+
+ReactDOM.createRoot(document.getElementById("pps-calculator-root")).render(<App />);
+</script>
+</body>
+</html>
