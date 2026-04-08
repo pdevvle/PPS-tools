@@ -215,7 +215,7 @@ const ALL_PAPERS = [
 const INV = [0.001,0.002,0.003,0.01,0.02,0.03,1.01,1.02];
 const PCF = {
   fc:0.05, bw:0.01, lp:35, lb:35, lc:45, pph:600, mph:750,
-  cbf:7.5, mkx:10, mkn:1.5, edm:0, edf:0.05, nif:35, csp:0.50,
+  cbf:7.5, mkx:15.8, mkn:1.5, edm:0, edf:0.05, nif:35, csp:0.50,
   csh:250, cph:200
 };
 const FOLDS = {
@@ -261,7 +261,7 @@ function calcPPS(qty, pv, sz, fk, fc, bc) {
   const p = ALL_PAPERS.find(x => x.val === pv); if(!p) return null;
   const spp = SIZES[sz]||2, fold = FOLDS[fk]||FOLDS.flat, flat = fk==="flat";
   const ps = Math.ceil(qty/spp);
-  const dL = ps>0?(0.9*Math.log(ps))-0.1447:0;
+  const dL = ps>0?(1.7*Math.log(ps))-0.1447:0;
   const mk = Math.max(PCF.mkx-dL, PCF.mkn);
   const P = {};
   P.paper = p.price*ps*mk;

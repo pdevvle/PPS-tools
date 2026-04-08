@@ -56,7 +56,7 @@ PCF = {
     "horizonspf20_sheetsperhour": 4000,
     "cutterbasefee": 7.5,
     "sheetsturnaround": 2500,
-    "backend_maximummarkup": 10,
+    "backend_maximummarkup": 15.8,
     "backend_minimummarkup": 1.5,
     "easydiscount_max": 0,
     "uvcoaterimpressionsperhour": 250,
@@ -134,7 +134,7 @@ def calculate_booklet_price(
 
     # Markup: logarithmic curve from max down to min as volume increases
     if tS > 0:
-        dL = (0.9 * math.log(tS)) - 0.1447
+        dL = (1.7 * math.log(tS)) - 0.1447
     else:
         dL = 0
     mk = max(PCF["backend_maximummarkup"] - dL, PCF["backend_minimummarkup"])
@@ -375,7 +375,7 @@ def calculate_brochure_price(
 
     # Markup calculation (same log curve as booklet calc)
     if parent_sheets > 0:
-        dL = (0.9 * math.log(parent_sheets)) - 0.1447
+        dL = (1.7 * math.log(parent_sheets)) - 0.1447
     else:
         dL = 0
     mk = max(PCF_BROCHURE["backend_maximummarkup"] - dL, PCF_BROCHURE["backend_minimummarkup"])
