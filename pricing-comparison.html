@@ -215,7 +215,7 @@ const ALL_PAPERS = [
 const INV = [0.001,0.002,0.003,0.01,0.02,0.03,1.01,1.02];
 const PCF = {
   fc:0.05, bw:0.01, lp:35, lb:35, lc:45, pph:600, mph:750,
-  cbf:7.5, mkx:8, mkn:1.5, edm:0, edf:0.05, nif:35,
+  cbf:7.5, mkx:8, mkn:1.5, edm:0, edf:0.05, nif:35, csp:0.50,
   csi:3, cph:200
 };
 const FOLDS = {
@@ -225,6 +225,7 @@ const FOLDS = {
   doublegate:{l:"Double Gate",f:3}, doubleparallel:{l:"Dbl Parallel",f:3}
 };
 const SIZES = {"8.5x11":2,"8.5x14":1,"11x17":1,"6x9":4,"5.5x8.5":4,"4x6":8,"4.25x5.5":8,"3.5x5":8};
+const COMMON = ["4.25x5.5","5.5x8.5","8.5x11","11x17"];
 const QTYS = [25,50,100,250,500,1000,2500];
 
 // ── Competitor prices (update via: pps scrape-all && pps export-comp-js) ──
@@ -271,7 +272,8 @@ function calcPPS(qty, pv, sz, fk, fc, bc) {
   P.nif = INV.includes(p.val)?0:PCF.nif;
   const std = spp>=2;
   P.disc = std&&flat ? -Math.min((P.paper+P.print)*PCF.edf,PCF.edm/10) : std ? -Math.min(P.press+P.cut+P.fold,PCF.edm/10) : 0;
-  const t = Object.values(P).reduce((a,b)=>a+b,0);
+  let t = Object.values(P).reduce((a,b)=>a+b,0);
+  if (!COMMON.includes(sz)) t *= (1 + PCF.csp);
   return {total:Math.round(t*100)/100, unit:t/qty, mk};
 }
 

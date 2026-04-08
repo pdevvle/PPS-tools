@@ -71,6 +71,7 @@ PCF = {
     "proof_digital_cost": 10,
     "sets_surcharge": 20,
     "bleed_minimum": 15,
+    "custom_size_surcharge_pct": 0.50,
     "two_staple_threshold": 5.25,
     "sheetsforlowcosthardcopyproof": 1500,
     "art_pagesperhour": 8,
@@ -93,6 +94,10 @@ SIZE_PRESETS = {
 # Inventory papers (no surcharge)
 INV_NC = [0.001, 0.002, 0.003]
 INV_CS = [0.01, 0.02, 0.03, 1.01, 1.02]
+
+# Common sizes: mid-pack pricing. Everything else gets custom surcharge.
+COMMON_BOOKLET_SIZES = ["4.25x5.5", "5.5x8.5", "8.5x11"]
+COMMON_BROCHURE_SIZES = ["4.25x5.5", "5.5x8.5", "8.5x11", "11x17"]
 
 
 def calculate_booklet_price(
@@ -265,6 +270,11 @@ def calculate_booklet_price(
     )
 
     total = sum(P.values())
+
+    # Custom size surcharge for non-common sizes
+    if size not in COMMON_BOOKLET_SIZES:
+        total *= (1 + PCF["custom_size_surcharge_pct"])
+
     per_unit = total / tQ if tQ > 0 else 0
 
     return {
@@ -434,6 +444,11 @@ def calculate_brochure_price(
         P["discEasy"] = 0
 
     total = sum(P.values())
+
+    # Custom size surcharge for non-common sizes
+    if size not in COMMON_BROCHURE_SIZES:
+        total *= (1 + PCF_BROCHURE["custom_size_surcharge_pct"])
+
     per_unit = total / tQ if tQ > 0 else 0
 
     return {
