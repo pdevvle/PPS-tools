@@ -56,7 +56,7 @@ PCF = {
     "horizonspf20_sheetsperhour": 4000,
     "cutterbasefee": 7.5,
     "sheetsturnaround": 2500,
-    "backend_maximummarkup": 8,
+    "backend_maximummarkup": 10,
     "backend_minimummarkup": 1.5,
     "easydiscount_max": 0,
     "uvcoaterimpressionsperhour": 250,
