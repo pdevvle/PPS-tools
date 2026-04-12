@@ -11,6 +11,7 @@ from pps_tools.commands.report import report
 from pps_tools.commands.export import export
 from pps_tools.commands.export_comp_js import export_comp_js
 from pps_tools.commands.import_data import import_group
+from pps_tools.commands.qb_categorize import qb_categorize
 
 
 @click.group()
@@ -42,6 +43,7 @@ main.add_command(report)
 main.add_command(export)
 main.add_command(export_comp_js)
 main.add_command(import_group, "import")
+main.add_command(qb_categorize)
 
 
 if __name__ == "__main__":
