@@ -1,0 +1,127 @@
+{% extends "qb_base.html" %}
+{% block title %}Review transactions{% endblock %}
+{% block content %}
+<div class="card">
+  <form class="row-filters" method="get" action="{{ url_for('review') }}">
+    <label>Mode
+      <select name="mode">
+        <option value="uncategorized" {% if mode == 'uncategorized' %}selected{% endif %}>Uncategorized only</option>
+        <option value="all" {% if mode == 'all' %}selected{% endif %}>All purchases</option>
+      </select>
+    </label>
+    <label>Start date
+      <input type="date" name="start" value="{{ start }}">
+    </label>
+    <label>End date
+      <input type="date" name="end" value="{{ end }}">
+    </label>
+    <button type="submit">Refresh</button>
+  </form>
+</div>
+
+{% if rows|length == 0 %}
+  <div class="card"><p>No transactions to categorize in this range. 🎉</p></div>
+{% else %}
+<div class="card">
+  <p class="muted">{{ rows|length }} transaction(s). Review each suggestion and click Apply to write it back to QuickBooks.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Payee / Description</th>
+        <th>Amount</th>
+        <th>Suggested category</th>
+        <th>Confidence</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for row in rows %}
+      {% set t = row.txn %}
+      {% set s = row.suggestion %}
+      <tr id="row-{{ t.id }}" data-txn-id="{{ t.id }}"
+          data-sync-token="{{ t.sync_token }}" data-line-id="{{ t.line_id or '' }}"
+          data-amount="{{ '%.2f'|format(t.amount) }}">
+        <td>{{ t.txn_date }}</td>
+        <td>
+          <strong>{{ t.payee_name or '(no payee)' }}</strong><br>
+          <span class="muted">{{ t.description or t.memo or '' }}</span>
+          {% if t.current_account_name %}
+            <br><span class="pill">currently: {{ t.current_account_name }}</span>
+          {% endif %}
+        </td>
+        <td>{{ '%.2f'|format(t.amount) }}</td>
+        <td>
+          {% if row.error %}
+            <span class="status-error">Error: {{ row.error }}</span>
+          {% else %}
+            <select class="account-select">
+              {% for a in accounts %}
+                <option value="{{ a.id }}" {% if s and a.id == s.account_id %}selected{% endif %}>
+                  {{ a.fully_qualified_name or a.name }} ({{ a.account_type }})
+                </option>
+              {% endfor %}
+            </select>
+            {% if s and s.reasoning %}
+              <div class="muted" style="margin-top:0.25rem">{{ s.reasoning }}</div>
+            {% endif %}
+          {% endif %}
+        </td>
+        <td class="confidence">
+          {% if s %}
+            {% set c = s.confidence %}
+            <span class="{% if c >= 0.8 %}conf-high{% elif c >= 0.5 %}conf-med{% else %}conf-low{% endif %}">
+              {{ '%.0f%%'|format(c * 100) }}
+            </span>
+          {% endif %}
+        </td>
+        <td>
+          {% if not row.error %}
+            <button class="apply-btn" type="button">Apply</button>
+            <span class="apply-status"></span>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<script>
+document.querySelectorAll('.apply-btn').forEach(function (btn) {
+  btn.addEventListener('click', async function () {
+    const row = btn.closest('tr');
+    const status = row.querySelector('.apply-status');
+    const select = row.querySelector('.account-select');
+    btn.disabled = true;
+    status.textContent = 'Applying…';
+    status.className = 'apply-status muted';
+    try {
+      const resp = await fetch("{{ url_for('apply') }}", {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          txn_id: row.dataset.txnId,
+          sync_token: row.dataset.syncToken,
+          line_id: row.dataset.lineId,
+          amount: row.dataset.amount,
+          account_id: select.value,
+        }),
+      });
+      const data = await resp.json();
+      if (!resp.ok || !data.ok) {
+        throw new Error(data.error || resp.statusText);
+      }
+      row.dataset.syncToken = data.new_sync_token;
+      status.textContent = '✓ Applied';
+      status.className = 'apply-status status-applied';
+    } catch (err) {
+      status.textContent = 'Error: ' + err.message;
+      status.className = 'apply-status status-error';
+      btn.disabled = false;
+    }
+  });
+});
+</script>
+{% endblock %}
