@@ -47,3 +47,7 @@ A turn-based squad tactics game inspired by XCOM 2. It is one self-contained HTM
 ## Controls
 
 Click a soldier to select, then click a tile to move. `1`–`8` pick actions, `Tab` cycles soldiers or targets, `Enter` confirms, `Esc` cancels, and `Backspace` ends the turn. `Q`/`E` rotate the camera, the mouse wheel zooms, and dragging pans (the camera re-centres on the next action). On touch devices, tap a tile once to preview the move and again to confirm it. The on-screen buttons rotate and zoom. In first-person overwatch: move the mouse to aim, click or `Space` to fire, arrow keys to fine-tune, `Esc` to auto-fire.
+
+## Mockups
+
+- `mockups/survivor-style.html` is a style test that rebuilds the squad and two Directorate enemies the way Project Zomboid builds its characters: realistic proportions, with clothing, faces and dirt or blood painted onto textures generated in code. It uses the game's joint layout and model kit. You can switch between isometric, close-up and face views, change the wear level, and flip back to the current mannequins to compare.
