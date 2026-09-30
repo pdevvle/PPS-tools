@@ -4,14 +4,29 @@ A turn-based squad tactics game inspired by XCOM 2. It is one self-contained HTM
 
 ## What's in it
 
-- **3D battlefield in a gritty low-poly style**: faceted, flat-shaded models in muted survival colours under warm dusk light and haze. The angled tactical camera rotates, zooms and pans, and it follows the action. The streets have weathered concrete and brick walls with exposed rebar, wooden and ammo crates, rusted barrels, sandbags and jersey barriers, and rusting wrecked cars. There are pines and dead trees, cracked asphalt with puddles, scattered debris, and a ruined city ringing the map. Tactical overlays (move ranges, paths, detection zones, fog of war) are painted onto the floor.
-- **Detailed character models**: soldiers have faces with varied skin tones, tapered limbs, plate carriers with mag pouches, belts, knee and elbow pads, gloves, boots and backpacks. Each class has its own kit:
-  - Ranger: hood, scarf and a glowing Arc Blade on the back
-  - Sharpshooter: boonie hat with ghillie strips, a scoped rifle with bipod, and a radio pack
-  - Grenadier: armoured helmet with face shield, shoulder pads and a grenade belt
-  - Specialist: headset with HUD eyepiece and a quad-rotor drone
+- **3D battlefield in a "crash-test dummy" low-poly style** (think Ravenfield): clean, brightly lit low-poly models in bold team colours under daylight. The angled tactical camera rotates, zooms and pans, and it follows the action. Each map picks a consistent look per building and per barrier line from the prop catalog below, set in a small town with a road loop, houses, power poles, streetlights and trees. Tactical overlays (move ranges, paths, detection zones, fog of war) are painted onto the floor.
+- **Mannequin soldiers**: every soldier is a glossy plastic mannequin (blue for the Resistance, red for the Directorate) with the following build:
+  - a lathe-turned torso and pelvis and a faceless egg head
+  - dark ball joints at the neck, shoulders, elbows, wrists, hips, knees and ankles
+  - mitten hands with thumbs and boots
+  - yellow/black crash-test markers on the head, arms and thighs
 
-  The Directorate troopers wear full helmets with glowing visor slits and carry breather tanks. Officers wear peaked caps and capes, Lancers have sleek helmets and coil lances, and the Warden is a hulking heavy with a glowing reactor pack.
+  Each class wears readable kit over the plastic:
+  - Ranger: shemagh, headband tails, plate carrier and an Arc Blade on the back
+  - Sharpshooter: boonie hat, rangefinder, a ghillie cape and a scoped rifle with bipod
+  - Grenadier: helmet with a tinted visor, shoulder and thigh plates, a grenade bandolier and a drum-fed launcher
+  - Specialist: headset helmet with a HUD eyepiece, a wrist computer, a medic cross and a quad-rotor drone
+
+  The Directorate wear charcoal plate with glowing red trim and visor slits. Troopers carry breather tanks. Officers have peaked caps, gold epaulettes and capes. Lancers wear finned helmets. The Warden is a heavy-plated brute with a reactor pack.
+- **Prop catalog** (about 45 props, all built from code with no textures). The categories correspond to the game's cover rules:
+  - **Full cover**: concrete, brick and corrugated-metal walls, plus windows with a low sill
+  - **Half cover**: wooden crates, ammo crates, oil drums, tire stacks, a generator, a dumpster, a sack pallet, an AC unit and tarped crates
+  - **Barriers**: jersey barriers, sandbag walls, concrete blocks, striped road barriers and planters
+  - **Vehicles**: sedans, pickups (sometimes loaded with crates), taxis and burnt-out wrecks
+  - **Trees**: pines, oaks and dead trees
+  - **Street dressing** (never blocks shots): cones, hydrants, trash cans, benches, boxes, pallets, trash bags, tires, rocks, grass, bushes, streetlights, road signs, power poles, mailboxes and houses
+
+  **Catalog** (in the header or on the briefing) opens a turntable viewer. Drag to spin a model, use ← → to browse, and use **Variant** to roll another random build of a prop.
 - **Animation**: soldiers walk, raise their weapons to aim, recoil when firing, kneel on overwatch, crouch to hunker down, flinch when hit and fall when killed. They also swing blades and lances, throw grenades, hack, reload and lift off on evac. Effects include tracers, muzzle flashes, impact sparks, explosions with debris and smoke, drop beams and hack links.
 - **First-person overwatch**: when an enemy moves into an overwatching soldier's sight, time slows and the view switches to that soldier's eyes, stepping out from cover. Aim with the mouse (or drag on touch) and fire with a click, Space or the Fire button. The shot is a real raycast:
   - Walls, crates and cars in the way stop the bullet.
