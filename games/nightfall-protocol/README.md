@@ -1,8 +1,12 @@
 # Nightfall Protocol
 
-A turn-based squad tactics game inspired by XCOM 2. It is one self-contained HTML file with no build step. Open `index.html` in a browser to play.
+A turn-based squad tactics game inspired by XCOM 2. It is one self-contained HTML file with no build step. Open `index.html` in a browser to play. The 3D view uses [three.js](https://threejs.org/) r128, loaded from cdnjs, so the first load needs an internet connection and a browser with WebGL.
 
 ## What's in it
+
+- **3D battlefield**: an angled camera like XCOM's that you can rotate, zoom and drag, and that follows the action. Walls, cars, trees, crates and the relay terminal cast real-time shadows. Tactical overlays (move ranges, paths, detection zones, fog of war) are painted onto the floor.
+- **Character models and animation**: every class and enemy type is a low-poly model built in code, with its own armor, silhouette and weapon. The Ranger's Arc Blade glows on its back, the Specialist's drone orbits, the Officer wears a cape and the Warden is a hulking heavy. Soldiers walk, raise their weapons to aim, recoil when firing, kneel on overwatch, crouch to hunker down, flinch when hit and fall when killed. Soldiers also swing blades, throw grenades, hack, reload and lift off on evac.
+- **Effects**: tracer rounds, muzzle flashes, impact sparks, explosions with debris and smoke, reinforcement drop beams and hacking links.
 
 - **4-soldier squad**: Ranger (shotgun + Arc Blade slash), Sharpshooter (sniper with squadsight + pistol), Grenadier (cannon + grenade launcher), Specialist (rifle + aid drone, remote hacking).
 - **Two actions per turn**: move within the blue range (1 action) or dash into the amber range (2). Firing ends the soldier's turn.
@@ -15,4 +19,4 @@ A turn-based squad tactics game inspired by XCOM 2. It is one self-contained HTM
 
 ## Controls
 
-Click a soldier to select, then click a tile to move. `1`–`8` pick actions, `Tab` cycles soldiers or targets, `Enter` confirms, `Esc` cancels, `E` ends the turn. On touch devices, tap a tile once to preview the move and again to confirm it.
+Click a soldier to select, then click a tile to move. `1`–`8` pick actions, `Tab` cycles soldiers or targets, `Enter` confirms, `Esc` cancels, and `Backspace` ends the turn. `Q`/`E` rotate the camera, the mouse wheel zooms, and dragging pans (the camera re-centres on the next action). On touch devices, tap a tile once to preview the move and again to confirm it. The on-screen buttons rotate and zoom.
