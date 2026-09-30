@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Base Figure Study</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a character-creator style stage (figures on a grey studio gradient) with a slim control rail, then a short proportion sheet. Deliberately neutral: the figures are the only colour on the page. */
+:root{
+  color-scheme:dark;
+  --bg:#1b1c1e; --panel:#232427; --line:#38393d; --text:#e2e0dc; --muted:#98968f; --accent:#c9b089;
+  --studio-top:#8d8e90; --studio-bottom:#3d3e41;
+  --body:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+html,body{background:var(--bg)}
+body{color:var(--text);font:15px/1.5 var(--body);padding-inline:16px}
+.wrap{max-width:1100px;margin:0 auto;padding-block:20px 36px;display:flex;flex-direction:column;gap:16px}
+header{display:flex;flex-direction:column;gap:4px}
+.eyebrow{font:12px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin:0}
+h1{font:600 clamp(24px,4.4vw,34px)/1.1 var(--body);margin:0;letter-spacing:.01em;text-wrap:balance}
+.lede{margin:0;max-width:66ch;color:var(--muted)}
+.studio{display:grid;grid-template-columns:minmax(0,1fr) 220px;border:1px solid var(--line);background:var(--panel)}
+#stage{position:relative;height:min(70vh,640px);min-height:380px;background:linear-gradient(180deg,var(--studio-top),var(--studio-bottom));touch-action:none;cursor:grab}
+#stage canvas{display:block;width:100%;height:100%}
+.fail{position:absolute;left:16px;bottom:16px;color:#ffb4a8;font:13px var(--mono)}
+.rail{border-left:1px solid var(--line);padding:14px;display:flex;flex-direction:column;gap:16px}
+.group{display:flex;flex-direction:column;gap:6px}
+.group>span{font:11px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.seg{display:grid;grid-template-columns:repeat(2,1fr);gap:4px}
+.seg button{background:var(--bg);border:1px solid var(--line);color:var(--text);font:500 14px var(--body);padding:5px 8px;cursor:pointer;text-align:left}
+.seg button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+.swatches{display:flex;gap:6px;flex-wrap:wrap}
+.swatches button{width:28px;height:28px;border:2px solid var(--line);border-radius:50%;cursor:pointer;padding:0}
+.swatches button[aria-pressed="true"]{border-color:var(--text)}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tip{font:12px var(--mono);color:var(--muted);margin:0}
+.sheet{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px}
+.sheet section{min-width:0}
+.sheet h2{font:600 17px var(--body);margin:0 0 6px}
+.sheet ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px}
+table{border-collapse:collapse;width:100%;font:13px var(--mono);font-variant-numeric:tabular-nums}
+td,th{border-bottom:1px solid var(--line);padding:5px 6px;text-align:left}
+th{color:var(--muted);font-weight:400}
+td:last-child,th:last-child{text-align:right}
+@media (max-width:720px){.studio{grid-template-columns:1fr}.rail{border-left:0;border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}#stage{height:62vh}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Character style · base figure</p>
+    <h1>Base figure study</h1>
+    <p class="lede">A plain starting point for the characters: two unclothed base bodies with realistic, slightly lanky proportions and a relaxed stance. Anatomy is painted into low-resolution skin textures rather than modelled, the way Project Zomboid does it. Clothing, hair and gear would layer on top of these later.</p>
+  </header>
+  <div class="studio">
+    <div id="stage" aria-label="3D view of two base figures"></div>
+    <div class="rail">
+      <div class="group"><span>View</span><div class="seg" id="segView">
+        <button type="button" data-v="front" aria-pressed="true">Front</button><button type="button" data-v="three" aria-pressed="false">¾</button>
+        <button type="button" data-v="side" aria-pressed="false">Side</button><button type="button" data-v="back" aria-pressed="false">Back</button>
+        <button type="button" data-v="game" aria-pressed="false">In game</button><button type="button" data-v="face" aria-pressed="false">Faces</button></div></div>
+      <div class="group"><span>Pose</span><div class="seg" id="segPose"><button type="button" data-v="stand" aria-pressed="true">Stand</button><button type="button" data-v="walk" aria-pressed="false">Walk</button></div></div>
+      <div class="group"><span>Skin</span><div class="swatches" id="skins"></div></div>
+      <div class="group"><span>Texture</span><div class="seg" id="segTex"><button type="button" data-v="pixel" aria-pressed="true">Pixel</button><button type="button" data-v="smooth" aria-pressed="false">Smooth</button></div></div>
+      <div class="group"><span>Guides</span><div class="seg" id="segGuide"><button type="button" data-v="on" aria-pressed="false">Head units</button><button type="button" data-v="off" aria-pressed="true">Off</button></div></div>
+      <p class="tip">Drag the figures to turn them.</p>
+    </div>
+  </div>
+  <div class="sheet">
+    <section>
+      <h2>Proportions</h2>
+      <table>
+        <thead><tr><th>Landmark</th><th>Height</th></tr></thead>
+        <tbody>
+          <tr><td>Top of head</td><td>1.78 m · 6.1 heads</td></tr>
+          <tr><td>Chin</td><td>1.49 m</td></tr>
+          <tr><td>Shoulder joint</td><td>1.39 m</td></tr>
+          <tr><td>Crotch</td><td>0.77 m</td></tr>
+          <tr><td>Fingertips (arms hanging)</td><td>0.66 m</td></tr>
+          <tr><td>Knee</td><td>0.46 m</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section>
+      <h2>What makes it read as grounded, not goofy</h2>
+      <ul>
+        <li>The head is about a sixth of body height and longer than it is wide. The neck is short.</li>
+        <li>Shoulders are narrow: about twice the head's width. The limbs are thin and taper, and the legs make up more than half the height.</li>
+        <li>Arms hang straight and a little away from the body, with the fingertips below the crotch.</li>
+        <li>No outlines, no bright colour and no oversized features. Shading is painted in at low resolution, so up close it looks like a texture, not a cartoon.</li>
+        <li>The skeleton matches the game's animation rig, so the walk cycle and every existing pose would apply unchanged.</li>
+      </ul>
+    </section>
+  </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+const stage=document.getElementById('stage');
+const SKINS=['#c8a47c','#e2bf9c','#a97f5a','#86573a','#5a3a26'];
+const ui={view:'front', pose:'stand', skin:0, tex:'pixel', guide:false, yaw:0};
+if(!window.THREE){ stage.insertAdjacentHTML('beforeend','<p class="fail">The 3D view needs three.js, which could not load. Check your connection and reload.</p>'); return; }
+let renderer;
+try{ renderer=new THREE.WebGLRenderer({antialias:true, alpha:true}); }catch(e){ stage.insertAdjacentHTML('beforeend','<p class="fail">This browser could not start WebGL.</p>'); return; }
+renderer.setPixelRatio(Math.min(2,window.devicePixelRatio||1)); renderer.setClearColor(0x000000,0);
+renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+stage.appendChild(renderer.domElement);
+const scene=new THREE.Scene(), TAU=Math.PI*2;
+const cam=new THREE.OrthographicCamera(-1,1,1,-1,-20,40);
+scene.add(new THREE.HemisphereLight(0xf2f0ec,0x5a5650,.78));
+const key=new THREE.DirectionalLight(0xfff6ea,.75); key.position.set(-2.5,4,4); key.castShadow=true; key.shadow.mapSize.set(1024,1024);
+Object.assign(key.shadow.camera,{left:-2,right:2,top:2.5,bottom:-.5,near:.5,far:12}); key.shadow.radius=6; key.shadow.bias=-.0005; scene.add(key);
+const fillL=new THREE.DirectionalLight(0xdfe6ee,.28); fillL.position.set(3,2,-3); scene.add(fillL);
+const floor=new THREE.Mesh(new THREE.PlaneGeometry(8,8), new THREE.ShadowMaterial({opacity:.22})); floor.rotation.x=-Math.PI/2; floor.receiveShadow=true; scene.add(floor);
+
+// ---------- geometry: lofted cross-sections (front of every texture is its horizontal centre) ----------
+const GC={}; const geo=(k,fn)=>GC[k]||(GC[k]=fn());
+function loft(k,rings,seg=28){ return geo(k,()=>{
+  rings=rings.slice().sort((a,b)=>a[0]-b[0]);
+  const pos=[],uv=[],idx=[], y0=rings[0][0], y1=rings[rings.length-1][0], pw=(v,n)=>Math.sign(v)*Math.pow(Math.abs(v),2/n);
+  rings.forEach(([y,w,d,cz=0,n=2])=>{ for(let i=0;i<=seg;i++){ const a=i/seg*TAU+Math.PI; pos.push(w*pw(Math.sin(a),n),y,cz+d*pw(Math.cos(a),n)); uv.push(i/seg,(y-y0)/(y1-y0)); } });
+  for(let j=0;j<rings.length-1;j++) for(let i=0;i<seg;i++){ const a=j*(seg+1)+i,b=a+seg+1; idx.push(a,a+1,b,a+1,b+1,b); }
+  const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3)); g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2)); g.setIndex(idx); g.computeVertexNormals();
+  const nr=g.attributes.normal; for(let j=0;j<rings.length;j++){ const a=j*(seg+1),b=a+seg; const x=(nr.getX(a)+nr.getX(b))/2,y=(nr.getY(a)+nr.getY(b))/2,z=(nr.getZ(a)+nr.getZ(b))/2; nr.setXYZ(a,x,y,z); nr.setXYZ(b,x,y,z); }
+  return g; }); }
+const rbox=geo('rbox',()=>{ const g=new THREE.BoxGeometry(1,1,1,3,3,3), p=g.attributes.position, v=new THREE.Vector3(), q=new THREE.Vector3(), r=.3, h=.5-r;
+  for(let i=0;i<p.count;i++){ v.fromBufferAttribute(p,i); q.set(Math.max(-h,Math.min(h,v.x)),Math.max(-h,Math.min(h,v.y)),Math.max(-h,Math.min(h,v.z))); const d=v.clone().sub(q); if(d.lengthSq()>0) d.setLength(r); p.setXYZ(i,q.x+d.x,q.y+d.y,q.z+d.z); }
+  g.computeVertexNormals(); return g; });
+const sph=geo('sph',()=>new THREE.SphereGeometry(1,14,10));
+function shape(fem){ const f=fem?.9:1, h=fem?1.09:1, k='f'+fem; return {
+  torso:loft('t'+k,[[-.01,.122*h,.086],[.05,.12*(fem?.93:1),.086,0,2.3],[.12,.123*(fem?.95:1),.09,.002,2.3],[.2,.13*f,.095,.006,2.4],[.28,.14*f,fem?.108:.1,fem?.018:.01,2.4],[.34,.148*f,fem?.1:.097,fem?.012:.008,2.5],[.39,.15*f,.086,0,2.6],[.42,.128*f,.076,-.004,2.5],[.445,.085*f,.062,-.006],[.46,.052,.048,-.006],[.47,.045,.044,-.006]]),
+  pelvis:loft('p'+k,[[-.19,.03,.034,.004],[-.17,.072,.064,.004],[-.13,.122*h,.084,0,2.3],[-.07,.134*h,.094,-.006,2.4],[-.02,.132*h,.09,-.004,2.4],[.03,.124*h,.086,0,2.3],[.06,.122*h,.086,0,2.3]]),
+  neck:loft('n'+k,[[0,.048,.046,-.006],[.04,.041*f,.043,-.004],[.075,.04*f,.042,-.002]],20),
+  upperArm:loft('u'+k,[[-.31,.026,.026],[-.29,.031*f,.034],[-.2,.035*f,.039,.002],[-.1,.037*f,.041,.003],[-.02,.043*f,.045],[.025,.038*f,.04],[.05,.022,.025],[.058,.003,.004]],20),
+  forearm:loft('f'+k,[[.028,.016,.016],[.014,.03*f,.032],[-.03,.034*f,.035],[-.1,.032*f,.031,.002],[-.19,.025*f,.021],[-.24,.022*f,.019],[-.25,.011,.011]],20),
+  thigh:loft('h'+k,[[.06,.028,.028],[.04,.058*h,.058],[0,.072*h,.074,.004],[-.1,.069*h,.073,.006],[-.24,.06,.064,.005],[-.35,.049,.052,.004],[-.41,.043,.045,.004],[-.43,.024,.026]],20),
+  shin:loft('s'+k,[[.034,.024,.026],[.01,.042,.044,.002],[-.05,.043,.048,-.006],[-.12,.043,.05,-.01],[-.2,.036,.04,-.006],[-.31,.027,.027],[-.37,.024,.024],[-.39,.016,.016]],20),
+  head:loft('d'+k,[[0,.018,.018,.058],[.012,.042,.034,.054],[.035,.058*f,.066,.034,2.2],[.065,.071*f,.088,.02,2.2],[.095,.077*f,.097,.013,2.2],[.125,.081*f,.1,.009,2.2],[.155,.083*f,.101,.006,2.2],[.185,.083*f,.1,.003,2.2],[.215,.079*f,.096,0,2.1],[.24,.069*f,.086,-.004],[.26,.053*f,.067,-.006],[.276,.028,.036,-.006],[.285,.004,.005,-.006]].map(r=>fem?[r[0]*.96,...r.slice(1)]:r),32),
+}; }
+
+// ---------- low-resolution painted skin ----------
+const textures=[];
+function tex(w,h,paint){ const c=document.createElement('canvas'); c.width=w; c.height=h; const g=c.getContext('2d'); paint(g,w,h); const t=new THREE.CanvasTexture(c); textures.push(t); setFilter(t); return t; }
+function setFilter(t){ const px=ui.tex==='pixel'; t.magFilter=px?THREE.NearestFilter:THREE.LinearFilter; t.minFilter=px?THREE.NearestFilter:THREE.LinearMipmapLinearFilter; t.generateMipmaps=!px; t.needsUpdate=true; }
+const rgb=hex=>{ const c=new THREE.Color(hex); return [c.r*255|0,c.g*255|0,c.b*255|0]; };
+function paintBase(g,w,h,skin){
+  g.fillStyle=skin; g.fillRect(0,0,w,h);
+  const side=g.createLinearGradient(0,0,w,0);   // sides and back a touch darker than the front
+  side.addColorStop(0,'rgba(0,0,0,.1)'); side.addColorStop(.25,'rgba(0,0,0,.05)'); side.addColorStop(.5,'rgba(0,0,0,0)'); side.addColorStop(.75,'rgba(0,0,0,.05)'); side.addColorStop(1,'rgba(0,0,0,.1)');
+  g.fillStyle=side; g.fillRect(0,0,w,h);
+  const [r,gg,b]=rgb(skin); for(let i=0;i<w*h/6;i++){ const k=(Math.random()-.5)*14; g.fillStyle=`rgb(${r+k|0},${gg+k|0},${b+k|0})`; g.globalAlpha=.25; g.fillRect(Math.random()*w|0,Math.random()*h|0,1,1); } g.globalAlpha=1;
+}
+const shadeAt=(g,x,y,rx,ry,a,light)=>{ g.save(); g.translate(x,y); g.scale(1,ry/rx); const gr=g.createRadialGradient(0,0,0,0,0,rx); const c=light?'255,245,230':'40,20,10'; gr.addColorStop(0,`rgba(${c},${a})`); gr.addColorStop(1,`rgba(${c},0)`); g.fillStyle=gr; g.fillRect(-rx,-rx,rx*2,rx*2); g.restore(); };
+const UNDER='#3b3c3f', BAND='#232426';
+function paintTorso(g,w,h,skin,fem){
+  paintBase(g,w,h,skin); const cx=w/2, Y=m=>(1-(m+.01)/.48)*h;
+  for(const s of [-1,1]){
+    g.fillStyle='rgba(255,240,220,.1)'; g.fillRect(cx+s*3,Y(.425),s*13,1); g.fillStyle='rgba(40,20,10,.1)'; g.fillRect(cx+s*3,Y(.415),s*12,1);      // collarbones
+    if(!fem){ shadeAt(g,cx+s*8,Y(.3),9,3,.28); shadeAt(g,cx+s*8,Y(.345),8,5,.12,true); g.fillStyle='rgba(110,60,45,.55)'; g.fillRect(cx+s*9-(s<0?1:0),Y(.31),1,1); }
+    shadeAt(g,cx+s*16,Y(.18),6,14,.18);          // flank
+    shadeAt(g,s*14+(s<0?w:0),Y(.33),8,7,.14);     // shoulder blades
+  }
+  if(!fem){ g.fillStyle='rgba(40,20,10,.08)'; g.fillRect(cx,Y(.27),1,Y(.1)-Y(.27)); for(const s of [-1,1]) for(const y of [.23,.18,.13]) shadeAt(g,cx+s*4,y===.23?Y(y):Y(y),4,3,.07,true); }
+  else { g.fillStyle='rgba(40,20,10,.1)'; g.fillRect(cx,Y(.24),1,Y(.08)-Y(.24)); }
+  g.fillStyle='rgba(60,30,20,.5)'; g.fillRect(cx,Y(.085),1,1);                                             // navel
+  g.fillStyle='rgba(40,20,10,.16)'; g.fillRect(0,0,1,h); g.fillRect(w-1,0,1,h);                               // spine
+  if(fem){ g.fillStyle=UNDER; g.fillRect(0,Y(.35),w,Y(.25)-Y(.35)); g.fillStyle=BAND; g.fillRect(0,Y(.265),w,2);
+    for(const s of [-1,1]){ shadeAt(g,cx+s*8,Y(.3),9,4,.2,true); g.fillStyle=UNDER; g.fillRect(cx+s*12-1,0,2,Y(.35)); g.fillRect(s<0?4:w-6,0,2,Y(.35)); } g.fillStyle='rgba(0,0,0,.25)'; g.fillRect(cx,Y(.35),1,Y(.27)-Y(.35)); }
+}
+function paintPelvis(g,w,h,skin,fem){
+  g.fillStyle=UNDER; g.fillRect(0,0,w,h);
+  const Y=m=>(1-(m+.19)/.25)*h, cx=w/2;
+  g.fillStyle=BAND; g.fillRect(0,Y(.06),w,Y(.035)-Y(.06));
+  if(fem){ g.fillStyle=skin; g.fillRect(0,0,w,Y(.03)); }
+  g.fillStyle='rgba(255,255,255,.05)'; for(let i=0;i<w*h/10;i++) g.fillRect(Math.random()*w|0,Math.random()*h|0,1,1);
+  g.fillStyle='rgba(0,0,0,.25)'; for(const s of [-1,1]){ g.fillRect(cx+s*10,Y(0),1,Y(-.17)-Y(0)); }
+  shadeAt(g,cx,Y(-.15),10,6,.25);
+}
+function paintLimb(g,w,h,skin,kind,fem){
+  paintBase(g,w,h,skin); const cx=w/2;
+  if(kind==='thigh'){ if(!fem){ g.fillStyle=UNDER; g.fillRect(0,0,w,h*.42); g.fillStyle='rgba(0,0,0,.3)'; g.fillRect(0,h*.42-1,w,1); }
+    else { g.fillStyle=UNDER; g.fillRect(0,0,w,h*.05); }
+    shadeAt(g,cx,h*.92,6,4,.12,true); shadeAt(g,cx+6,h*.55,5,14,.1); shadeAt(g,cx-6,h*.55,5,14,.1); }
+  if(kind==='shin'){ shadeAt(g,cx,h*.08,5,4,.2,true); shadeAt(g,cx,h*.16,6,3,.16); g.fillStyle='rgba(255,240,220,.12)'; g.fillRect(cx-1,h*.2,2,h*.6); shadeAt(g,0,h*.3,8,14,.16); shadeAt(g,w,h*.3,8,14,.16); }
+  if(kind==='upper'){ shadeAt(g,cx,h*.45,6,10,.08,true); shadeAt(g,0,h*.5,6,12,.12); shadeAt(g,w,h*.5,6,12,.12); }
+  if(kind==='fore'){ shadeAt(g,0,h*.06,5,4,.22); shadeAt(g,w,h*.06,5,4,.22); shadeAt(g,cx,h*.3,5,8,.08,true); }
+}
+function paintHead(g,w,h,skin,fem,seed){
+  paintBase(g,w,h,skin); const cx=w/2, Y=m=>(1-m/.285)*h, X=f=>cx+f*w;
+  shadeAt(g,cx,Y(.28),w*.4,10,.1,true);                                                      // scalp sheen
+  shadeAt(g,cx,Y(.015),16,5,.3);                                                             // under the jaw
+  for(const s of [-1,1]){
+    shadeAt(g,X(s*.052),Y(.153),6,3.5,.6);                                                    // eye sockets
+    shadeAt(g,X(s*.075),Y(.1),6,7,.14);                                                      // cheek hollows
+    shadeAt(g,X(s*.06),Y(.125),5,3,.12,true);                                                // cheekbones
+    g.fillStyle='rgba(50,28,18,.75)'; g.fillRect(X(s*.03)-(s<0?5:0),Y(.172),5,1);             // brow line
+    g.fillStyle='rgba(50,28,18,.35)'; g.fillRect(X(s*.03)-(s<0?5:0),Y(.176),5,1);
+    g.fillStyle='rgba(235,225,212,.8)'; g.fillRect(X(s*.052)-1,Y(.153),3,1);                  // eye white
+    g.fillStyle='#2a1f18'; g.fillRect(X(s*.052)+(s<0?0:0),Y(.153),1,1);                       // iris
+    g.fillStyle='rgba(40,20,10,.45)'; g.fillRect(X(s*.052)-1,Y(.159),3,1);                    // lid crease
+  }
+  shadeAt(g,cx,Y(.172),4,2,.18,true);                                                        // brow ridge
+  shadeAt(g,cx,Y(.108),4,2,.2);   // shadow under the nose
+  g.fillStyle='rgba(40,20,10,.5)'; g.fillRect(cx-2,Y(.104),1,1); g.fillRect(cx+2,Y(.104),1,1);                          // nostrils
+  g.fillStyle='rgba(40,20,10,.14)'; g.fillRect(cx-4,Y(.092),1,Y(.078)-Y(.092)); g.fillRect(cx+4,Y(.092),1,Y(.078)-Y(.092));
+  g.fillStyle=fem?'rgba(120,55,45,.5)':'rgba(100,50,40,.4)'; g.fillRect(cx-4,Y(.078),9,2);                              // lips
+  g.fillStyle='rgba(40,15,10,.6)'; g.fillRect(cx-4,Y(.077),9,1);                                                       // mouth line
+  shadeAt(g,cx,Y(.055),5,3,.16);                                                                                       // under the lip
+  if(!fem){ g.fillStyle='rgba(40,30,25,.07)'; for(let i=0;i<160;i++){ const x=cx+(Math.random()-.5)*34, y=Y(.02)+Math.random()*(Y(.1)-Y(.02)); if(Math.abs(x-cx)<5 && y>Y(.085) && y<Y(.07)) continue; g.fillRect(x|0,y|0,1,1); } }
+  for(const s of [-1,1]) shadeAt(g,X(s*.25),Y(.14),5,8,.18);                                                           // ears
+}
+
+// ---------- figure ----------
+function Gp(p,x=0,y=0,z=0){ const g=new THREE.Group(); g.position.set(x,y,z); p.add(g); return g; }
+function P(g,m,p,x=0,y=0,z=0,sx=1,sy=1,sz=1,rx=0,ry=0,rz=0){ const me=new THREE.Mesh(g,m); me.position.set(x,y,z); me.scale.set(sx,sy,sz); me.rotation.set(rx,ry,rz); me.castShadow=true; me.receiveShadow=true; p.add(me); return me; }
+const M=map=>new THREE.MeshStandardMaterial({map, roughness:.92, metalness:0});
+function figure(fem,skin){
+  const F=shape(fem), sx=fem?.158:.17;
+  const skinM=new THREE.MeshStandardMaterial({color:skin, roughness:.9});
+  const T=(w,h,fn)=>M(tex(w,h,(g,W,H)=>fn(g,W,H)));
+  const root=new THREE.Group(), body=Gp(root), hips=Gp(body,0,.95,0);
+  P(F.pelvis,T(64,32,(g,w,h)=>paintPelvis(g,w,h,skin,fem)),hips);
+  const torso=Gp(hips,0,.05,0);
+  P(F.torso,T(64,64,(g,w,h)=>paintTorso(g,w,h,skin,fem)),torso);
+  const neckM=T(32,16,(g,w,h)=>{ paintBase(g,w,h,skin); shadeAt(g,w/2,h*.2,10,4,.2); });
+  P(F.neck,neckM,torso,0,.445,-.004);
+  const head=Gp(torso,0,.5,.006), face=Gp(head,0,-.01,0);
+  P(F.head,T(128,64,(g,w,h)=>paintHead(g,w,h,skin,fem)),face);
+  P(geo('nose',()=>{ const g=new THREE.ConeGeometry(1,1,3); g.rotateX(Math.PI/2); g.rotateZ(Math.PI); return g; }),skinM,face,0,.124,.108,.016,.026,.022,.3,0,0);
+  for(const s of [-1,1]) P(sph,skinM,face,s*.081,.14,-.006,.007,.026,.015,0,s*.25,0);
+  const sh=[],el=[],lg=[],kn=[];
+  const upM=T(32,64,(g,w,h)=>paintLimb(g,w,h,skin,'upper',fem)), foM=T(32,64,(g,w,h)=>paintLimb(g,w,h,skin,'fore',fem));
+  for(const s of [-1,1]){
+    const shoulder=Gp(torso,s*sx,.39,-.006); P(F.upperArm,upM,shoulder);
+    const elbow=Gp(shoulder,0,-.3,0); P(F.forearm,foM,elbow);
+    const hand=Gp(elbow,0,-.245,0);
+    P(loft('hand',[[-.185,.006,.016,.004],[-.165,.011,.026,.004],[-.1,.014,.034,.002],[-.05,.016,.036],[-.01,.016,.032],[.01,.01,.02]],12),skinM,hand,0,0,.004,1,1,1,.08,0,0);   // palm and relaxed fingers
+    P(loft('thumb',[[-.05,.008,.008],[-.03,.011,.011],[0,.012,.012],[.005,.004,.004]],8),skinM,hand,s*-.012,-.03,.035,1,1,1,-.2,0,s*.3);
+    sh.push(shoulder); el.push(elbow);
+  }
+  const thM=[0,1].map(()=>T(32,64,(g,w,h)=>paintLimb(g,w,h,skin,'thigh',fem))), shM=T(32,64,(g,w,h)=>paintLimb(g,w,h,skin,'shin',fem));
+  for(const s of [-1,1]){ const i=s<0?0:1;
+    const leg=Gp(hips,s*(fem?.083:.08),-.08,0); P(F.thigh,thM[i],leg);
+    const knee=Gp(leg,0,-.415,0); P(F.shin,shM,knee);
+    P(loft('foot'+fem,[[-.12,.012,.018,0],[-.1,.03,.028,0,2.4],[-.02,.036,.032,0,2.6],[.06,.04,.026,0,2.6],[.1,.035,.018,0,2.4],[.12,.012,.01]],16),skinM,knee,0,-.415,.045,1,1,1,Math.PI/2,0,0);
+    lg.push(leg); kn.push(knee); }
+  return {root, body, hips, torso, head, sh, el, lg, kn, j:null, t0:Math.random()*10, fem};
+}
+const STAND={bodyY:0,torsoX:0,torsoY:0,headX:0,shRx:.02,shRz:-.1,elR:-.1,shLx:.02,shLz:.1,elL:-.1,lgR:0,knR:0,lgL:0,knL:0};
+function applyPose(r,j){ r.body.position.y=j.bodyY; r.torso.rotation.set(j.torsoX,j.torsoY,0); r.head.rotation.x=j.headX;
+  r.sh[0].rotation.set(j.shRx,0,j.shRz); r.el[0].rotation.x=j.elR; r.sh[1].rotation.set(j.shLx,0,j.shLz); r.el[1].rotation.x=j.elL;
+  r.lg[0].rotation.x=j.lgR; r.kn[0].rotation.x=j.knR; r.lg[1].rotation.x=j.lgL; r.kn[1].rotation.x=j.knL; }
+
+let figs=[];
+const turn=new THREE.Group(); scene.add(turn);
+function build(){
+  figs.forEach(f=>turn.remove(f.root)); textures.splice(0).forEach(t=>t.dispose());
+  figs=[figure(false,SKINS[ui.skin]), figure(true,SKINS[(ui.skin+1)%SKINS.length])];
+  figs[0].root.position.x=-.42; figs[1].root.position.x=.42;
+  figs.forEach(f=>{ turn.add(f.root); f.j=Object.assign({},STAND); applyPose(f,f.j); });
+}
+build();
+
+// head-unit guides
+const guides=new THREE.Group(); scene.add(guides); guides.visible=false;
+{ const lm=new THREE.LineBasicMaterial({color:0xe8e4dc, transparent:true, opacity:.35});
+  const HU=.29; for(let i=0;i<=6;i++){ const y=1.78-i*HU; if(y<0) break; const g=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-1.15,y,-.3),new THREE.Vector3(1.15,y,-.3)]); guides.add(new THREE.Line(g,lm));
+    const c=document.createElement('canvas'); c.width=64; c.height=32; const x=c.getContext('2d'); x.fillStyle='#ece8e0'; x.font='20px monospace'; x.fillText(String(i),24,24);
+    const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c), transparent:true, depthTest:false})); sp.scale.set(.16,.08,1); sp.position.set(-1.25,y-.02,-.3); guides.add(sp); } }
+
+// ---------- camera ----------
+const VIEWS={front:{yaw:0,pitch:.02,size:2.05,ty:.92}, three:{yaw:.62,pitch:.06,size:2.05,ty:.92}, side:{yaw:Math.PI/2,pitch:.02,size:2.05,ty:.92}, back:{yaw:Math.PI,pitch:.02,size:2.05,ty:.92},
+  game:{yaw:Math.PI/4,pitch:.6,size:9,ty:.6}, face:{yaw:.25,pitch:.03,size:.7,ty:1.56}};
+const V=Object.assign({},VIEWS.front);
+let W=1,H=1; function resize(){ W=stage.clientWidth; H=stage.clientHeight; renderer.setSize(W,H,false); } new ResizeObserver(resize).observe(stage); resize();
+let drag=null;
+stage.addEventListener('pointerdown',e=>{ drag={x:e.clientX,yaw:ui.yaw}; stage.setPointerCapture(e.pointerId); stage.style.cursor='grabbing'; });
+stage.addEventListener('pointermove',e=>{ if(drag) ui.yaw=drag.yaw+(e.clientX-drag.x)*.012; });
+const end=()=>{ drag=null; stage.style.cursor=''; }; stage.addEventListener('pointerup',end); stage.addEventListener('pointercancel',end);
+
+const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+let last=performance.now(), phase=0;
+function loop(now){
+  requestAnimationFrame(loop);
+  const dt=Math.min(.05,(now-last)/1000); last=now;
+  phase+=dt*5.2;
+  for(const f of figs){
+    const t=now/1000+f.t0, J=Object.assign({},STAND);
+    if(ui.pose==='walk'){ const s=Math.sin(phase+(f.fem?.4:0));
+      Object.assign(J,{lgR:s*.5, lgL:-s*.5, knR:Math.max(0,-s)*.9+.06, knL:Math.max(0,s)*.9+.06, bodyY:-Math.abs(Math.cos(phase+(f.fem?.4:0)))*.03, torsoX:.04, shRx:-s*.35, shLx:s*.35, elR:-.25, elL:-.25}); }
+    else if(!reduce){ J.torsoX=Math.sin(t*1.2)*.012; J.bodyY=Math.sin(t*1.2)*.004; J.headX=Math.sin(t*.35)*.03; J.shRz=-.1+Math.sin(t*1.2)*.01; J.shLz=.1-Math.sin(t*1.2)*.01; }
+    const k=1-Math.exp(-dt*10); for(const key in J) f.j[key]+=(J[key]-f.j[key])*k; applyPose(f,f.j);
+  }
+  const G=VIEWS[ui.view], kk=1-Math.exp(-dt*6);
+  for(const key of ['pitch','size','ty']) V[key]+=(G[key]-V[key])*kk;
+  V.yaw+=(G.yaw+ui.yaw-V.yaw)*kk;
+  const a=W/Math.max(1,H), s=V.size*(a<.8?.8/a:1);
+  cam.left=-s*a/2; cam.right=s*a/2; cam.top=s/2; cam.bottom=-s/2; cam.updateProjectionMatrix();
+  const d=15, tx=ui.view==='face'?0:0;
+  cam.position.set(tx+Math.sin(V.yaw)*Math.cos(V.pitch)*d, V.ty+Math.sin(V.pitch)*d, Math.cos(V.yaw)*Math.cos(V.pitch)*d); cam.lookAt(tx,V.ty,0);
+  renderer.render(scene,cam);
+}
+requestAnimationFrame(loop);
+
+// ---------- controls ----------
+function seg(id,fn){ const el=document.getElementById(id); el.addEventListener('click',e=>{ const b=e.target.closest('button[data-v]'); if(!b) return; el.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',String(x===b))); fn(b.dataset.v); }); }
+seg('segView',v=>{ ui.view=v; ui.yaw=0; });
+seg('segPose',v=>{ ui.pose=v; });
+seg('segTex',v=>{ ui.tex=v; textures.forEach(setFilter); });
+seg('segGuide',v=>{ ui.guide=v==='on'; guides.visible=ui.guide; });
+const sw=document.getElementById('skins');
+sw.innerHTML=SKINS.map((c,i)=>`<button type="button" style="background:${c}" aria-label="Skin tone ${i+1}" aria-pressed="${i===0}" data-i="${i}"></button>`).join('');
+sw.addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; ui.skin=+b.dataset.i; sw.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',String(x===b))); build(); });
+})();
+</script>
+</body>
+</html>

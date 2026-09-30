@@ -51,3 +51,4 @@ Click a soldier to select, then click a tile to move. `1`–`8` pick actions, `T
 ## Mockups
 
 - `mockups/survivor-style.html` is a style test that rebuilds the squad and two Directorate enemies the way Project Zomboid builds its characters: realistic proportions, with clothing, faces and dirt or blood painted onto textures generated in code. It uses the game's joint layout and model kit. You can switch between isometric, close-up and face views, change the wear level, and flip back to the current mannequins to compare.
+- `mockups/base-figure.html` is a stripped-down figure study: two unclothed base bodies with lanky, realistic proportions (about 6 heads tall), a relaxed stance, and anatomy painted into low-resolution skin textures. It has front, ¾, side, back, in-game and face views, head-unit guides, skin tones, a pixel/smooth texture switch and a walk cycle.
