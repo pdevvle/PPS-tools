@@ -91,7 +91,7 @@ td:last-child,th:last-child{text-align:right}
       <h2>What defines the look</h2>
       <ul>
         <li>Flat shading on purpose. Each form has 8 to 12 sides, so the light breaks into clear planes across the chest, jaw, shoulders and limbs.</li>
-        <li>A narrow, angular head: a squared jaw, a defined chin, a flat face, a wedge nose and a high forehead, under a separate faceted cap of hair.</li>
+        <li>A long, narrow head: the jaw angles sharply down to a small chin set forward, the brow overhangs shadowed, slit-like eyes, and a long straight wedge nose sits over a small mouth. A faceted cap of hair adds volume on top and drops to the nape.</li>
         <li>An athletic V-taper: broad shoulders and chest, a narrow waist, a strong neck and long tapering limbs.</li>
         <li>Solid colours with no painted detail, apart from thin lines for the eyes, brows and mouth.</li>
         <li>The same skeleton as the game's animation rig, so the walk cycle and every existing pose apply unchanged.</li>
@@ -139,12 +139,31 @@ function shape(fem){ const f=fem?.88:1, h=fem?1.08:1, k='f'+fem; return {
   thigh:loft('g'+k,[[.06,.03,.03],[.04,.064*h,.066],[0,.076*h,.08,.004],[-.12,.074*h,.078,.008],[-.26,.066,.07,.006],[-.37,.052,.055,.004],[-.42,.046,.048],[-.44,.025,.025]],8),
   shin:loft('s'+k,[[.035,.026,.026],[.01,.047,.05],[-.06,.05*f,.056,-.008],[-.14,.048*f,.055,-.012],[-.22,.038,.042,-.006],[-.33,.028,.028],[-.38,.025,.025],[-.4,.016,.016]],8),
   foot:loft('o'+k,[[-.11,.012,.016],[-.09,.03,.026,0,2.4],[-.01,.036*f,.03,0,2.6],[.07,.04*f,.024,0,2.6],[.11,.034*f,.016,0,2.4],[.13,.012,.008]],6),
-  head:loft('d'+k,[[0,.02,.02,.055],[.012,.04,.03,.05],[.03,.055*f,.06,.03,2.3],[.05,.068*f,.082,.016,2.3],[.08,.072*f,.09,.01,2.3],[.11,.075*f,.093,.008,2.3],[.14,.076*f,.094,.005,2.3],[.17,.074*f,.093,.002,2.3],[.2,.068*f,.088,-.002,2.2],[.22,.052*f,.07,-.006],[.233,.026,.035,-.008],[.236,.003,.003,-.008]].map(r=>fem?[r[0]*.97,...r.slice(1)]:r),10),
+  head:loft('d'+k,[
+    [0,.012,.012,.07],            // chin tip
+    [.012,.026,.022,.068],        // chin
+    [.035,.044*f,.05,.048,2.4],   // jaw line, angling back to the ears
+    [.06,.058*f,.072,.03,2.5],    // corners of the mouth
+    [.09,.066*f,.084,.018,2.6],   // under the cheekbones
+    [.118,.071*f,.09,.012,2.6],   // cheekbones
+    [.142,.071*f,.086,.01,2.6],   // eye line (set back under the brow)
+    [.162,.073*f,.094,.008,2.6],  // brow ridge
+    [.19,.071*f,.091,.003,2.5],   // forehead
+    [.215,.064*f,.084,-.003,2.3],
+    [.232,.046*f,.062,-.007],
+    [.242,.016,.022,-.008],[.244,.002,.002,-.008]].map(r=>fem?[r[0]*.97,...r.slice(1)]:r),8),
 }; }
-const capG=geo('cap',()=>new THREE.SphereGeometry(1,10,5,0,TAU,0,Math.PI*.5));
-const bobG=geo('bob',()=>new THREE.SphereGeometry(1,10,6,0,TAU,0,Math.PI*.64));
+const capG=loft('hairM',[[.17,.076,.096,.004,2.4],[.2,.08,.1,.012,2.5],[.232,.077,.1,.022,2.4],[.258,.06,.086,.026,2.2],[.274,.032,.05,.02],[.28,.004,.004,.014]],8);
+const bobG=loft('hairF',[[.055,.068,.07,-.04,2.4],[.09,.08,.082,-.034,2.5],[.13,.084,.088,-.026,2.5],[.17,.083,.09,-.02,2.5],[.19,.078,.086,-.018]],8);   // sides and back of a bob; its front sits inside the face
 const earG=geo('ear',()=>new THREE.SphereGeometry(1,6,4));
-const noseG=geo('nose',()=>{ const g=new THREE.ConeGeometry(1,1,3); g.rotateX(Math.PI/2); g.rotateZ(Math.PI); return g; });
+const noseG=geo('nose2',()=>{
+  const tl=[-.006,.152,-.004], tr=[.006,.152,-.004], tip=[0,.094,.03], bl=[-.015,.088,.002], br=[.015,.088,.002], bm=[0,.086,.012];
+  const tris=[[tl,tip,bl],[tr,br,tip],[tl,tr,tip],[bl,tip,bm],[bm,tip,br]];
+  const A=new THREE.Vector3(),B=new THREE.Vector3(),C=new THREE.Vector3(), inside=new THREE.Vector3(0,.12,-.03), out=[];
+  for(const t of tris){ A.fromArray(t[0]); B.fromArray(t[1]); C.fromArray(t[2]);
+    const n=B.clone().sub(A).cross(C.clone().sub(A)), c=A.clone().add(B).add(C).multiplyScalar(1/3);
+    out.push(...(n.dot(c.sub(inside))<0 ? [t[0],t[2],t[1]] : t)); }
+  const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(out.flat(),3)); g.computeVertexNormals(); return g; });
 
 // ---------- materials: solid colours; only the face and underwear bands use tiny textures ----------
 const mats=[];
@@ -153,14 +172,23 @@ function tex(w,h,paint){ const c=document.createElement('canvas'); c.width=w; c.
 const UNDER='#5b504d', BAND='#3c3433';
 function faceTex(skin,fem){ return tex(256,128,(g,w,h)=>{
   g.fillStyle=skin; g.fillRect(0,0,w,h);
-  const cx=w/2, Y=m=>(1-m/.236)*h, X=f=>cx+f*w;
-  g.strokeStyle='rgba(60,38,26,.85)'; g.lineCap='round';
+  const cx=w/2, Y=m=>(1-m/.244)*h, X=f=>cx+f*w;
+  const shade=(x,y,rx,ry,a)=>{ g.save(); g.translate(x,y); g.scale(1,ry/rx); const gr=g.createRadialGradient(0,0,0,0,0,rx); gr.addColorStop(0,`rgba(70,40,25,${a})`); gr.addColorStop(1,'rgba(70,40,25,0)'); g.fillStyle=gr; g.fillRect(-rx,-rx,rx*2,rx*2); g.restore(); };
+  g.lineCap='round';
   for(const s of [-1,1]){
-    g.lineWidth=fem?2:2.6; g.beginPath(); g.moveTo(X(s*.022),Y(.168)); g.lineTo(X(s*.07),Y(.165)); g.stroke();             // brow
-    g.lineWidth=1.8; g.beginPath(); g.moveTo(X(s*.03),Y(.146)); g.lineTo(X(s*.062),Y(.147)); g.stroke();                     // eye line
-    g.fillStyle='rgba(60,38,26,.9)'; g.fillRect(X(s*.046)-1.5,Y(.146)-1,3,2.4);                                               // iris
+    shade(X(s*.045),Y(.147),9,4,.35);                                                   // eye socket shadow under the brow
+    g.strokeStyle='rgba(55,34,22,.9)'; g.lineWidth=fem?2.2:3;
+    g.beginPath(); g.moveTo(X(s*.018),Y(fem?.162:.158)); g.quadraticCurveTo(X(s*.045),Y(fem?.168:.163),X(s*.07),Y(fem?.164:.164)); g.stroke();      // brow, lower at the centre (his)
+    g.strokeStyle='rgba(40,24,16,.95)'; g.lineWidth=fem?1.8:1.5;
+    g.beginPath(); g.moveTo(X(s*.026),Y(.145)); g.lineTo(X(s*.062),Y(.147)); g.stroke();     // upper lid
+    g.strokeStyle='rgba(40,24,16,.35)'; g.lineWidth=1;
+    g.beginPath(); g.moveTo(X(s*.03),Y(.139)); g.lineTo(X(s*.058),Y(.14)); g.stroke();       // lower lid
+    shade(X(s*.07),Y(.1),8,10,.12);                                                      // hollow under the cheekbone
   }
-  g.strokeStyle='rgba(110,60,45,.75)'; g.lineWidth=fem?2.2:1.6; g.beginPath(); g.moveTo(cx-9,Y(.07)); g.lineTo(cx+9,Y(.07)); g.stroke();    // mouth
+  shade(cx,Y(.083),6,2.5,.28);                                                           // under the nose
+  g.strokeStyle=fem?'rgba(130,62,50,.8)':'rgba(105,58,44,.75)'; g.lineWidth=fem?2.2:1.6;
+  g.beginPath(); g.moveTo(cx-7,Y(.066)); g.quadraticCurveTo(cx,Y(.064),cx+7,Y(.066)); g.stroke();   // mouth
+  shade(cx,Y(.05),5,2,.22);                                                              // under the lower lip
 }); }
 function bandTex(skin,stops){ return tex(4,64,(g,w,h)=>{ g.fillStyle=skin; g.fillRect(0,0,w,h); for(const [a,b,c] of stops){ g.fillStyle=c; g.fillRect(0,(1-b)*h,w,(b-a)*h); } }); }
 
@@ -177,11 +205,11 @@ function figure(fem,skin,hair){
   P(F.neck,skinM,torso,0,.44,-.006);
   const head=Gp(torso,0,.53,.006), face=Gp(head,0,-.005,0);
   P(F.head,M({map:faceTex(skin,fem)}),face);
-  P(noseG,skinM,face,0,.118,.1,.014,.03,.026,.3,0,0);
-  for(const s of [-1,1]) P(earG,skinM,face,s*.075,.13,-.008,.009,.026,.016,0,s*.3,0);
+  P(noseG,skinM,face,0,0,.092,fem?.85:1,fem?.92:1,fem?.85:1);
+  for(const s of [-1,1]) P(earG,skinM,face,s*.07,.128,-.014,.008,.024,.014,0,s*.35,0);
   const hm=M({color:hair});
-  if(fem){ P(bobG,hm,face,0,.153,-.014,.087,.098,.11,-.45,Math.PI/10,0); P(earG,hm,face,0,.17,-.1,.04,.035,.035); }
-  else P(capG,hm,face,0,.158,-.01,.086,.09,.108,-.4,Math.PI/10,0);
+  const hairPivot=Gp(face,0,.19,0); hairPivot.rotation.x=fem?-.36:-.42;
+  P(capG,hm,hairPivot,0,-.19,-.004,fem?1.02:1,fem?.96:1,1); if(fem) P(bobG,hm,face,0,0,0);
   const sh=[],el=[],lg=[],kn=[];
   for(const s of [-1,1]){
     const shoulder=Gp(torso,s*sx,.385,-.006); P(F.upperArm,skinM,shoulder);
@@ -199,8 +227,8 @@ function figure(fem,skin,hair){
   return {root, body, hips, torso, head, sh, el, lg, kn, j:null, t0:Math.random()*10, fem};
 }
 const POSES={
-  t:{bodyY:0,torsoX:0,torsoY:0,headX:0,shRx:0,shRz:-1.5,elR:0,shLx:0,shLz:1.5,elL:0,lgR:0,knR:0,lgL:0,knL:0},
-  stand:{bodyY:0,torsoX:0,torsoY:0,headX:0,shRx:.02,shRz:-.12,elR:-.12,shLx:.02,shLz:.12,elL:-.12,lgR:0,knR:0,lgL:0,knL:0},
+  t:{bodyY:0,torsoX:0,torsoY:0,headX:.08,shRx:0,shRz:-1.5,elR:0,shLx:0,shLz:1.5,elL:0,lgR:0,knR:0,lgL:0,knL:0},
+  stand:{bodyY:0,torsoX:0,torsoY:0,headX:.06,shRx:.02,shRz:-.12,elR:-.12,shLx:.02,shLz:.12,elL:-.12,lgR:0,knR:0,lgL:0,knL:0},
 };
 function applyPose(r,j){ r.body.position.y=j.bodyY; r.torso.rotation.set(j.torsoX,j.torsoY,0); r.head.rotation.x=j.headX;
   r.sh[0].rotation.set(j.shRx,0,j.shRz); r.el[0].rotation.x=j.elR; r.sh[1].rotation.set(j.shLx,0,j.shLz); r.el[1].rotation.x=j.elL;
