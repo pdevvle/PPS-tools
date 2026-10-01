@@ -57,7 +57,7 @@ td:last-child,th:last-child{text-align:right}
   <header>
     <p class="eyebrow">Character style · base figure</p>
     <h1>Base figure study</h1>
-    <p class="lede">A plain starting point for the characters in a toon-shaded low-poly style. Every face is generated from a seed, so no two people look alike: press New faces, or open the Lineup. Flat planes are lit in three hard tones. The head is sculpted with realistic anatomy (brow, eye sockets, cheekbones, nose, lips, chin) under a straight-cut block of hair, on a thick neck. The colours are solid, and the face is painted with only a few marks. Clothing, hair styles and gear would layer on top later.</p>
+    <p class="lede">A plain starting point for the characters in a toon-shaded low-poly style. Every face is generated from a seed, and so is every body, so no two people look alike: press New people, or open the Lineup. Flat planes are lit in three hard tones. The head is sculpted with realistic anatomy (brow, eye sockets, cheekbones, nose, lips, chin) under a straight-cut block of hair, on a thick neck. The colours are solid, and the face is painted with only a few marks. Clothing, hair styles and gear would layer on top later.</p>
   </header>
   <div class="studio">
     <div id="stage" aria-label="3D view of two base figures"></div>
@@ -68,7 +68,7 @@ td:last-child,th:last-child{text-align:right}
         <button type="button" data-v="his" aria-pressed="false">His head</button><button type="button" data-v="her" aria-pressed="false">Her head</button>
         <button type="button" data-v="lineup" aria-pressed="false">Lineup</button><button type="button" data-v="game" aria-pressed="false">In game</button></div></div>
       <div class="group"><span>Pose</span><div class="seg three" id="segPose"><button type="button" data-v="t" aria-pressed="true">T-pose</button><button type="button" data-v="stand" aria-pressed="false">Stand</button><button type="button" data-v="ready" aria-pressed="false">Ready</button><button type="button" data-v="walk" aria-pressed="false">Walk</button></div></div>
-      <div class="group"><span>Faces</span><button type="button" class="reroll" id="reroll">New faces</button><span class="seed" id="seedLabel"></span></div>
+      <div class="group"><span>People</span><button type="button" class="reroll" id="reroll">New people</button><span class="seed" id="seedLabel"></span></div>
       <div class="group"><span>Shading</span><div class="seg three" id="segShade"><button type="button" data-v="toon" aria-pressed="true">Toon</button><button type="button" data-v="flat" aria-pressed="false">Faceted</button><button type="button" data-v="smooth" aria-pressed="false">Smooth</button></div></div>
       <div class="group"><span>Guides</span><div class="seg" id="segGuide"><button type="button" data-v="on" aria-pressed="false">Head units</button><button type="button" data-v="off" aria-pressed="true">Off</button></div></div>
       <p class="tip">Drag the figures to turn them.</p>
@@ -90,12 +90,18 @@ td:last-child,th:last-child{text-align:right}
       </table>
     </section>
     <section>
+      <h2>This pair's body</h2>
+      <table id="bodyStats"></table>
+      <p class="tip" style="margin-top:6px">Sizes are relative to the base figure; chest, bust and glutes run from 0 to 100%.</p>
+    </section>
+    <section>
       <h2>What defines the look</h2>
       <ul>
         <li>Toon shading on flat planes. Each form has 8 to 12 sides, and light falls into three hard tones (lit, mid and shadow), so the planes of the jaw, nose, chest and limbs read like a painted poster.</li>
         <li>A face sculpted with real anatomy at low-poly resolution: the eyes sit halfway up the head in sockets under a brow ridge, with cheekbones and hollows below them. The nose has a bridge, tip and nostril wings, and the lips curve forward over the teeth above a defined chin and jaw angle. The paint adds only brows, almond-shaped eyes and lip colour. The hair is a straight-cut block on a thick neck.</li>
         <li>An athletic V-taper: broad shoulders and chest, a narrow waist, a strong neck and long tapering limbs.</li>
         <li>Solid colours with no painted detail, apart from thin lines for the eyes, brows and mouth.</li>
+        <li>Bodies are procedural too. The same seed sets head size, neck length, shoulder width, torso length, chest or bust, waist, hips, glutes, leg length, knee height, arm length and overall build. Clothing would follow automatically because it is built from the same shapes.</li>
         <li>Faces are procedural. A seed sets about 30 values: head width, depth and length, jaw width, chin size and projection, brow ridge, cheekbones, eye height, spacing, depth and size, nose length, width, tip and hump, lip fullness, mouth width, forehead slope and ears. The same seed also picks the skin tone, hair and eye colour, brow shape and one of six haircuts. Each recruit could carry just one number.</li>
         <li>The same skeleton as the game's animation rig, so the walk cycle and every existing pose apply unchanged.</li>
       </ul>
@@ -120,6 +126,11 @@ function genFace(seed,fem){
   const tone=Math.floor(r()*SKINS.length); P.skin=SKINS[tone];
   P.hair=pick(tone>4?HAIRS.slice(0,3):HAIRS); P.eye=pick(tone>3?EYES.slice(0,2):EYES);
   const h=r(); P.style=fem?(h<.45?'bob':h<.8?'bun':'crop'):(h<.45?'crop':h<.8?'buzz':'quiff');
+  // body: a second random stream from the same seed
+  const b=rng(seed*97+13), B=(a,c)=>a+(c-a)*b();
+  P.body={head:B(.93,1.07), neck:B(.8,1.3), shoulders:fem?B(.88,1.06):B(.9,1.15), torso:B(.94,1.06), waist:B(.88,1.15), hips:fem?B(1,1.12):B(.92,1.06),
+    chest:fem?0:B(0,1), breast:fem?B(0,1):0, glutes:B(0,1), legs:B(.92,1.08), knee:B(.94,1.06), arms:B(.95,1.05), girth:B(.85,1.2)};
+  for(const key in P.body) P.body[key]=Math.round(P.body[key]*1000)/1000;
   for(const key in P) if(typeof P[key]==='number') P[key]=Math.round(P[key]*10000)/10000;
   return P; }
 const ui={view:'front', pose:'t', seed:20481, shade:'toon', guide:false, yaw:0};
@@ -147,7 +158,16 @@ function loft(k,rings,seg){ return geo(k,()=>{
   for(let j=0;j<rings.length-1;j++) for(let i=0;i<seg;i++){ const a=j*(seg+1)+i,b=a+seg+1; idx.push(a,a+1,b,a+1,b+1,b); }
   const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3)); g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2)); g.setIndex(idx); g.computeVertexNormals();
   return g; }); }
-function shape(fem){ const f=fem?.88:1, h=fem?1.08:1, k='f'+fem; return {
+const smooth=t=>t<0?0:t>1?1:t*t*(3-2*t), gauss=(x,m,s)=>Math.exp(-((x-m)**2)/(2*s*s));
+function bodyShape(fem,Bd){ const F=shape(fem), k='b'+fem+JSON.stringify(Bd);
+  const torsoRings=F.torsoRings.map(([y,w,d,cz=0,n=2])=>{
+    const hipF=Bd.hips*Bd.girth, waistF=Bd.waist*Bd.girth, shF=Bd.shoulders;
+    const wf=hipF+(waistF-hipF)*smooth((y-.04)/.12), wf2=wf+(shF-wf)*smooth((y-.24)/.14);
+    const bump=fem? Bd.breast*.034*gauss(y,.29,.026) : Bd.chest*.02*gauss(y,.32,.03);
+    return [y*Bd.torso, w*wf2, d*Bd.girth+bump, cz+bump, n]; });
+  const pelvisRings=F.pelvisRings.map(([y,w,d,cz=0,n=2])=>{ const g=Bd.glutes*.024*gauss(y,fem?-.06:-.07,.04); return [y, w*Bd.hips*Bd.girth, d*Bd.girth+g, cz-g, n]; });
+  return Object.assign({},F,{torso:loft('T'+k,torsoRings,7), pelvis:loft('P'+k,pelvisRings,7)}); }
+function shape(fem){ const f=fem?.88:1, h=fem?1.08:1, k='f'+fem; const TR=[[-.01,.124*h,.086],[.06,.118*(fem?.92:1),.084],[.14,.128*(fem?.95:1),.09,.004],[.22,.148*f,.1,.012],[.28,.162*f,fem?.115:.108,fem?.028:.02],[.335,.172*f,fem?.1:.1,.012],[.37,.184*f,.094,.008],[.395,.19*f,.086,.002],[.418,.172*f,.075,-.004],[.442,.13*f,.065,-.006],[.462,.088*f,.058,-.008],[.48,.06,.052,-.008]], PR=[[-.18,.03,.034,.004],[-.16,.08*h,.07,.004],[-.12,.13*h,.088],[-.06,.14*h,.095,-.006],[0,.135*h,.09],[.04,.126*h,.087]]; return { torsoRings:TR, pelvisRings:PR,
   torso:loft('t'+k,[[-.01,.124*h,.086],[.06,.118*(fem?.92:1),.084],[.14,.128*(fem?.95:1),.09,.004],[.22,.148*f,.1,.012],[.28,.162*f,fem?.115:.108,fem?.028:.02],[.335,.172*f,fem?.1:.1,.012],[.37,.184*f,.094,.008],[.395,.19*f,.086,.002],[.418,.172*f,.075,-.004],[.442,.13*f,.065,-.006],[.462,.088*f,.058,-.008],[.48,.06,.052,-.008]],7),
   pelvis:loft('p'+k,[[-.18,.03,.034,.004],[-.16,.08*h,.07,.004],[-.12,.13*h,.088],[-.06,.14*h,.095,-.006],[0,.135*h,.09],[.04,.126*h,.087]],7),
   neck:loft('n'+k,[[0,.078*f,.066,-.006,2.5],[.05,.067*f,.061,-.006,2.5],[.1,.062*f,.059,-.006,2.5],[.15,.058*f,.057,-.008,2.5],[.2,.054*f,.055,-.012,2.5],[.215,.03,.03,-.012]],6),
@@ -182,6 +202,15 @@ function hairBlock(k,edge,rings){ return geo(k,()=>{
 const capG=hairBlock('hairM',[.192,.142,.1,.07],[[.198,.081,.106,.006,2.5],[.214,.078,.103,.004,2.5],[.227,.066,.09,0,2.3],[.236,.044,.064,-.006,2.2],[.242,.012,.018,-.01],[.2435,.002,.002,-.01]]);
 const buzzG=hairBlock('hairB',[.188,.14,.1,.065],[[.194,.0775,.102,.005,2.5],[.212,.0755,.099,.003,2.5],[.226,.063,.087,-.001,2.3],[.235,.041,.061,-.006,2.2],[.24,.012,.018,-.01],[.241,.002,.002,-.01]]);
 const bobG=hairBlock('hairF',[.19,.05,.04,.03],[[.196,.082,.106,.004,2.5],[.214,.079,.103,.002,2.5],[.227,.067,.09,-.002,2.3],[.236,.045,.065,-.006,2.2],[.242,.012,.018,-.01],[.2435,.002,.002,-.01]]);
+// a shoe: cross-sections from heel to toe (flat sole, high instep, tapering toe box), origin at the ankle, toe toward +z
+function shoeG(fem){ return geo('shoe'+fem,()=>{
+  const f=fem?.88:1, sole=-.062, S=[[-.056,.026,.034],[-.045,.036,.068],[-.02,.04,.078],[.02,.042,.07],[.06,.045,.042],[.1,.044,.03],[.135,.038,.024],[.16,.026,.017],[.172,.012,.011]];
+  const ring=(z,hw,top)=>[[-hw,0],[hw,0],[hw*1.04,top*.42],[hw*.78,top],[-hw*.78,top],[-hw*1.04,top*.42]].map(([x,y])=>[x*f,sole+y,z*f]);
+  const R=S.map(([z,hw,t])=>ring(z,hw,t)), n=6, pos=[];
+  const tri=(a,b,c)=>pos.push(...a,...b,...c);
+  for(let j=0;j<R.length-1;j++) for(let i=0;i<n;i++){ const a=R[j][i], b=R[j][(i+1)%n], c=R[j+1][(i+1)%n], d=R[j+1][i]; tri(a,c,b); tri(a,d,c); }
+  for(const [rr,flip] of [[R[0],true],[R[R.length-1],false]]) for(let i=1;i<n-1;i++) flip?tri(rr[0],rr[i],rr[i+1]):tri(rr[0],rr[i+1],rr[i]);
+  const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3)); g.computeVertexNormals(); return g; }); }
 const jointG=geo('joint',()=>new THREE.SphereGeometry(1,5,3));   // a chunky faceted block at each joint
 const earG=geo('ear',()=>new THREE.SphereGeometry(1,6,4));
 function sculptHead(F){ return geo('sculpt'+JSON.stringify(F),()=>{
@@ -266,14 +295,15 @@ function bandTex(skin,stops){ return tex(4,64,(g,w,h)=>{ g.fillStyle=skin; g.fil
 function Gp(p,x=0,y=0,z=0){ const g=new THREE.Group(); g.position.set(x,y,z); p.add(g); return g; }
 function P(g,m,p,x=0,y=0,z=0,sx=1,sy=1,sz=1,rx=0,ry=0,rz=0){ const me=new THREE.Mesh(g,m); me.position.set(x,y,z); me.scale.set(sx,sy,sz); me.rotation.set(rx,ry,rz); me.castShadow=true; me.receiveShadow=true; p.add(me); return me; }
 function figure(fem,FP){
-  const F=shape(fem), sx=fem?.175:.192, skin=FP.skin, hair=FP.hair;
+  const Bd=FP.body, F=bodyShape(fem,Bd), sx=(fem?.175:.192)*Bd.shoulders, skin=FP.skin, hair=FP.hair, gi=Bd.girth;
+  const ts=Bd.legs*(2-Bd.knee), ss=Bd.legs*Bd.knee, tl=Bd.torso;   // thigh and shin scale: knee height splits the leg
   const skinM=M({color:skin}), underM=M({color:UNDER});
-  const root=new THREE.Group(), body=Gp(root), hips=Gp(body,0,.95,0);
+  const root=new THREE.Group(), body=Gp(root), hips=Gp(body,0,.08+.42*ts+.39*ss+.062,0);
   P(F.pelvis,underM,hips);
   const torso=Gp(hips,0,.05,0);
   P(F.torso,fem?M({map:bandTex(skin,[[.5,.72,UNDER],[.5,.53,BAND]])}):skinM,torso);
-  P(F.neck,skinM,torso,0,.43,-.004);
-  const head=Gp(torso,0,.55,.008), face=Gp(head,0,-.01,0);
+  P(F.neck,skinM,torso,0,.43*tl,-.004,(1+gi)/2,Bd.neck,(1+gi)/2);
+  const head=Gp(torso,0,.43*tl+.12*Bd.neck,.008), face=Gp(head,0,-.01,0); head.scale.setScalar(Bd.head);
   face.scale.set(fem?.95:1,(fem?.97:1)*FP.len,fem?.97:1);
   P(sculptHead(FP),M({map:faceTex(FP)}),face);
   P(noseFor(FP),skinM,face,0,0,.112*FP.d,fem?.85:1,fem?.94:1,fem?.85:1);
@@ -286,17 +316,17 @@ function figure(fem,FP){
   if(FP.style==='bun'){ P(buzzG,hm,face,0,0,0,...hs); P(earG,hm,face,0,.17,-.11*FP.d,.034,.032,.03); }
   const sh=[],el=[],lg=[],kn=[];
   for(const s of [-1,1]){
-    const shoulder=Gp(torso,s*sx,.385,-.006); P(F.upperArm,skinM,shoulder);
-    const elbow=Gp(shoulder,0,-.3,0); P(F.forearm,skinM,elbow); P(jointG,skinM,elbow,0,0,0,.042,.04,.042);   // elbow
-    const hand=Gp(elbow,0,-.25,0); P(F.hand,skinM,hand,0,0,.004); P(jointG,skinM,hand,0,.004,0,.024,.02,.026);   // wrist
+    const shoulder=Gp(torso,s*sx,.385*tl,-.006); P(F.upperArm,skinM,shoulder,0,0,0,gi,Bd.arms,gi);
+    const elbow=Gp(shoulder,0,-.3*Bd.arms,0); P(F.forearm,skinM,elbow,0,0,0,gi,Bd.arms,gi); P(jointG,skinM,elbow,0,0,0,.042,.04,.042);   // elbow
+    const hand=Gp(elbow,0,-.25*Bd.arms,0); P(F.hand,skinM,hand,0,0,.004); P(jointG,skinM,hand,0,.004,0,.024,.02,.026);   // wrist
     P(loft('thumb',[[-.05,.008,.008],[-.025,.011,.011],[0,.012,.012],[.006,.004,.004]],6),skinM,hand,s*-.006,-.03,.036,1,1,1,-.25,0,s*.3);
     sh.push(shoulder); el.push(elbow);
   }
-  const thighM=M({map:bandTex(skin,[[fem?.92:.5,1,UNDER]])});
+  const thighM=M({map:bandTex(skin,[[fem?.92:.5,1,UNDER]])}); const shoeM=M({color:'#4a3b30'}), soleM=M({color:'#2a2522'}); const soleG=geo('sole'+fem,()=>{ const g=shoeG(fem).clone(); g.scale(1.07,.25,1.04); g.translate(0,-.05,0); return g; });
   for(const s of [-1,1]){
-    const leg=Gp(hips,s*(fem?.082:.078),-.08,0); P(F.thigh,thighM,leg);
-    const knee=Gp(leg,0,-.42,0); P(F.shin,skinM,knee); P(jointG,skinM,knee,0,.005,.006,.05,.052,.054); P(jointG,skinM,knee,0,-.39,0,.026,.026,.03);   // knee, ankle
-    P(F.foot,skinM,knee,0,-.405,.04,1,1,1,Math.PI/2,0,0);
+    const leg=Gp(hips,s*(fem?.082:.078)*Bd.hips,-.08,0); P(F.thigh,thighM,leg,0,0,0,gi,ts,gi);
+    const knee=Gp(leg,0,-.42*ts,0); P(F.shin,skinM,knee,0,0,0,gi,ss,gi); P(jointG,skinM,knee,0,.005,.006,.05,.052,.054);   // knee (the shoe covers the ankle)
+    P(shoeG(fem),shoeM,knee,0,-.39*ss,0); P(soleG,soleM,knee,0,-.39*ss,0);
     lg.push(leg); kn.push(knee); }
   return {root, body, hips, torso, head, sh, el, lg, kn, j:null, t0:Math.random()*10, fem, FP};
 }
@@ -319,6 +349,10 @@ function build(){
   figs.forEach(f=>{ turn.add(f.root); f.j=Object.assign({},POSES[ui.pose==='t'?'t':ui.pose==='ready'?'ready':'stand']); applyPose(f,f.j); });
   line=[0,1,2,3,4,5].map(i=>{ const fem=i%2===1, f=figure(fem,genFace(ui.seed+10+i,fem)); f.lineup=true; f.root.position.x=(i-2.5)*.56; lineup.add(f.root); f.j=Object.assign({},POSES.stand); applyPose(f,f.j); return f; });
   document.getElementById('seedLabel').textContent='Seed '+ui.seed;
+  const ROWS=[['head','Head size'],['neck','Neck length'],['shoulders','Shoulder width'],['torso','Torso length'],['chest','Chest (pecs)'],['breast','Bust'],['waist','Waist'],['hips','Hip width'],['glutes','Glutes'],['legs','Leg length'],['knee','Knee height'],['arms','Arm length'],['girth','Build']];
+  const pct=v=>{ const d=Math.round((v-1)*100); return d===0?'0%':`${d>0?'+':''}${d}%`; };
+  const hb=figs[0].FP.body, sb=figs[1].FP.body;
+  document.getElementById('bodyStats').innerHTML='<thead><tr><th>Attribute</th><th>Him</th><th>Her</th></tr></thead><tbody>'+ROWS.map(([k,l])=>{ const fmt=v=>k==='chest'||k==='breast'||k==='glutes'?(v?Math.round(v*100)+'%':'–'):pct(v); return `<tr><td>${l}</td><td>${fmt(hb[k])}</td><td>${fmt(sb[k])}</td></tr>`; }).join('')+'</tbody>';
 }
 toonLight(); build();
 
