@@ -3,109 +3,103 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Base Figure Study</title>
+<title>Procedural Motion</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-/* Layout: a character-creator style stage (figures on a pale studio gradient) with a slim control rail, then a short proportion sheet. Deliberately neutral: the figures carry the only colour. */
+/* Layout: three stacked plates, one per layer of variation, each a live 3D stage beside a short caption; a closing strip on what never varies. Neutral dark frame, warm accent for bounds and highlights. */
 :root{
   color-scheme:dark;
-  --bg:#1b1c1e; --panel:#232427; --line:#38393d; --text:#e2e0dc; --muted:#98968f; --accent:#d9bf86;
+  --bg:#1b1c1e; --panel:#232427; --line:#38393d; --text:#e2e0dc; --muted:#98968f; --accent:#d9bf86; --cool:#7fb2c9; --rose:#d98a7a;
   --studio-top:#e4e2de; --studio-bottom:#a9a7a2;
   --body:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
 }
 html,body{background:var(--bg)}
 body{color:var(--text);font:15px/1.5 var(--body);padding-inline:16px}
-.wrap{max-width:1100px;margin:0 auto;padding-block:20px 36px;display:flex;flex-direction:column;gap:16px}
+.wrap{max-width:1120px;margin:0 auto;padding-block:20px 40px;display:flex;flex-direction:column;gap:22px}
 header{display:flex;flex-direction:column;gap:4px}
 .eyebrow{font:12px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin:0}
-h1{font:600 clamp(24px,4.4vw,34px)/1.1 var(--body);margin:0;letter-spacing:.01em;text-wrap:balance}
-.lede{margin:0;max-width:66ch;color:var(--muted)}
-.studio{display:grid;grid-template-columns:minmax(0,1fr) 220px;border:1px solid var(--line);background:var(--panel)}
-#stage{position:relative;height:min(70vh,640px);min-height:380px;background:linear-gradient(180deg,var(--studio-top),var(--studio-bottom));touch-action:none;cursor:grab}
-#stage canvas{display:block;width:100%;height:100%}
-.fail{position:absolute;left:16px;bottom:16px;color:#7a1d12;font:13px var(--mono)}
-.rail{border-left:1px solid var(--line);padding:14px;display:flex;flex-direction:column;gap:16px}
-.group{display:flex;flex-direction:column;gap:6px}
-.group>span{font:11px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
-.seg{display:grid;grid-template-columns:repeat(2,1fr);gap:4px}
-.seg.three{grid-template-columns:repeat(3,1fr)}
-.seg button{background:var(--bg);border:1px solid var(--line);color:var(--text);font:500 14px var(--body);padding:5px 8px;cursor:pointer;text-align:left}
-.seg button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
-.reroll{background:var(--accent);border:0;color:#211b10;font:600 14px var(--body);padding:7px 10px;cursor:pointer;text-align:left}
-.seed{font:12px var(--mono);color:var(--muted);font-variant-numeric:tabular-nums}
-.swatches{display:flex;gap:6px;flex-wrap:wrap}
-.swatches button{width:28px;height:28px;border:2px solid var(--line);border-radius:50%;cursor:pointer;padding:0}
-.swatches button[aria-pressed="true"]{border-color:var(--text)}
-button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.tip{font:12px var(--mono);color:var(--muted);margin:0}
-.sheet{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px}
-.sheet section{min-width:0}
-.sheet h2{font:600 17px var(--body);margin:0 0 6px}
-.sheet ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px}
-table{border-collapse:collapse;width:100%;font:13px var(--mono);font-variant-numeric:tabular-nums}
-td,th{border-bottom:1px solid var(--line);padding:5px 6px;text-align:left}
-th{color:var(--muted);font-weight:400}
-td:last-child,th:last-child{text-align:right}
-@media (max-width:720px){.studio{grid-template-columns:1fr}.rail{border-left:0;border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}#stage{height:62vh}}
+h1{font:600 clamp(24px,4.4vw,34px)/1.1 var(--body);margin:0;text-wrap:balance}
+.lede{margin:0;max-width:70ch;color:var(--muted)}
+.plate{display:grid;grid-template-columns:minmax(0,1fr) 300px;border:1px solid var(--line);background:var(--panel)}
+.stage{position:relative;min-height:360px;height:100%;background:linear-gradient(180deg,var(--studio-top),var(--studio-bottom))}
+.stage>canvas:not(.trace){position:absolute;inset:0;display:block;width:100%;height:100%}
+.cap{border-left:1px solid var(--line);padding:16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.num{font:12px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--accent)}
+.cap h2{font:600 20px/1.2 var(--body);margin:0;text-wrap:balance}
+.cap p{margin:0;color:var(--muted)}
+.cap ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:3px}
+.traits{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;position:absolute;left:8px;right:8px;bottom:8px;pointer-events:none}
+.traits div{background:rgba(24,24,26,.8);color:#efece6;border-radius:4px;padding:4px 6px;font:11px/1.35 var(--mono);font-variant-numeric:tabular-nums}
+.traits b{display:block;font:600 12px var(--body);color:var(--accent)}
+.btn{align-self:flex-start;background:var(--accent);border:0;color:#211b10;font:600 14px var(--body);padding:7px 12px;cursor:pointer}
+.btn:focus-visible{outline:2px solid var(--text);outline-offset:2px}
+.stage .trace{position:absolute;right:10px;top:10px;width:44%;height:44%;display:block;background:rgba(24,24,26,.82);border-radius:6px}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font:12px var(--mono);color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:3px;margin-right:5px;vertical-align:middle}
+.never{border:1px solid var(--line);padding:14px 16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.never h2{grid-column:1/-1;font:600 17px var(--body);margin:0}
+.never div{min-width:0}
+.never b{display:block;font:600 14px var(--body)}
+.never span{color:var(--muted);font-size:14px}
+.fail{position:absolute;left:12px;bottom:12px;color:#7a1d12;font:13px var(--mono)}
+@media (max-width:820px){.plate{grid-template-columns:1fr}.stage{height:340px}.cap{border-left:0;border-top:1px solid var(--line)}.traits{grid-template-columns:repeat(3,1fr)}.trace{width:60%}}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">Character style · base figure</p>
-    <h1>Base figure study</h1>
-    <p class="lede">A plain starting point for the characters in a toon-shaded low-poly style. Every face is generated from a seed, so no two people look alike: press New faces, or open the Lineup. Flat planes are lit in three hard tones. The head is sculpted with realistic anatomy (brow, eye sockets, cheekbones, nose, lips, chin) under a straight-cut block of hair, on a thick neck. The colours are solid, and the face is painted with only a few marks. Clothing, hair styles and gear would layer on top later.</p>
+    <p class="eyebrow">Character animation · procedural motion</p>
+    <h1>No two moves alike</h1>
+    <p class="lede">Every pose is a short list of joint angles, so motion can be varied the way faces are: within limits, and from a seed. Three layers stack on top of each other. All of the figures below are live and running the same code.</p>
   </header>
-  <div class="studio">
-    <div id="stage" aria-label="3D view of two base figures"></div>
-    <div class="rail">
-      <div class="group"><span>View</span><div class="seg" id="segView">
-        <button type="button" data-v="front" aria-pressed="true">Front</button><button type="button" data-v="three" aria-pressed="false">¾</button>
-        <button type="button" data-v="side" aria-pressed="false">Side</button><button type="button" data-v="back" aria-pressed="false">Back</button>
-        <button type="button" data-v="his" aria-pressed="false">His head</button><button type="button" data-v="her" aria-pressed="false">Her head</button>
-        <button type="button" data-v="lineup" aria-pressed="false">Lineup</button><button type="button" data-v="game" aria-pressed="false">In game</button></div></div>
-      <div class="group"><span>Pose</span><div class="seg three" id="segPose"><button type="button" data-v="t" aria-pressed="true">T-pose</button><button type="button" data-v="stand" aria-pressed="false">Stand</button><button type="button" data-v="ready" aria-pressed="false">Ready</button><button type="button" data-v="walk" aria-pressed="false">Walk</button></div></div>
-      <div class="group"><span>Faces</span><button type="button" class="reroll" id="reroll">New faces</button><span class="seed" id="seedLabel"></span></div>
-      <div class="group"><span>Shading</span><div class="seg three" id="segShade"><button type="button" data-v="toon" aria-pressed="true">Toon</button><button type="button" data-v="flat" aria-pressed="false">Faceted</button><button type="button" data-v="smooth" aria-pressed="false">Smooth</button></div></div>
-      <div class="group"><span>Guides</span><div class="seg" id="segGuide"><button type="button" data-v="on" aria-pressed="false">Head units</button><button type="button" data-v="off" aria-pressed="true">Off</button></div></div>
-      <p class="tip">Drag the figures to turn them.</p>
+
+  <section class="plate">
+    <div class="stage" id="st1"><div class="traits" id="traits"></div></div>
+    <div class="cap">
+      <span class="num">Layer 1 · fixed per person</span>
+      <h2>Everyone has their own walk</h2>
+      <p>The seed that builds a face also sets a few movement traits. Six people run the same walk cycle, each with their own stride, arm swing, posture and pace.</p>
+      <ul><li>Same seed, same walk, every time</li><li>A veteran is recognisable by how they move</li></ul>
     </div>
-  </div>
-  <div class="sheet">
-    <section>
-      <h2>Proportions</h2>
-      <table>
-        <thead><tr><th>Landmark</th><th>Height</th></tr></thead>
-        <tbody>
-          <tr><td>Top of head</td><td>1.76 m · 7.5 heads</td></tr>
-          <tr><td>Chin</td><td>1.53 m</td></tr>
-          <tr><td>Shoulder joint</td><td>1.39 m</td></tr>
-          <tr><td>Crotch</td><td>0.77 m</td></tr>
-          <tr><td>Knee</td><td>0.45 m</td></tr>
-          <tr><td>Shoulder width</td><td>0.50 m · 3.3 head widths</td></tr>
-        </tbody>
-      </table>
-    </section>
-    <section>
-      <h2>What defines the look</h2>
-      <ul>
-        <li>Toon shading on flat planes. Each form has 8 to 12 sides, and light falls into three hard tones (lit, mid and shadow), so the planes of the jaw, nose, chest and limbs read like a painted poster.</li>
-        <li>A face sculpted with real anatomy at low-poly resolution: the eyes sit halfway up the head in sockets under a brow ridge, with cheekbones and hollows below them. The nose has a bridge, tip and nostril wings, and the lips curve forward over the teeth above a defined chin and jaw angle. The paint adds only brows, almond-shaped eyes and lip colour. The hair is a straight-cut block on a thick neck.</li>
-        <li>An athletic V-taper: broad shoulders and chest, a narrow waist, a strong neck and long tapering limbs.</li>
-        <li>Solid colours with no painted detail, apart from thin lines for the eyes, brows and mouth.</li>
-        <li>Faces are procedural. A seed sets about 30 values: head width, depth and length, jaw width, chin size and projection, brow ridge, cheekbones, eye height, spacing, depth and size, nose length, width, tip and hump, lip fullness, mouth width, forehead slope and ears. The same seed also picks the skin tone, hair and eye colour, brow shape and one of six haircuts. Each recruit could carry just one number.</li>
-        <li>The same skeleton as the game's animation rig, so the walk cycle and every existing pose apply unchanged.</li>
-      </ul>
-    </section>
-  </div>
+  </section>
+
+  <section class="plate">
+    <div class="stage" id="st2"></div>
+    <div class="cap">
+      <span class="num">Layer 2 · rolled per action</span>
+      <h2>Every action lands a little differently</h2>
+      <p>Each time an action plays, its joint angles get a random offset inside set bounds. The faint figures are earlier rolls of the same "take cover" crouch; the solid one is the newest.</p>
+      <ul><li>Elbows ±10°, knees ±9°, head ±7°, spine ±4°</li><li>Bounds per joint, so no pose is impossible</li></ul>
+      <button class="btn" id="roll" type="button">Take cover again</button>
+    </div>
+  </section>
+
+  <section class="plate">
+    <div class="stage" id="st3"><canvas class="trace" id="trace" aria-label="Joint angles over the last six seconds"></canvas></div>
+    <div class="cap">
+      <span class="num">Layer 3 · continuous</span>
+      <h2>Standing still is never still</h2>
+      <p>Smooth noise keeps a held pose alive: weight shifts, breathing, small head turns. The trace shows three joints over the last six seconds, each wandering inside its shaded band.</p>
+      <div class="legend"><span><i style="background:var(--accent)"></i>head</span><span><i style="background:var(--cool)"></i>spine</span><span><i style="background:var(--rose)"></i>left knee</span></div>
+      <p>Fear, fatigue and wounds widen the bands. Try it:</p>
+      <button class="btn" id="stress" type="button">Wound this soldier</button>
+    </div>
+  </section>
+
+  <section class="never">
+    <h2>What never varies</h2>
+    <div><b>Hands on the weapon</b><span>Hand positions are solved to the grip, so noise moves the elbows and shoulders, not the hands.</span></div>
+    <div><b>The aim line</b><span>Sway comes only from the soldier's Aim stat, as in the first-person shot, never from cosmetic noise.</span></div>
+    <div><b>Feet on the ground</b><span>Hip height adjusts so knees can bend differently without feet sinking or floating.</span></div>
+  </section>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-(function(){
-const stage=document.getElementById('stage');
+const FigureKit=(()=>{
+const TAU=Math.PI*2; const ui={shade:'toon'};
 const SKINS=['#f3dfb0','#efd3a8','#e6c39a','#d8ab80','#c18e64','#a87550','#8a5a3c','#6a4330'];
 const HAIRS=['#1f1813','#2e2119','#4a3020','#6a4a2e','#8a6a40','#b08a52','#7a3c22','#5c5650'];
 const EYES=['#4a3524','#2f2a26','#4c6a7a','#566640','#6a4a2a','#3a4a58'];
@@ -122,22 +116,6 @@ function genFace(seed,fem){
   const h=r(); P.style=fem?(h<.45?'bob':h<.8?'bun':'crop'):(h<.45?'crop':h<.8?'buzz':'quiff');
   for(const key in P) if(typeof P[key]==='number') P[key]=Math.round(P[key]*10000)/10000;
   return P; }
-const ui={view:'front', pose:'t', seed:20481, shade:'toon', guide:false, yaw:0};
-if(!window.THREE){ stage.insertAdjacentHTML('beforeend','<p class="fail">The 3D view needs three.js, which could not load. Check your connection and reload.</p>'); return; }
-let renderer;
-try{ renderer=new THREE.WebGLRenderer({antialias:true, alpha:true}); }catch(e){ stage.insertAdjacentHTML('beforeend','<p class="fail">This browser could not start WebGL.</p>'); return; }
-renderer.setPixelRatio(Math.min(2,window.devicePixelRatio||1)); renderer.setClearColor(0x000000,0);
-renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
-stage.appendChild(renderer.domElement);
-const scene=new THREE.Scene(), TAU=Math.PI*2;
-const cam=new THREE.OrthographicCamera(-1,1,1,-1,-20,40);
-const hemi=new THREE.HemisphereLight(0xfffaf0,0x8a8070,.5); scene.add(hemi);
-const toonLight=()=>{ const t=ui.shade==='toon'; hemi.intensity=t?.3:.5; key.intensity=t?.9:.95; rim.intensity=t?.1:.35; };
-const key=new THREE.DirectionalLight(0xfff3dc,.95); key.position.set(3.6,3,1.6); key.castShadow=true; key.shadow.mapSize.set(1024,1024);
-Object.assign(key.shadow.camera,{left:-2.4,right:2.4,top:2.5,bottom:-.5,near:.5,far:12}); key.shadow.radius=5; key.shadow.bias=-.0008; key.shadow.normalBias=.012; scene.add(key);
-const rim=new THREE.DirectionalLight(0xe8eef6,.35); rim.position.set(-3,2,-2.5); scene.add(rim);
-const floor=new THREE.Mesh(new THREE.PlaneGeometry(8,8), new THREE.ShadowMaterial({opacity:.16})); floor.rotation.x=-Math.PI/2; floor.receiveShadow=true; scene.add(floor);
-
 // ---------- geometry: low-sided lofts (stacked cross-sections; front of any texture is its horizontal centre) ----------
 const GC={}; const geo=(k,fn)=>GC[k]||(GC[k]=fn());
 function loft(k,rings,seg){ return geo(k,()=>{
@@ -309,72 +287,104 @@ function applyPose(r,j){ r.body.position.y=j.bodyY; r.torso.rotation.set(j.torso
   r.sh[0].rotation.set(j.shRx,0,j.shRz); r.el[0].rotation.x=j.elR; r.sh[1].rotation.set(j.shLx,0,j.shLz); r.el[1].rotation.x=j.elL;
   r.lg[0].rotation.x=j.lgR; r.kn[0].rotation.x=j.knR; r.lg[1].rotation.x=j.lgL; r.kn[1].rotation.x=j.knL; }
 
-let figs=[], line=[];
-const turn=new THREE.Group(), lineup=new THREE.Group(); scene.add(turn,lineup);
-function build(){
-  figs.concat(line).forEach(f=>f.root.parent.remove(f.root)); mats.splice(0).forEach(m=>{ if(m.map) m.map.dispose(); m.dispose(); });
-  figs=[figure(false,genFace(ui.seed,false)), figure(true,genFace(ui.seed+1,true))];
-  const gap=ui.pose==='t'?.95:.45;
-  figs[0].root.position.x=-gap; figs[1].root.position.x=gap;
-  figs.forEach(f=>{ turn.add(f.root); f.j=Object.assign({},POSES[ui.pose==='t'?'t':ui.pose==='ready'?'ready':'stand']); applyPose(f,f.j); });
-  line=[0,1,2,3,4,5].map(i=>{ const fem=i%2===1, f=figure(fem,genFace(ui.seed+10+i,fem)); f.lineup=true; f.root.position.x=(i-2.5)*.56; lineup.add(f.root); f.j=Object.assign({},POSES.stand); applyPose(f,f.j); return f; });
-  document.getElementById('seedLabel').textContent='Seed '+ui.seed;
-}
-toonLight(); build();
-
-// head-unit guides
-const guides=new THREE.Group(); scene.add(guides); guides.visible=false;
-{ const lm=new THREE.LineBasicMaterial({color:0x3a3936, transparent:true, opacity:.35});
-  const HU=.235; for(let i=0;i<=7;i++){ const y=1.76-i*HU; const g=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-1.9,y,-.3),new THREE.Vector3(1.9,y,-.3)]); guides.add(new THREE.Line(g,lm));
-    const c=document.createElement('canvas'); c.width=64; c.height=32; const x=c.getContext('2d'); x.fillStyle='#3a3936'; x.font='20px monospace'; x.fillText(String(i),24,24);
-    const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c), transparent:true, depthTest:false})); sp.scale.set(.16,.08,1); sp.position.set(-2,y-.02,-.3); guides.add(sp); } }
-
-// ---------- camera ----------
-const VIEWS={front:{yaw:0,pitch:.02,size:2.05,ty:.92}, three:{yaw:.62,pitch:.06,size:2.05,ty:.92}, side:{yaw:Math.PI/2,pitch:.02,size:2.05,ty:.92}, back:{yaw:Math.PI,pitch:.02,size:2.05,ty:.92},
-  game:{yaw:Math.PI/4,pitch:.6,size:9,ty:.6}, his:{yaw:.55,pitch:.06,size:.5,ty:1.57,fig:0}, her:{yaw:.55,pitch:.06,size:.5,ty:1.56,fig:1}, lineup:{yaw:.3,pitch:.05,size:.7,ty:1.52,wide:3.5}};
-const V=Object.assign({tx:0},VIEWS.front);
-let W=1,H=1; function resize(){ W=stage.clientWidth; H=stage.clientHeight; renderer.setSize(W,H,false); } new ResizeObserver(resize).observe(stage); resize();
-let drag=null;
-stage.addEventListener('pointerdown',e=>{ drag={x:e.clientX,yaw:ui.yaw}; stage.setPointerCapture(e.pointerId); stage.style.cursor='grabbing'; });
-stage.addEventListener('pointermove',e=>{ if(drag) ui.yaw=drag.yaw+(e.clientX-drag.x)*.012; });
-const end=()=>{ drag=null; stage.style.cursor=''; }; stage.addEventListener('pointerup',end); stage.addEventListener('pointercancel',end);
-
+return {figure, genFace, POSES, applyPose, mats};
+})();
+(function(){
+if(!window.THREE){ document.querySelectorAll('.stage').forEach(s=>s.insertAdjacentHTML('beforeend','<p class="fail">The 3D view needs three.js, which could not load.</p>')); return; }
+const {figure, genFace, POSES, applyPose}=FigureKit;
 const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-let last=performance.now(), phase=0;
+const KEYS=['bodyY','torsoX','torsoY','headX','shRx','shRz','elR','shLx','shLz','elL','lgR','knR','lgL','knL'];
+const D=Math.PI/180;
+// bounds for a rolled action, per joint (radians; bodyY in metres)
+const BOUND={bodyY:.03,torsoX:4*D,torsoY:7*D,headX:7*D,shRx:8*D,shRz:6*D,elR:10*D,shLx:8*D,shLz:6*D,elL:10*D,lgR:7*D,knR:9*D,lgL:7*D,knL:9*D};
+function rng(seed){ let x=seed>>>0||1; return ()=>{ x=(Math.imul(x,1664525)+1013904223)>>>0; return x/4294967296; }; }
+// smooth 1D value noise in -1..1
+const hash=i=>{ let x=Math.imul(i^0x5bd1e995,0x27d4eb2d); x^=x>>>15; x=Math.imul(x,0x85ebca6b); x^=x>>>13; return ((x>>>0)/4294967296)*2-1; };
+const noise=(t,ch)=>{ const i=Math.floor(t), f=t-i, u=f*f*(3-2*f); return hash(i*131+ch*7919)*(1-u)+hash((i+1)*131+ch*7919)*u; };
+
+function makeStage(el, size, ty, yaw){
+  const r=new THREE.WebGLRenderer({antialias:true, alpha:true}); r.setPixelRatio(Math.min(2,devicePixelRatio||1)); r.setClearColor(0,0); r.shadowMap.enabled=true; r.shadowMap.type=THREE.PCFSoftShadowMap; el.prepend(r.domElement);
+  const scene=new THREE.Scene(), cam=new THREE.OrthographicCamera(-1,1,1,-1,-20,40);
+  scene.add(new THREE.HemisphereLight(0xfffaf0,0x8a8070,.3));
+  const key=new THREE.DirectionalLight(0xfff3dc,.9); key.position.set(3.6,3,1.6); key.castShadow=true; key.shadow.mapSize.set(1024,1024);
+  Object.assign(key.shadow.camera,{left:-4,right:4,top:3,bottom:-1,near:.5,far:14}); key.shadow.bias=-.0008; key.shadow.normalBias=.012; scene.add(key);
+  const floor=new THREE.Mesh(new THREE.PlaneGeometry(14,14),new THREE.ShadowMaterial({opacity:.16})); floor.rotation.x=-Math.PI/2; floor.receiveShadow=true; scene.add(floor);
+  const st={r,scene,cam,el,size,ty,yaw,w:1,h:1};
+  new ResizeObserver(()=>{ st.w=el.clientWidth; st.h=el.clientHeight; r.setSize(st.w,st.h,false); }).observe(el);
+  st.render=()=>{ const a=st.w/Math.max(1,st.h), s=st.size*(a<1.2?1.2/a:1); cam.left=-s*a/2; cam.right=s*a/2; cam.top=s/2; cam.bottom=-s/2; cam.updateProjectionMatrix();
+    cam.position.set(Math.sin(st.yaw)*15,st.ty+15*.06,Math.cos(st.yaw)*15); cam.lookAt(0,st.ty,0); r.render(scene,cam); };
+  return st;
+}
+const blend=(j,J,k)=>{ for(const key of KEYS) j[key]+=(J[key]-j[key])*k; };
+
+// ---------- plate 1: six walks ----------
+const s1=makeStage(document.getElementById('st1'),2.5,.82,.55);
+const walkers=[0,1,2,3,4,5].map(i=>{
+  const fem=i%2===1, seed=3100+i*37, f=figure(fem,genFace(seed,fem)), r=rng(seed*7);
+  f.trait={stride:.75+r()*.5, swing:.6+r()*.8, slouch:(r()-.4)*.16, tempo:.85+r()*.3, bounce:.6+r()*.8, width:(r()-.5)*.08};
+  f.j=Object.assign({},POSES.stand); f.root.position.x=(i-2.5)*.62; f.root.rotation.y=.5; f.ph=r()*6; s1.scene.add(f.root); return f; });
+document.getElementById('traits').innerHTML=walkers.map((f,i)=>`<div><b>Seed ${3100+i*37}</b>stride ${f.trait.stride.toFixed(2)}<br>swing ${f.trait.swing.toFixed(2)}<br>pace ${f.trait.tempo.toFixed(2)}</div>`).join('');
+
+// ---------- plate 2: rolled crouches with ghosts ----------
+const s2=makeStage(document.getElementById('st2'),2.0,.6,.7);
+const CROUCH={bodyY:-.3,torsoX:.38,torsoY:.1,headX:-.25,shRx:-.95,shRz:-.12,elR:-1.25,shLx:-1.1,shLz:.2,elL:-1.1,lgR:-1.2,knR:1.75,lgL:-.35,knL:1.25};
+const crouchFace=genFace(5150,false);
+const live=figure(false,crouchFace); live.j=Object.assign({},POSES.stand); s2.scene.add(live.root);
+const ghosts=[]; const GHOSTS=6;
+function ghostify(f){ f.root.traverse(o=>{ if(o.isMesh){ o.material=o.material.clone(); o.material.transparent=true; o.material.opacity=.0; o.material.depthWrite=false; o.castShadow=false; } }); }
+for(let i=0;i<GHOSTS;i++){ const g=figure(false,crouchFace); ghostify(g); g.root.visible=false; s2.scene.add(g.root); ghosts.push(g); }
+let rollN=0, target=null, rollR=rng(42);
+function roll(){ // push the current pose into the ghost ring, then roll a new one
+  if(target){ const g=ghosts[rollN%GHOSTS]; g.j=Object.assign({},live.j); applyPose(g,g.j); g.root.visible=true; g.born=performance.now(); rollN++; }
+  target={}; for(const k of KEYS) target[k]=CROUCH[k]+(rollR()*2-1)*BOUND[k];
+}
+roll();
+document.getElementById('roll').addEventListener('click',roll);
+let autoT=performance.now();
+
+// ---------- plate 3: continuous noise with a trace ----------
+const s3=makeStage(document.getElementById('st3'),2.1,.95,.45);
+const idle=figure(true,genFace(7730,true)); idle.j=Object.assign({},POSES.stand); idle.root.position.x=-.55; s3.scene.add(idle.root);
+let stress=0, stressT=0; const btn=document.getElementById('stress');
+btn.addEventListener('click',()=>{ stressT=stressT?0:1; btn.textContent=stressT?'Treat the wound':'Wound this soldier'; });
+const trace=document.getElementById('trace'), tg=trace.getContext('2d'), hist=[];
+const IDLE_B={headX:6*D,torsoX:2.5*D,knL:5*D};
+function drawTrace(){
+  const W=trace.width=trace.clientWidth*devicePixelRatio, H=trace.height=trace.clientHeight*devicePixelRatio, cs=getComputedStyle(document.documentElement);
+  tg.clearRect(0,0,W,H);
+  const rows=[['headX',cs.getPropertyValue('--accent')],['torsoX',cs.getPropertyValue('--cool')],['knL',cs.getPropertyValue('--rose')]], rh=H/3, pad=6*devicePixelRatio;
+  rows.forEach(([k,c],ri)=>{ const y0=ri*rh, mid=y0+rh/2, amp=rh/2-pad, scale=amp/(IDLE_B[k]*2.2);
+    const band=IDLE_B[k]*(1+stress*1.4)*scale; tg.fillStyle=c.trim(); tg.globalAlpha=.16; tg.fillRect(0,mid-band,W,band*2); tg.globalAlpha=1;
+    tg.strokeStyle='rgba(255,255,255,.12)'; tg.beginPath(); tg.moveTo(0,mid); tg.lineTo(W,mid); tg.stroke();
+    tg.strokeStyle=c.trim(); tg.lineWidth=1.6*devicePixelRatio; tg.beginPath();
+    hist.forEach((h,i)=>{ const x=i/(hist.length-1||1)*W, y=mid-h[k]*scale; i?tg.lineTo(x,y):tg.moveTo(x,y); }); tg.stroke(); });
+}
+
+// ---------- frame loop ----------
+let last=performance.now(), traceAcc=0;
 function loop(now){
-  requestAnimationFrame(loop);
-  const dt=Math.min(.05,(now-last)/1000); last=now;
-  phase+=dt*5.2;
-  for(const f of figs){
-    const t=now/1000+f.t0, J=Object.assign({},POSES[ui.pose==='t'?'t':ui.pose==='ready'?'ready':'stand']);
-    if(ui.pose==='walk'){ const ph=phase+(f.fem?.4:0), s=Math.sin(ph);
-      Object.assign(J,{lgR:s*.5, lgL:-s*.5, knR:Math.max(0,-s)*.9+.06, knL:Math.max(0,s)*.9+.06, bodyY:-Math.abs(Math.cos(ph))*.03, torsoX:.04, shRx:-s*.35, shLx:s*.35, elR:-.25, elL:-.25}); }
-    else if(!reduce){ J.torsoX+=Math.sin(t*1.2)*.01; J.bodyY+=Math.sin(t*1.2)*.004; J.headX+=Math.sin(t*.35)*.025; }
-    const k=1-Math.exp(-dt*10); for(const key in J) f.j[key]+=(J[key]-f.j[key])*k; applyPose(f,f.j);
-    const gx=(f.fem?1:-1)*(ui.pose==='t'?.95:.45); f.root.position.x+=(gx-f.root.position.x)*k;
-  }
-  const showLine=ui.view==='lineup'; turn.visible=!showLine; lineup.visible=showLine;
-  if(showLine) for(const f of line){ const t=now/1000+f.t0, J=Object.assign({},POSES.stand); if(!reduce){ J.headX+=Math.sin(t*.35)*.025; J.torsoX+=Math.sin(t*1.2)*.01; } const k=1-Math.exp(-dt*10); for(const key in J) f.j[key]+=(J[key]-f.j[key])*k; applyPose(f,f.j); }
-  const G=VIEWS[ui.view], kk=1-Math.exp(-dt*6);
-  const asp=W/Math.max(1,H), size=G.wide?Math.max(G.size,G.wide/asp):G.size*(ui.pose==='t'&&/front|three|back/.test(ui.view)?1.25:1);
-  const tx=G.fig!==undefined?figs[G.fig].root.position.x:0; V.tx=(V.tx||0)+(tx-(V.tx||0))*kk;
-  V.pitch+=(G.pitch-V.pitch)*kk; V.size+=(size-V.size)*kk; V.ty+=(G.ty-V.ty)*kk;
-  V.yaw+=(G.yaw+ui.yaw-V.yaw)*kk;
-  const a=W/Math.max(1,H), s=V.size*(a<.9?.9/a:1);
-  cam.left=-s*a/2; cam.right=s*a/2; cam.top=s/2; cam.bottom=-s/2; cam.updateProjectionMatrix();
-  const d=15;
-  cam.position.set(V.tx+Math.sin(V.yaw)*Math.cos(V.pitch)*d, V.ty+Math.sin(V.pitch)*d, Math.cos(V.yaw)*Math.cos(V.pitch)*d); cam.lookAt(V.tx,V.ty,0);
-  renderer.render(scene,cam);
+  requestAnimationFrame(loop); const dt=Math.min(.05,(now-last)/1000); last=now; const t=now/1000, k=1-Math.exp(-dt*10);
+  // walks
+  for(const f of walkers){ const T=f.trait; f.ph+=dt*5.2*T.tempo*(reduce?.3:1); const s=Math.sin(f.ph);
+    const J=Object.assign({},POSES.stand,{lgR:s*.5*T.stride, lgL:-s*.5*T.stride, knR:Math.max(0,-s)*.9*T.stride+.06, knL:Math.max(0,s)*.9*T.stride+.06,
+      bodyY:-Math.abs(Math.cos(f.ph))*.03*T.bounce, torsoX:.04+T.slouch, headX:.06-T.slouch*.6, shRx:-s*.35*T.swing, shLx:s*.35*T.swing, shRz:-.12-T.width, shLz:.12+T.width, elR:-.15-.2*T.swing, elL:-.15-.2*T.swing});
+    blend(f.j,J,k); applyPose(f,f.j); }
+  s1.render();
+  // crouch rolls: auto every 2.4 s unless the button was just used
+  if(!reduce && now-autoT>2400){ roll(); autoT=now; }
+  blend(live.j,target,1-Math.exp(-dt*7)); applyPose(live,live.j);
+  for(const g of ghosts){ if(!g.root.visible) continue; const age=(now-g.born)/1000, op=Math.max(0,.26-age*.018); g.root.traverse(o=>{ if(o.isMesh) o.material.opacity=op; }); if(op<=0) g.root.visible=false; }
+  s2.render();
+  // idle noise, widened by stress
+  stress+=(stressT-stress)*Math.min(1,dt*2); const amp=1+stress*1.4, sp=1+stress*1.8;
+  const n={headX:noise(t*.6*sp,1)*IDLE_B.headX*amp, torsoX:noise(t*.45*sp,2)*IDLE_B.torsoX*amp+Math.sin(t*1.6)*.006, knL:noise(t*.35*sp,3)*IDLE_B.knL*amp};
+  const J=Object.assign({},POSES.stand); J.headX+=n.headX; J.torsoX+=n.torsoX+stress*.12; J.knL+=Math.max(0,n.knL+IDLE_B.knL)+stress*.15; J.lgL-=stress*.08;
+  J.torsoY=noise(t*.3*sp,4)*5*D*amp; J.shRz+=noise(t*.5*sp,5)*3*D*amp; J.shLz+=noise(t*.5*sp,6)*3*D*amp; J.bodyY=-stress*.03+noise(t*.4,7)*.006;
+  blend(idle.j,J,k); applyPose(idle,idle.j);
+  traceAcc+=dt; if(traceAcc>1/30){ traceAcc=0; hist.push(n); if(hist.length>180) hist.shift(); drawTrace(); }
+  s3.render();
 }
 requestAnimationFrame(loop);
-
-// ---------- controls ----------
-function seg(id,fn){ const el=document.getElementById(id); el.addEventListener('click',e=>{ const b=e.target.closest('button[data-v]'); if(!b) return; el.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',String(x===b))); fn(b.dataset.v); }); }
-seg('segView',v=>{ ui.view=v; ui.yaw=0; });
-seg('segPose',v=>{ ui.pose=v; });
-seg('segShade',v=>{ ui.shade=v; toonLight(); build(); });
-seg('segGuide',v=>{ ui.guide=v==='on'; guides.visible=ui.guide; });
-document.getElementById('reroll').addEventListener('click',()=>{ ui.seed=1+Math.floor(Math.random()*99999); build(); });
 })();
 </script>
 </body>
