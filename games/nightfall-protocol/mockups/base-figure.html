@@ -70,7 +70,7 @@ td:last-child,th:last-child{text-align:right}
         <button type="button" data-v="lineup" aria-pressed="false">Lineup</button><button type="button" data-v="game" aria-pressed="false">In game</button></div></div>
       <div class="group"><span>Pose</span><div class="seg three" id="segPose"><button type="button" data-v="t" aria-pressed="true">T-pose</button><button type="button" data-v="stand" aria-pressed="false">Stand</button><button type="button" data-v="ready" aria-pressed="false">Ready</button><button type="button" data-v="walk" aria-pressed="false">Walk</button></div></div>
       <div class="group"><span>People</span><button type="button" class="reroll" id="reroll">New people</button><span class="seed" id="seedLabel"></span></div>
-      <div class="group"><span>Shading</span><div class="seg three" id="segShade"><button type="button" data-v="toon" aria-pressed="true">Toon</button><button type="button" data-v="painted" aria-pressed="false">Painted</button><button type="button" data-v="ink" aria-pressed="false">Ink</button><button type="button" data-v="two" aria-pressed="false">Two-tone</button><button type="button" data-v="flat" aria-pressed="false">Faceted</button><button type="button" data-v="smooth" aria-pressed="false">Smooth</button></div></div>
+      <div class="group"><span>Shading</span><div class="seg three" id="segShade"><button type="button" data-v="toon" aria-pressed="true">Toon</button><button type="button" data-v="painted" aria-pressed="false">Painted</button><button type="button" data-v="ink" aria-pressed="false">Ink</button><button type="button" data-v="inkfacet" aria-pressed="false">Ink faceted</button><button type="button" data-v="two" aria-pressed="false">Two-tone</button><button type="button" data-v="flat" aria-pressed="false">Faceted</button><button type="button" data-v="smooth" aria-pressed="false">Smooth</button></div></div>
       <div class="group"><span>Guides</span><div class="seg" id="segGuide"><button type="button" data-v="on" aria-pressed="false">Head units</button><button type="button" data-v="off" aria-pressed="true">Off</button></div></div>
       <p class="tip">Drag the figures to turn them.</p>
     </div>
@@ -146,7 +146,7 @@ const cam=new THREE.OrthographicCamera(-1,1,1,-1,-20,40);
 const hemi=new THREE.HemisphereLight(0xfffaf0,0x8a8070,.5); scene.add(hemi);
 const LOOKS={ // per shading style: hemisphere sky/ground/intensity, key colour/intensity, rim colour/intensity
   toon:[0xfffaf0,0x8a8070,.3,0xfff3dc,.9,0xe8eef6,.1], ink:[0xfffaf0,0x8a8070,.34,0xfff3dc,.88,0xe8eef6,.1], two:[0xfffaf0,0x8a8070,.25,0xfff3dc,1,0xe8eef6,0],
-  painted:[0xffe0b0,0x4f5f94,.42,0xffd49a,.95,0x9fc4ff,.75], flat:[0xfffaf0,0x8a8070,.5,0xfff3dc,.95,0xe8eef6,.35], smooth:[0xfffaf0,0x8a8070,.5,0xfff3dc,.95,0xe8eef6,.35]};
+  painted:[0xffe0b0,0x4f5f94,.42,0xffd49a,.95,0x9fc4ff,.75], inkfacet:[0xfffaf0,0x8a8070,.55,0xfff3dc,1.05,0xe8eef6,.25], flat:[0xfffaf0,0x8a8070,.5,0xfff3dc,.95,0xe8eef6,.35], smooth:[0xfffaf0,0x8a8070,.5,0xfff3dc,.95,0xe8eef6,.35]};
 const toonLight=()=>{ const L=LOOKS[ui.shade]; hemi.color.setHex(L[0]); hemi.groundColor.setHex(L[1]); hemi.intensity=L[2]; key.color.setHex(L[3]); key.intensity=L[4]; rim.color.setHex(L[5]); rim.intensity=L[6];
   rim.position.set(ui.shade==='painted'?-2.5:-3,ui.shade==='painted'?3:2,-2.5); };
 const key=new THREE.DirectionalLight(0xfff3dc,.95); key.position.set(3.6,3,1.6); key.castShadow=true; key.shadow.mapSize.set(1024,1024);
@@ -301,7 +301,7 @@ const RAMP=(()=>{ const t=new THREE.DataTexture(new Uint8Array([40,40,40, 140,14
 const ramp=v=>{ const d=new Uint8Array(v.length*3); v.forEach((x,i)=>d.set([x,x,x],i*3)); const t=new THREE.DataTexture(d,v.length,1,THREE.RGBFormat); t.minFilter=t.magFilter=THREE.NearestFilter; t.generateMipmaps=false; t.needsUpdate=true; return t; };
 const RAMPS={toon:RAMP, ink:RAMP, two:ramp([70,255]), painted:ramp([70,125,185,255])};
 const M=o=>{ const m = RAMPS[ui.shade] ? new THREE.MeshToonMaterial(Object.assign({gradientMap:RAMPS[ui.shade], flatShading:true},o))
-                                        : new THREE.MeshStandardMaterial(Object.assign({roughness:.85, metalness:0, flatShading:ui.shade==='flat'},o)); mats.push(m); return m; };
+                                        : new THREE.MeshStandardMaterial(Object.assign({roughness:.85, metalness:0, flatShading:ui.shade==='flat'||ui.shade==='inkfacet'},o)); mats.push(m); return m; };
 function tex(w,h,paint){ const c=document.createElement('canvas'); c.width=w; c.height=h; paint(c.getContext('2d'),w,h); const t=new THREE.CanvasTexture(c); t.magFilter=THREE.LinearFilter; return t; }
 const UNDER='#5b504d', BAND='#3c3433';
 function faceTex(F){ return tex(512,256,(g,w,h)=>{
@@ -375,15 +375,19 @@ let figs=[], line=[];
 const turn=new THREE.Group(), lineup=new THREE.Group(); scene.add(turn,lineup);
 const inkMat=new THREE.MeshBasicMaterial({color:0x1d1814, side:THREE.BackSide});
 inkMat.onBeforeCompile=sh=>{ sh.vertexShader=sh.vertexShader.replace('#include <project_vertex>','vec4 mvPosition=modelViewMatrix*vec4(transformed,1.0); mvPosition.xyz+=normalize(normalMatrix*normal)*0.0055; gl_Position=projectionMatrix*mvPosition;'); };
-function inkUp(f){ const list=[]; f.root.traverse(o=>{ if(o.isMesh && !o.userData.ink) list.push(o); }); for(const o of list){ const sh=new THREE.Mesh(o.geometry,inkMat); sh.userData.ink=true; sh.castShadow=false; o.add(sh); } }
+const creaseMat=new THREE.LineBasicMaterial({color:0x2a211b, transparent:true, opacity:.55}), creaseCache=new Map();
+// outline every mesh; in the faceted ink style also ink the creases between planes that meet at a sharp angle
+function inkUp(f,creases){ const list=[]; f.root.traverse(o=>{ if(o.isMesh && !o.userData.ink) list.push(o); });
+  for(const o of list){ const sh=new THREE.Mesh(o.geometry,inkMat); sh.userData.ink=true; sh.castShadow=false; o.add(sh);
+    if(creases){ let eg=creaseCache.get(o.geometry); if(!eg){ eg=new THREE.EdgesGeometry(o.geometry,28); creaseCache.set(o.geometry,eg); } const ln=new THREE.LineSegments(eg,creaseMat); ln.userData.ink=true; o.add(ln); } } }
 function build(){
   figs.concat(line).forEach(f=>f.root.parent.remove(f.root)); mats.splice(0).forEach(m=>{ if(m.map) m.map.dispose(); m.dispose(); });
   figs=[figure(false,genFace(ui.seed,false)), figure(true,genFace(ui.seed+1,true))];
   const gap=ui.pose==='t'?.95:.45;
   figs[0].root.position.x=-gap; figs[1].root.position.x=gap;
-  if(ui.shade==='ink') figs.forEach(inkUp);
+  if(ui.shade==='ink'||ui.shade==='inkfacet') figs.forEach(f=>inkUp(f,ui.shade==='inkfacet'));
   figs.forEach(f=>{ turn.add(f.root); f.j=Object.assign({},POSES[ui.pose==='t'?'t':ui.pose==='ready'?'ready':'stand']); applyPose(f,f.j); });
-  line=[0,1,2,3,4,5].map(i=>{ const fem=i%2===1, f=figure(fem,genFace(ui.seed+10+i,fem)); f.lineup=true; if(ui.shade==='ink') inkUp(f); f.root.position.x=(i-2.5)*.56; lineup.add(f.root); f.j=Object.assign({},POSES.stand); applyPose(f,f.j); return f; });
+  line=[0,1,2,3,4,5].map(i=>{ const fem=i%2===1, f=figure(fem,genFace(ui.seed+10+i,fem)); f.lineup=true; if(ui.shade==='ink'||ui.shade==='inkfacet') inkUp(f,ui.shade==='inkfacet'); f.root.position.x=(i-2.5)*.56; lineup.add(f.root); f.j=Object.assign({},POSES.stand); applyPose(f,f.j); return f; });
   document.getElementById('seedLabel').textContent='Seed '+ui.seed;
   const ROWS=[['headW','Head width'],['head','Head size'],['neck','Neck length'],['shoulders','Shoulder width'],['torso','Torso length'],['chest','Chest (pecs)'],['breast','Bust'],['waist','Waist'],['hips','Hip width'],['glutes','Glutes'],['legs','Leg length'],['knee','Knee height'],['arms','Arm length'],['girth','Build'],['muscle','Muscle tone']];
   const pct=v=>{ const d=Math.round((v-1)*100); return d===0?'0%':`${d>0?'+':''}${d}%`; };
