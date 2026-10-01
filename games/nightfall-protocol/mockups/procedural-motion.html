@@ -174,14 +174,17 @@ function hairBlock(k,edge,rings){ return geo(k,()=>{
 const capG=hairBlock('hairM',[.192,.142,.1,.07],[[.198,.081,.106,.006,2.5],[.214,.078,.103,.004,2.5],[.227,.066,.09,0,2.3],[.236,.044,.064,-.006,2.2],[.242,.012,.018,-.01],[.2435,.002,.002,-.01]]);
 const buzzG=hairBlock('hairB',[.188,.14,.1,.065],[[.194,.0775,.102,.005,2.5],[.212,.0755,.099,.003,2.5],[.226,.063,.087,-.001,2.3],[.235,.041,.061,-.006,2.2],[.24,.012,.018,-.01],[.241,.002,.002,-.01]]);
 const bobG=hairBlock('hairF',[.19,.05,.04,.03],[[.196,.082,.106,.004,2.5],[.214,.079,.103,.002,2.5],[.227,.067,.09,-.002,2.3],[.236,.045,.065,-.006,2.2],[.242,.012,.018,-.01],[.2435,.002,.002,-.01]]);
-// a shoe: cross-sections from heel to toe (flat sole, high instep, tapering toe box), origin at the ankle, toe toward +z
-function shoeG(fem){ return geo('shoe'+fem,()=>{
-  const f=fem?.88:1, sole=-.062, S=[[-.056,.026,.034],[-.045,.036,.068],[-.02,.04,.078],[.02,.042,.07],[.06,.045,.042],[.1,.044,.03],[.135,.038,.024],[.16,.026,.017],[.172,.012,.011]];
-  const ring=(z,hw,top)=>[[-hw,0],[hw,0],[hw*1.04,top*.42],[hw*.78,top],[-hw*.78,top],[-hw*1.04,top*.42]].map(([x,y])=>[x*f,sole+y,z*f]);
-  const R=S.map(([z,hw,t])=>ring(z,hw,t)), n=6, pos=[];
-  const tri=(a,b,c)=>pos.push(...a,...b,...c);
-  for(let j=0;j<R.length-1;j++) for(let i=0;i<n;i++){ const a=R[j][i], b=R[j][(i+1)%n], c=R[j+1][(i+1)%n], d=R[j+1][i]; tri(a,c,b); tri(a,d,c); }
-  for(const [rr,flip] of [[R[0],true],[R[R.length-1],false]]) for(let i=1;i<n-1;i++) flip?tri(rr[0],rr[i],rr[i+1]):tri(rr[0],rr[i+1],rr[i]);
+// a bare foot: narrow round heel, high ankle and instep, a raised arch on the inner side, the ball as the widest part,
+// and toes that slope back from the big toe to the little toe. Origin at the ankle, toe toward +z; side -1 = right foot, +1 = left.
+function footG(fem,side){ return geo('foot'+fem+side,()=>{
+  const f=fem?.9:1, sole=-.062;
+  // [z, half-width, height, arch lift on the inner bottom edge, how far the outer toe edge pulls back]
+  const S=[[-.052,.018,.028,0,0],[-.044,.025,.048,0,0],[-.025,.028,.064,0,0],[.005,.03,.068,.004,0],[.04,.034,.05,.009,0],[.075,.04,.034,.006,0],[.1,.043,.025,0,0],[.122,.041,.019,0,.008],[.142,.035,.014,0,.016],[.153,.022,.009,0,.022]];
+  const ring=([z,hw,top,arch,pull])=>{ const inner=-side, pts=[[-hw,0],[hw,0],[hw*1.03,top*.45],[hw*.7,top],[-hw*.7,top],[-hw*1.03,top*.45]];
+    return pts.map(([x,y])=>{ const isInner=Math.sign(x)===inner, yy=(y===0&&isInner)?arch:y, zz=z-(Math.sign(x)===-inner?pull:0); return [x*f,sole+yy,zz*f]; }); };
+  const R=S.map(ring), n=6, pos=[], tri=(a,b,c)=>pos.push(...a,...b,...c);
+  for(let j=0;j<R.length-1;j++) for(let i=0;i<n;i++){ const a=R[j][i], b=R[j][(i+1)%n], c=R[j+1][(i+1)%n], d=R[j+1][i]; tri(a,b,c); tri(a,c,d); }
+  for(const [rr,flip] of [[R[0],true],[R[R.length-1],false]]) for(let i=1;i<n-1;i++) flip?tri(rr[0],rr[i+1],rr[i]):tri(rr[0],rr[i],rr[i+1]);
   const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3)); g.computeVertexNormals(); return g; }); }
 const jointG=geo('joint',()=>new THREE.SphereGeometry(1,5,3));   // a chunky faceted block at each joint
 const earG=geo('ear',()=>new THREE.SphereGeometry(1,6,4));
@@ -294,11 +297,11 @@ function figure(fem,FP){
     P(loft('thumb',[[-.05,.008,.008],[-.025,.011,.011],[0,.012,.012],[.006,.004,.004]],6),skinM,hand,s*-.006,-.03,.036,1,1,1,-.25,0,s*.3);
     sh.push(shoulder); el.push(elbow);
   }
-  const thighM=M({map:bandTex(skin,[[fem?.92:.5,1,UNDER]])}); const shoeM=M({color:'#4a3b30'}), soleM=M({color:'#2a2522'}); const soleG=geo('sole'+fem,()=>{ const g=shoeG(fem).clone(); g.scale(1.07,.25,1.04); g.translate(0,-.05,0); return g; });
+  const thighM=M({map:bandTex(skin,[[fem?.92:.5,1,UNDER]])});
   for(const s of [-1,1]){
     const leg=Gp(hips,s*(fem?.082:.078)*Bd.hips,-.08,0); P(F.thigh,thighM,leg,0,0,0,gi,ts,gi);
-    const knee=Gp(leg,0,-.42*ts,0); P(F.shin,skinM,knee,0,0,0,gi,ss,gi); P(jointG,skinM,knee,0,.005,.006,.05,.052,.054);   // knee (the shoe covers the ankle)
-    P(shoeG(fem),shoeM,knee,0,-.39*ss,0); P(soleG,soleM,knee,0,-.39*ss,0);
+    const knee=Gp(leg,0,-.42*ts,0); P(F.shin,skinM,knee,0,0,0,gi,ss,gi); P(jointG,skinM,knee,0,.005,.006,.05,.052,.054);   // knee
+    P(footG(fem,s),skinM,knee,0,-.39*ss,0); P(jointG,skinM,knee,0,-.39*ss+.004,-.004,.024,.026,.028);   // foot, ankle
     lg.push(leg); kn.push(knee); }
   return {root, body, hips, torso, head, sh, el, lg, kn, j:null, t0:Math.random()*10, fem, FP};
 }
