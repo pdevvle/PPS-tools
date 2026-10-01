@@ -24,12 +24,12 @@ def png_rgb(path):
         out[y*stride:(y+1)*stride]=line; prev=line
     return w,h,bpp,out
 
-Z=15; tiles={}
-def elev(lat,lon):
+tiles={}
+def elev(lat,lon,Z=15):
     n=2**Z; fx=(lon+180)/360*n; fy=(1-math.log(math.tan(math.radians(lat))+1/math.cos(math.radians(lat)))/math.pi)/2*n
     x,y=int(fx),int(fy)
-    if (x,y) not in tiles: tiles[(x,y)]=png_rgb(f't{Z}_{x}_{y}.png')
-    w,h,bpp,px=tiles[(x,y)]; u=(fx-x)*256; v=(fy-y)*256
+    if (Z,x,y) not in tiles: tiles[(Z,x,y)]=png_rgb(f't{Z}_{x}_{y}.png')
+    w,h,bpp,px=tiles[(Z,x,y)]; u=(fx-x)*256; v=(fy-y)*256
     def at(i,j):
         i=min(255,max(0,i)); j=min(255,max(0,j)); o=(j*256+i)*bpp; r,g,b=px[o],px[o+1],px[o+2]; return r*256+g+b/256-32768
     i,j=int(u-.5),int(v-.5); tx,ty=u-.5-i,v-.5-j
@@ -88,13 +88,34 @@ def build(src,bbox,name,out):
         k=poi_kind(t)
         if k:
             cx=sum(p[0] for p in g)/len(g); cz=sum(p[1] for p in g)/len(g); S['pois'].append({'p':[round(cx,1),round(cz,1)],'kind':k,'what':t.get('shop') or t.get('amenity'),'name':t.get('name','')})
-    # terrain: heights on a 10 m grid, relative to the sector's lowest point
-    step=10; nx=int(2*half[0]/step)+1; nz=int(2*half[1]/step)+1; H=[]
+    # terrain: heights on a 4 m grid (zoom-15 elevation is ~4 m per pixel here), relative to the sector's lowest point
+    step=4; nx=int(2*half[0]/step)+1; nz=int(2*half[1]/step)+1; H=[]
     for j in range(nz):
         for i in range(nx):
             x=-half[0]+i*step; z=-half[1]+j*step
             H.append(elev(lat0-z/ky, lon0+x/kx))
     lo=min(H); S['terrain']={'step':step,'nx':nx,'nz':nz,'base':round(lo,1),'h':[round(h-lo,2) for h in H]}
+    # context: the landscape 4 km around the sector (50 m grid, zoom-13 elevation) with major roads, towns and water
+    CH=4000; cstep=50; cn=int(2*CH/cstep)+1; CHh=[]
+    for j in range(cn):
+        for i in range(cn):
+            x=-CH+i*cstep; z=-CH+j*cstep; CHh.append(round(elev(lat0-z/ky, lon0+x/kx, 13)-lo,1))
+    C={'half':CH,'step':cstep,'n':cn,'h':CHh,'roads':[],'areas':[],'water':[]}
+    def simp(pts,tol=6):
+        if len(pts)<3: return pts
+        a,b=pts[0],pts[-1]; dx,dz=b[0]-a[0],b[1]-a[1]; L=math.hypot(dx,dz) or 1; best=-1; bi=0
+        for i in range(1,len(pts)-1):
+            dd=abs((pts[i][0]-a[0])*dz-(pts[i][1]-a[1])*dx)/L
+            if dd>best: best,bi=dd,i
+        return simp(pts[:bi+1],tol)[:-1]+simp(pts[bi:],tol) if best>tol else [a,b]
+    for el in json.load(open('context.json'))['elements']:
+        t=el.get('tags',{}); g=[P(q['lat'],q['lon']) for q in el.get('geometry',[]) if q]
+        if not g or not any(abs(x)<CH and abs(z)<CH for x,z in g): continue
+        g=[[round(x),round(z)] for x,z in simp(g)]
+        if 'highway' in t: C['roads'].append({'pts':g,'cls':t['highway']})
+        elif 'waterway' in t: C['water'].append({'pts':g})
+        else: C['areas'].append({'pts':g,'kind':t.get('landuse') or t.get('leisure') or t.get('natural')})
+    S['context']=C
     json.dump(S,open(out,'w'),separators=(',',':'))
     print(out, len(S['buildings']),'bld',len(S['roads']),'roads',len(S['pois']),'pois',len(S['areas']),'areas','relief',round(max(H)-lo,1),'m')
 
