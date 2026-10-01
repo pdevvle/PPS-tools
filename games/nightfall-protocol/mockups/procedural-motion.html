@@ -104,16 +104,35 @@ const SKINS=['#f3dfb0','#efd3a8','#e6c39a','#d8ab80','#c18e64','#a87550','#8a5a3
 const HAIRS=['#1f1813','#2e2119','#4a3020','#6a4a2e','#8a6a40','#b08a52','#7a3c22','#5c5650'];
 const EYES=['#4a3524','#2f2a26','#4c6a7a','#566640','#6a4a2a','#3a4a58'];
 // every face is generated from a seed: proportions, features, colouring and haircut
-function rng(seed){ let x=seed>>>0||1; return ()=>{ x=(Math.imul(x,1664525)+1013904223)>>>0; return x/4294967296; }; }
+function rng(seed){ let x=seed>>>0; x^=x>>>16; x=Math.imul(x,0x7feb352d); x^=x>>>15; x=Math.imul(x,0x846ca68b); x^=x>>>16; x=x>>>0||1; return ()=>{ x=(Math.imul(x,1664525)+1013904223)>>>0; return x/4294967296; }; }
+// Heritage profiles: broad population tendencies that nudge the individual draw. Ranges overlap heavily, individual
+// variation stays larger than the nudge, and about a third of people blend two profiles.
+const HERITAGE={
+  westAfrican:   {label:'West African',    skin:[5,7], eyes:[0,1],       hair:[0,1],   d:{noseW:.26,noseL:-.06,noseT:-.12,noseS:.04,lipU:.0016,lipL:.0018,eyeOpen:.05,eyeS:.04}},
+  eastAsian:     {label:'East Asian',      skin:[0,3], eyes:[0,1],       hair:[0,1],   d:{noseW:.02,noseL:-.08,noseT:-.24,noseS:-.06,eyeOpen:-.3,fold:.9,tilt:.07,socket:-.004,brow:-.003,cheek:.002,w:.03,eyeS:-.05}},
+  southAsian:    {label:'South Asian',     skin:[3,6], eyes:[0,1,4],     hair:[0,1,2], d:{noseL:.03,noseW:.06,eyeOpen:.06,eyeS:.05,lipL:.0006}},
+  european:      {label:'European',        skin:[0,2], eyes:[0,1,2,3,4,5], hair:[1,2,3,4,5,6,7], d:{noseL:.05,noseT:.1,noseW:-.08,socket:.002,brow:.001}},
+  middleEastern: {label:'Middle Eastern',  skin:[2,4], eyes:[0,1,4,3],   hair:[0,1,2], d:{noseL:.07,noseT:.14,noseS:.05,hump:.35,brow:.001,browT:.12}},
+  indigenous:    {label:'Indigenous American', skin:[3,5], eyes:[0,1],   hair:[0,1],   d:{noseT:.06,noseL:.02,cheek:.003,eyeOpen:-.12,fold:.4,w:.03}},
+};
+const HKEYS=Object.keys(HERITAGE);
 function genFace(seed,fem){
   const r=rng(seed*2654435761), R=(a,b)=>a+(b-a)*r(), pick=a=>a[Math.floor(r()*a.length)], k=fem?.6:1;
-  const P={fem, w:R(.88,1.12), d:R(.94,1.07), len:R(.92,1.08), jaw:R(.8,1.2)*(fem?.93:1), chinFwd:R(-.01,.01), chin:R(.002,.011)*k,
-    brow:R(.002,.011)*k, cheek:R(.002,.011), cheekY:R(.09,.106), eyeY:R(.11,.126), eyeA:R(16,22.5), socket:R(.006,.014),
-    noseL:R(.84,1.14), noseW:R(.78,1.32), noseT:R(.75,1.35), hump:r()<.3, lipU:R(.002,.0045)+(fem?.0015:0), lipL:R(.0028,.005)+(fem?.0015:0),
-    mouthW:R(.9,1.15), browT:R(.8,1.25)*(fem?.8:1), browArch:R(-.004,.006)+(fem?.003:0), eyeS:R(.85,1.15), forehead:R(-.008,.006), ear:R(.85,1.15)};
-  const tone=Math.floor(r()*SKINS.length); P.skin=SKINS[tone];
-  P.hair=pick(tone>4?HAIRS.slice(0,3):HAIRS); P.eye=pick(tone>3?EYES.slice(0,2):EYES);
-  const h=r(); P.style=fem?(h<.45?'bob':h<.8?'bun':'crop'):(h<.45?'crop':h<.8?'buzz':'quiff');
+  // heritage: one profile, sometimes blended with a second
+  const h1=pick(HKEYS), mixed=r()<.33; let h2=pick(HKEYS); if(h2===h1) h2=HKEYS[(HKEYS.indexOf(h1)+1)%HKEYS.length];
+  const wt=mixed?R(.25,.5):0, H1=HERITAGE[h1], H2=HERITAGE[h2], D=k2=>(H1.d[k2]||0)*(1-wt)+(H2.d[k2]||0)*wt;
+  const P={fem, heritage:mixed?`${H1.label} / ${H2.label}`:H1.label,
+    w:R(.88,1.12)+D('w'), d:R(.94,1.07), len:R(.92,1.08), jaw:R(.8,1.2)*(fem?.93:1), chinFwd:R(-.01,.01), chin:R(.002,.011)*k,
+    brow:Math.max(.0005,R(.002,.011)*k+D('brow')), cheek:R(.002,.011)+D('cheek'), cheekY:R(.09,.106), eyeY:R(.11,.126), eyeA:R(16,22.5), socket:Math.max(.003,R(.006,.014)+D('socket')),
+    noseL:R(.84,1.14)+D('noseL'), noseW:R(.78,1.3)+D('noseW'), noseT:R(.75,1.3)+D('noseT'), noseS:R(.86,1.14)+D('noseS'), hump:r()<.2+D('hump'),
+    lipU:R(.002,.0045)+(fem?.0015:0)+D('lipU'), lipL:R(.0028,.005)+(fem?.0015:0)+D('lipL'),
+    mouthW:R(.9,1.15), browT:R(.8,1.25)*(fem?.8:1)+D('browT'), browArch:R(-.004,.006)+(fem?.003:0),
+    eyeS:R(.82,1.2)+D('eyeS'), eyeOpen:Math.max(.5,R(.85,1.15)+D('eyeOpen')), fold:Math.min(1,Math.max(0,R(-.15,.15)+D('fold'))), tilt:R(-.03,.05)+D('tilt'),
+    forehead:R(-.008,.006), ear:R(.85,1.15)};
+  // colouring from the blended profile: skin index range, then eye and brow colour from the main profile
+  const lo=H1.skin[0]*(1-wt)+H2.skin[0]*wt, hi=H1.skin[1]*(1-wt)+H2.skin[1]*wt, tone=Math.max(0,Math.min(SKINS.length-1,Math.round(R(lo-.4,hi+.4))));
+  P.skin=SKINS[tone]; P.eye=EYES[pick(r()<wt?H2.eyes:H1.eyes)]; P.hair=HAIRS[pick(r()<wt?H2.hair:H1.hair)];
+  const hs=r(); P.style=fem?(hs<.45?'bob':hs<.8?'bun':'crop'):(hs<.45?'crop':hs<.8?'buzz':'quiff');
   // body: a second random stream from the same seed
   const b=rng(seed*97+13), B=(a,c)=>a+(c-a)*b();
   P.body={head:B(.93,1.07), neck:B(.8,1.3), shoulders:fem?B(.88,1.06):B(.9,1.15), torso:B(.94,1.06), waist:B(.88,1.15), hips:fem?B(1,1.12):B(.92,1.06),
@@ -268,7 +287,7 @@ const RAMP=(()=>{ const t=new THREE.DataTexture(new Uint8Array([40,40,40, 140,14
 const ramp=v=>{ const d=new Uint8Array(v.length*3); v.forEach((x,i)=>d.set([x,x,x],i*3)); const t=new THREE.DataTexture(d,v.length,1,THREE.RGBFormat); t.minFilter=t.magFilter=THREE.NearestFilter; t.generateMipmaps=false; t.needsUpdate=true; return t; };
 const RAMPS={toon:RAMP, ink:RAMP, two:ramp([70,255]), painted:ramp([70,125,185,255])};
 const M=o=>{ const m = RAMPS[ui.shade] ? new THREE.MeshToonMaterial(Object.assign({gradientMap:RAMPS[ui.shade], flatShading:true},o))
-                                        : new THREE.MeshStandardMaterial(Object.assign({roughness:.85, metalness:0, flatShading:ui.shade==='flat'},o)); mats.push(m); return m; };
+                                        : new THREE.MeshStandardMaterial(Object.assign({roughness:.85, metalness:0, flatShading:ui.shade==='flat'||ui.shade==='inkfacet'},o)); mats.push(m); return m; };
 function tex(w,h,paint){ const c=document.createElement('canvas'); c.width=w; c.height=h; paint(c.getContext('2d'),w,h); const t=new THREE.CanvasTexture(c); t.magFilter=THREE.LinearFilter; return t; }
 const UNDER='#5b504d', BAND='#3c3433';
 function faceTex(F){ return tex(512,256,(g,w,h)=>{
@@ -280,12 +299,16 @@ function faceTex(F){ return tex(512,256,(g,w,h)=>{
     g.fillStyle=mix(F.hair,.78,.92); g.beginPath();
     g.moveTo(X(s*(eu-.03)),Y(by-.002)); g.quadraticCurveTo(X(s*eu),Y(by+F.browArch+t*.6),X(s*(eu+.034)),Y(by-.003));
     g.lineTo(X(s*(eu+.032)),Y(by-.005)); g.quadraticCurveTo(X(s*eu),Y(by+F.browArch-t),X(s*(eu-.03)),Y(by-.002-t*1.4)); g.closePath(); g.fill();
-    const ex=X(s*eu), ey=Y(F.eyeY), ew=w*.02*F.eyeS, eh=h*.012*F.eyeS;
-    g.fillStyle=mix('#000',.35,.35); g.beginPath(); g.ellipse(ex,ey-eh*1.2,ew*1.05,eh*.9,0,0,TAU); g.fill();
+    const ex=X(s*eu), ey=Y(F.eyeY), ew=w*.02*F.eyeS, eh=h*.012*F.eyeS*F.eyeOpen;
+    g.save(); g.translate(ex,ey); g.rotate(-s*F.tilt); g.translate(-ex,-ey);   // canthal tilt: outer corners up
+    g.fillStyle=mix('#000',.35,.35*(1-F.fold*.6)); g.beginPath(); g.ellipse(ex,ey-eh*1.2,ew*1.05,eh*.9,0,0,TAU); g.fill();
     g.fillStyle='#ece6dc'; g.beginPath(); g.moveTo(ex-ew,ey); g.quadraticCurveTo(ex,ey-eh*1.3,ex+ew,ey); g.quadraticCurveTo(ex,ey+eh*1.1,ex-ew,ey); g.fill();
     g.fillStyle=F.eye; g.beginPath(); g.arc(ex+s,ey,eh*.85,0,TAU); g.fill();
     g.fillStyle='#161210'; g.beginPath(); g.arc(ex+s,ey,eh*.38,0,TAU); g.fill();
     g.strokeStyle='rgba(40,26,18,.95)'; g.lineWidth=fem?2.2:1.8; g.beginPath(); g.moveTo(ex-ew,ey); g.quadraticCurveTo(ex,ey-eh*1.35,ex+ew,ey+.5); g.stroke();
+    // lid crease above the eye; a fuller lid fold hides it and narrows the visible eye
+    if(F.fold<.6){ g.strokeStyle=mix('#2a1a12',.5,.5*(1-F.fold/.6)); g.lineWidth=1; g.beginPath(); g.moveTo(ex-ew*.8,ey-eh*1.25); g.quadraticCurveTo(ex,ey-eh*2.2,ex+ew*.9,ey-eh*1.1); g.stroke(); }
+    g.restore();
   }
   const mw=F.mouthW;
   g.fillStyle=mix(fem?'#b04a44':'#a0574a',fem?.38:.25,1);
@@ -310,7 +333,7 @@ function figure(fem,FP){
   const head=Gp(torso,0,.43*tl+.12*Bd.neck,.008), face=Gp(head,0,-.01,0); head.scale.setScalar(Bd.head);
   face.scale.set(fem?.95:1,(fem?.97:1)*FP.len,fem?.97:1);
   P(sculptHead(FP),M({map:faceTex(FP)}),face);
-  P(noseFor(FP),skinM,face,0,0,.112*FP.d,fem?.85:1,fem?.94:1,fem?.85:1);
+  P(noseFor(FP),skinM,face,0,(FP.eyeY+.012)*(1-FP.noseS),.112*FP.d,(fem?.85:1)*FP.noseS,(fem?.94:1)*FP.noseS,(fem?.85:1)*FP.noseS);   // scaled about the bridge
   for(const s of [-1,1]) P(earG,skinM,face,s*.075*FP.w,FP.eyeY-.012,-.016,.008*FP.ear,.03*FP.ear,.018*FP.ear,-.12,s*.2,0);
   // no hair on the base figure: hair length and style will be a procedural layer, like clothing
   const sh=[],el=[],lg=[],kn=[];
@@ -329,6 +352,29 @@ function figure(fem,FP){
     lg.push(leg); kn.push(knee); }
   return {root, body, hips, torso, head, sh, el, lg, kn, j:null, t0:Math.random()*10, fem, FP};
 }
+// ---------- ink: outline shells and creases ----------
+// The outline is a back-facing shell pushed out along the normal in view space. With persp, the push grows with distance
+// so the stroke keeps the same width on screen (used in the 3D sectors); without it the width is fixed in metres.
+function makeInk(color,width,persp){ const m=new THREE.MeshBasicMaterial({color, side:THREE.BackSide});
+  m.onBeforeCompile=sh=>{ sh.vertexShader=sh.vertexShader.replace('#include <project_vertex>',
+    `vec4 mvPosition=vec4(transformed,1.0); vec3 nn=normal;
+     #ifdef USE_INSTANCING
+       mvPosition=instanceMatrix*mvPosition; nn=mat3(instanceMatrix)*nn;
+     #endif
+     mvPosition=modelViewMatrix*mvPosition; mvPosition.xyz+=normalize(normalMatrix*nn)*${width.toFixed(5)}*${persp?'(-mvPosition.z)':'1.0'};
+     gl_Position=projectionMatrix*mvPosition;`); };
+  m.customProgramCacheKey=()=>'ink'+width+persp; return m; }
+const creaseCache=new Map();
+function inkUp(root,{color=0x1d1814,width=.0072,persp=false,creases=false,creaseColor=0x2a211b}={}){
+  const mat=makeInk(color,width,persp), cm=creases?new THREE.LineBasicMaterial({color:creaseColor, transparent:true, opacity:.55}):null, list=[];
+  root.traverse(o=>{ if(o.isMesh && !o.userData.ink && !o.userData.noInk) list.push(o); });
+  for(const o of list){ const sh=o.isInstancedMesh? new THREE.InstancedMesh(o.geometry,mat,o.count) : new THREE.Mesh(o.geometry,mat);
+    if(o.isInstancedMesh){ sh.instanceMatrix=o.instanceMatrix; }
+    sh.userData.ink=true; sh.castShadow=false; sh.receiveShadow=false; sh.matrixAutoUpdate=false; o.add(sh);
+    if(cm && !o.isInstancedMesh){ let eg=creaseCache.get(o.geometry); if(!eg){ eg=new THREE.EdgesGeometry(o.geometry,28); creaseCache.set(o.geometry,eg); } const ln=new THREE.LineSegments(eg,cm); ln.userData.ink=true; ln.matrixAutoUpdate=false; o.add(ln); } }
+  return mat; }
+// stroke colour carries the character's state
+const STATES={calm:{c:0x1d1814,label:'Calm'}, selected:{c:0xe0a526,label:'Selected'}, overwatch:{c:0x2f9fc4,label:'Overwatch'}, concealed:{c:0x5b6fa8,label:'Concealed'}, wounded:{c:0xc23b2e,label:'Wounded'}, panicked:{c:0x9b4fc4,label:'Panicked'}};
 const POSES={
   t:{bodyY:0,torsoX:0,torsoY:0,headX:.08,shRx:0,shRz:-1.5,elR:0,shLx:0,shLz:1.5,elL:0,lgR:0,knR:0,lgL:0,knL:0},
   ready:{bodyY:-.05,torsoX:.14,torsoY:.15,headX:-.05,shRx:-.55,shRz:-.2,elR:-1.35,shLx:-1.05,shLz:.35,elL:-.95,lgR:-.42,knR:.75,lgL:.12,knL:.3},
@@ -338,7 +384,7 @@ function applyPose(r,j){ r.body.position.y=j.bodyY; r.torso.rotation.set(j.torso
   r.sh[0].rotation.set(j.shRx,0,j.shRz); r.el[0].rotation.x=j.elR; r.sh[1].rotation.set(j.shLx,0,j.shLz); r.el[1].rotation.x=j.elL;
   r.lg[0].rotation.x=j.lgR; r.kn[0].rotation.x=j.knR; r.lg[1].rotation.x=j.lgL; r.kn[1].rotation.x=j.knL; }
 
-return {figure, genFace, POSES, applyPose, mats};
+return {figure, genFace, POSES, applyPose, mats, inkUp, STATES};
 })();
 (function(){
 if(!window.THREE){ document.querySelectorAll('.stage').forEach(s=>s.insertAdjacentHTML('beforeend','<p class="fail">The 3D view needs three.js, which could not load.</p>')); return; }
