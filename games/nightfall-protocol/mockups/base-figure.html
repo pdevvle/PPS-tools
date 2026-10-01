@@ -57,7 +57,7 @@ td:last-child,th:last-child{text-align:right}
   <header>
     <p class="eyebrow">Character style · base figure</p>
     <h1>Base figure study</h1>
-    <p class="lede">A plain starting point for the characters in a toon-shaded low-poly style. Every face is generated from a seed, and so is every body, so no two people look alike: press New people, or open the Lineup. Flat planes are lit in three hard tones. The head is sculpted with realistic anatomy (brow, eye sockets, cheekbones, nose, lips, chin) under a straight-cut block of hair, on a thick neck. The colours are solid, and the face is painted with only a few marks. Clothing, hair styles and gear would layer on top later.</p>
+    <p class="lede">A plain starting point for the characters in a toon-shaded low-poly style. Every face is generated from a seed, and so is every body, so no two people look alike: press New people, or open the Lineup. Flat planes are lit in three hard tones. The head is sculpted with realistic anatomy (brow, eye sockets, cheekbones, nose, lips, chin) on a thick neck. Hair is left off: it will be a procedural layer, like clothing. The colours are solid, and the face is painted with only a few marks. Clothing, hair styles and gear would layer on top later.</p>
   </header>
   <div class="studio">
     <div id="stage" aria-label="3D view of two base figures"></div>
@@ -98,11 +98,11 @@ td:last-child,th:last-child{text-align:right}
       <h2>What defines the look</h2>
       <ul>
         <li>Toon shading on flat planes. Each form has 8 to 12 sides, and light falls into three hard tones (lit, mid and shadow), so the planes of the jaw, nose, chest and limbs read like a painted poster.</li>
-        <li>A face sculpted with real anatomy at low-poly resolution: the eyes sit halfway up the head in sockets under a brow ridge, with cheekbones and hollows below them. The nose has a bridge, tip and nostril wings, and the lips curve forward over the teeth above a defined chin and jaw angle. The paint adds only brows, almond-shaped eyes and lip colour. The hair is a straight-cut block on a thick neck.</li>
+        <li>A face sculpted with real anatomy at low-poly resolution: the eyes sit halfway up the head in sockets under a brow ridge, with cheekbones and hollows below them. The nose has a bridge, tip and nostril wings, and the lips curve forward over the teeth above a defined chin and jaw angle. The paint adds only brows, almond-shaped eyes and lip colour. Hair is left off the base figure.</li>
         <li>An athletic V-taper: broad shoulders and chest, a narrow waist, a strong neck and long tapering limbs.</li>
         <li>Solid colours with no painted detail, apart from thin lines for the eyes, brows and mouth.</li>
-        <li>Bodies are procedural too. The same seed sets head size, neck length, shoulder width, torso length, chest or bust, waist, hips, glutes, leg length, knee height, arm length and overall build. Clothing would follow automatically because it is built from the same shapes.</li>
-        <li>Faces are procedural. A seed sets about 30 values: head width, depth and length, jaw width, chin size and projection, brow ridge, cheekbones, eye height, spacing, depth and size, nose length, width, tip and hump, lip fullness, mouth width, forehead slope and ears. The same seed also picks the skin tone, hair and eye colour, brow shape and one of six haircuts. Each recruit could carry just one number.</li>
+        <li>Bodies are procedural too. The same seed sets head width, head size, neck length, shoulder width, torso length, chest or bust, waist, hips, glutes, leg length, knee height, arm length and overall build. Clothing would follow automatically because it is built from the same shapes.</li>
+        <li>Faces are procedural. A seed sets about 30 values: head width, depth and length, jaw width, chin size and projection, brow ridge, cheekbones, eye height, spacing, depth and size, nose length, width, tip and hump, lip fullness, mouth width, forehead slope and ears. The same seed also picks the skin tone, eye colour, brow colour and brow shape. Hair is left off the base figure: length and style will be a procedural layer, like clothing. Each recruit could carry just one number.</li>
         <li>The same skeleton as the game's animation rig, so the walk cycle and every existing pose apply unchanged.</li>
       </ul>
     </section>
@@ -119,7 +119,7 @@ const EYES=['#4a3524','#2f2a26','#4c6a7a','#566640','#6a4a2a','#3a4a58'];
 function rng(seed){ let x=seed>>>0||1; return ()=>{ x=(Math.imul(x,1664525)+1013904223)>>>0; return x/4294967296; }; }
 function genFace(seed,fem){
   const r=rng(seed*2654435761), R=(a,b)=>a+(b-a)*r(), pick=a=>a[Math.floor(r()*a.length)], k=fem?.6:1;
-  const P={fem, w:R(.9,1.1), d:R(.94,1.07), len:R(.92,1.08), jaw:R(.8,1.2)*(fem?.93:1), chinFwd:R(-.01,.01), chin:R(.002,.011)*k,
+  const P={fem, w:R(.88,1.12), d:R(.94,1.07), len:R(.92,1.08), jaw:R(.8,1.2)*(fem?.93:1), chinFwd:R(-.01,.01), chin:R(.002,.011)*k,
     brow:R(.002,.011)*k, cheek:R(.002,.011), cheekY:R(.09,.106), eyeY:R(.11,.126), eyeA:R(16,22.5), socket:R(.006,.014),
     noseL:R(.84,1.14), noseW:R(.78,1.32), noseT:R(.75,1.35), hump:r()<.3, lipU:R(.002,.0045)+(fem?.0015:0), lipL:R(.0028,.005)+(fem?.0015:0),
     mouthW:R(.9,1.15), browT:R(.8,1.25)*(fem?.8:1), browArch:R(-.004,.006)+(fem?.003:0), eyeS:R(.85,1.15), forehead:R(-.008,.006), ear:R(.85,1.15)};
@@ -159,16 +159,34 @@ function loft(k,rings,seg){ return geo(k,()=>{
   const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3)); g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2)); g.setIndex(idx); g.computeVertexNormals();
   return g; }); }
 const smooth=t=>t<0?0:t>1?1:t*t*(3-2*t), gauss=(x,m,s)=>Math.exp(-((x-m)**2)/(2*s*s));
+// a loft with soft lobes pushed out of its surface: used for the bust, pecs and glutes so they stay round, not pointed
+function loftLobes(k,rings,seg,extraY,lobes){ return geo(k,()=>{
+  rings=rings.slice().sort((a,b)=>a[0]-b[0]);
+  const at=y=>{ for(let i=0;i<rings.length-1;i++){ const A=rings[i],B=rings[i+1]; if(y<=B[0]){ const t=(y-A[0])/(B[0]-A[0]); return A.map((v,j)=>j===0?y:(v??(j===3?0:2))+(((B[j]??(j===3?0:2)))-(v??(j===3?0:2)))*t); } } return rings[rings.length-1]; };
+  const ys=[...new Set([...rings.map(r=>r[0]),...extraY])].sort((a,b)=>a-b), R=ys.map(at);
+  const pos=[],uv=[],idx=[], y0=ys[0], y1=ys[ys.length-1], pw=(v,n)=>Math.sign(v)*Math.pow(Math.abs(v),2/n);
+  R.forEach(([y,w,d,cz=0,n=2])=>{ for(let i=0;i<=seg;i++){ const a=i/seg*TAU+Math.PI, sx=Math.sin(a), cz2=Math.cos(a), x=w*pw(sx,n), z=cz+d*pw(cz2,n), ang=Math.atan2(sx,cz2);
+    let push=0; for(const L of lobes){ const da=Math.atan2(Math.sin(ang-L.a),Math.cos(ang-L.a)), r2=(da/L.sa)**2+((y-L.y)/L.sy)**2; if(r2<1) push+=L.amp*Math.pow(1-r2,1.6); }
+    const l=Math.hypot(x,z-cz)||1; pos.push(x+x/l*push,y,z+(z-cz)/l*push); uv.push(i/seg,(y-y0)/(y1-y0)); } });
+  for(let j=0;j<R.length-1;j++) for(let i=0;i<seg;i++){ const a=j*(seg+1)+i,b=a+seg+1; idx.push(a,a+1,b,a+1,b+1,b); }
+  const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3)); g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2)); g.setIndex(idx); g.computeVertexNormals();
+  return g; }); }
 function bodyShape(fem,Bd){ const F=shape(fem), k='b'+fem+JSON.stringify(Bd);
   const torsoRings=F.torsoRings.map(([y,w,d,cz=0,n=2])=>{
     const hipF=Bd.hips*Bd.girth, waistF=Bd.waist*Bd.girth, shF=Bd.shoulders;
     const wf=hipF+(waistF-hipF)*smooth((y-.04)/.12), wf2=wf+(shF-wf)*smooth((y-.24)/.14);
-    const bump=fem? Bd.breast*.034*gauss(y,.29,.026) : Bd.chest*.02*gauss(y,.32,.03);
-    return [y*Bd.torso, w*wf2, d*Bd.girth+bump, cz+bump, n]; });
-  const pelvisRings=F.pelvisRings.map(([y,w,d,cz=0,n=2])=>{ const g=Bd.glutes*.024*gauss(y,fem?-.06:-.07,.04); return [y, w*Bd.hips*Bd.girth, d*Bd.girth+g, cz-g, n]; });
-  return Object.assign({},F,{torso:loft('T'+k,torsoRings,7), pelvis:loft('P'+k,pelvisRings,7)}); }
-function shape(fem){ const f=fem?.88:1, h=fem?1.08:1, k='f'+fem; const TR=[[-.01,.124*h,.086],[.06,.118*(fem?.92:1),.084],[.14,.128*(fem?.95:1),.09,.004],[.22,.148*f,.1,.012],[.28,.162*f,fem?.115:.108,fem?.028:.02],[.335,.172*f,fem?.1:.1,.012],[.37,.184*f,.094,.008],[.395,.19*f,.086,.002],[.418,.172*f,.075,-.004],[.442,.13*f,.065,-.006],[.462,.088*f,.058,-.008],[.48,.06,.052,-.008]], PR=[[-.18,.03,.034,.004],[-.16,.08*h,.07,.004],[-.12,.13*h,.088],[-.06,.14*h,.095,-.006],[0,.135*h,.09],[.04,.126*h,.087]]; return { torsoRings:TR, pelvisRings:PR,
-  torso:loft('t'+k,[[-.01,.124*h,.086],[.06,.118*(fem?.92:1),.084],[.14,.128*(fem?.95:1),.09,.004],[.22,.148*f,.1,.012],[.28,.162*f,fem?.115:.108,fem?.028:.02],[.335,.172*f,fem?.1:.1,.012],[.37,.184*f,.094,.008],[.395,.19*f,.086,.002],[.418,.172*f,.075,-.004],[.442,.13*f,.065,-.006],[.462,.088*f,.058,-.008],[.48,.06,.052,-.008]],7),
+    return [y*Bd.torso, w*wf2, d*Bd.girth, cz, n]; });
+  const pelvisRings=F.pelvisRings.map(([y,w,d,cz=0,n=2])=>[y, w*Bd.hips*Bd.girth, d*Bd.girth, cz, n]);
+  const T=Bd.torso, side=s=>s*.5;
+  // lobes: a = angle from the front (radians), y = centre height, sa/sy = spread, amp = how far out (metres)
+  const chestLobes=fem
+    ? [-1,1].map(s=>({a:side(s)*1.0,y:.285*T,sa:.62,sy:.055,amp:.006+Bd.breast*.03}))
+    : [-1,1].map(s=>({a:side(s)*1.05,y:.325*T,sa:.75,sy:.05,amp:Bd.chest*.014}));
+  const gluteLobes=[-1,1].map(s=>({a:Math.PI+side(s)*.95,y:fem?-.065:-.075,sa:.7,sy:.06,amp:.004+Bd.glutes*.022}));
+  const tY=[.2,.23,.25,.27,.29,.31,.33,.35].map(y=>y*T), pY=[-.14,-.11,-.09,-.07,-.05,-.03,-.01,.02];
+  return Object.assign({},F,{torso:loftLobes('T'+k,torsoRings,12,tY,chestLobes), pelvis:loftLobes('P'+k,pelvisRings,12,pY,gluteLobes)}); }
+function shape(fem){ const f=fem?.88:1, h=fem?1.08:1, k='f'+fem; const TR=[[-.01,.124*h,.086],[.06,.118*(fem?.92:1),.084],[.14,.128*(fem?.95:1),.09,.004],[.22,.148*f,.1,.012],[.28,.162*f,fem?.104:.108,fem?.014:.02],[.335,.172*f,fem?.1:.1,.012],[.37,.184*f,.094,.008],[.395,.19*f,.086,.002],[.418,.172*f,.075,-.004],[.442,.13*f,.065,-.006],[.462,.088*f,.058,-.008],[.48,.06,.052,-.008]], PR=[[-.18,.03,.034,.004],[-.16,.08*h,.07,.004],[-.12,.13*h,.088],[-.06,.14*h,.095,-.006],[0,.135*h,.09],[.04,.126*h,.087]]; return { torsoRings:TR, pelvisRings:PR,
+  torso:loft('t'+k,[[-.01,.124*h,.086],[.06,.118*(fem?.92:1),.084],[.14,.128*(fem?.95:1),.09,.004],[.22,.148*f,.1,.012],[.28,.162*f,fem?.104:.108,fem?.014:.02],[.335,.172*f,fem?.1:.1,.012],[.37,.184*f,.094,.008],[.395,.19*f,.086,.002],[.418,.172*f,.075,-.004],[.442,.13*f,.065,-.006],[.462,.088*f,.058,-.008],[.48,.06,.052,-.008]],7),
   pelvis:loft('p'+k,[[-.18,.03,.034,.004],[-.16,.08*h,.07,.004],[-.12,.13*h,.088],[-.06,.14*h,.095,-.006],[0,.135*h,.09],[.04,.126*h,.087]],7),
   neck:loft('n'+k,[[0,.078*f,.066,-.006,2.5],[.05,.067*f,.061,-.006,2.5],[.1,.062*f,.059,-.006,2.5],[.15,.058*f,.057,-.008,2.5],[.2,.054*f,.055,-.012,2.5],[.215,.03,.03,-.012]],6),
   upperArm:loft('u'+k,[[-.3,.03,.03],[-.28,.038*f,.04],[-.18,.043*f,.047,.003],[-.08,.046*f,.05],[-.02,.048*f,.05],[.012,.042*f,.046],[.026,.026,.032],[.032,.004,.006]],5),
@@ -310,13 +328,8 @@ function figure(fem,FP){
   face.scale.set(fem?.95:1,(fem?.97:1)*FP.len,fem?.97:1);
   P(sculptHead(FP),M({map:faceTex(FP)}),face);
   P(noseFor(FP),skinM,face,0,0,.112*FP.d,fem?.85:1,fem?.94:1,fem?.85:1);
-  if(FP.style!=='bob') for(const s of [-1,1]) P(earG,skinM,face,s*.075*FP.w,FP.eyeY-.012,-.016,.008*FP.ear,.03*FP.ear,.018*FP.ear,-.12,s*.2,0);
-  const hm=M({color:hair}), hs=[FP.w*1.005,1,FP.d*1.005];
-  if(FP.style==='crop') P(capG,hm,face,0,0,0,...hs);
-  if(FP.style==='quiff') P(capG,hm,face,0,-.012,.004,hs[0],1.09,hs[2]);
-  if(FP.style==='buzz') P(buzzG,hm,face,0,0,0,...hs);
-  if(FP.style==='bob') P(bobG,hm,face,0,0,0,...hs);
-  if(FP.style==='bun'){ P(buzzG,hm,face,0,0,0,...hs); P(earG,hm,face,0,.17,-.11*FP.d,.034,.032,.03); }
+  for(const s of [-1,1]) P(earG,skinM,face,s*.075*FP.w,FP.eyeY-.012,-.016,.008*FP.ear,.03*FP.ear,.018*FP.ear,-.12,s*.2,0);
+  // no hair on the base figure: hair length and style will be a procedural layer, like clothing
   const sh=[],el=[],lg=[],kn=[];
   for(const s of [-1,1]){
     const shoulder=Gp(torso,s*sx,.385*tl,-.006); P(F.upperArm,skinM,shoulder,0,0,0,gi,Bd.arms,gi);
@@ -352,9 +365,9 @@ function build(){
   figs.forEach(f=>{ turn.add(f.root); f.j=Object.assign({},POSES[ui.pose==='t'?'t':ui.pose==='ready'?'ready':'stand']); applyPose(f,f.j); });
   line=[0,1,2,3,4,5].map(i=>{ const fem=i%2===1, f=figure(fem,genFace(ui.seed+10+i,fem)); f.lineup=true; f.root.position.x=(i-2.5)*.56; lineup.add(f.root); f.j=Object.assign({},POSES.stand); applyPose(f,f.j); return f; });
   document.getElementById('seedLabel').textContent='Seed '+ui.seed;
-  const ROWS=[['head','Head size'],['neck','Neck length'],['shoulders','Shoulder width'],['torso','Torso length'],['chest','Chest (pecs)'],['breast','Bust'],['waist','Waist'],['hips','Hip width'],['glutes','Glutes'],['legs','Leg length'],['knee','Knee height'],['arms','Arm length'],['girth','Build']];
+  const ROWS=[['headW','Head width'],['head','Head size'],['neck','Neck length'],['shoulders','Shoulder width'],['torso','Torso length'],['chest','Chest (pecs)'],['breast','Bust'],['waist','Waist'],['hips','Hip width'],['glutes','Glutes'],['legs','Leg length'],['knee','Knee height'],['arms','Arm length'],['girth','Build']];
   const pct=v=>{ const d=Math.round((v-1)*100); return d===0?'0%':`${d>0?'+':''}${d}%`; };
-  const hb=figs[0].FP.body, sb=figs[1].FP.body;
+  const hb=Object.assign({headW:figs[0].FP.w},figs[0].FP.body), sb=Object.assign({headW:figs[1].FP.w},figs[1].FP.body);
   document.getElementById('bodyStats').innerHTML='<thead><tr><th>Attribute</th><th>Him</th><th>Her</th></tr></thead><tbody>'+ROWS.map(([k,l])=>{ const fmt=v=>k==='chest'||k==='breast'||k==='glutes'?(v?Math.round(v*100)+'%':'–'):pct(v); return `<tr><td>${l}</td><td>${fmt(hb[k])}</td><td>${fmt(sb[k])}</td></tr>`; }).join('')+'</tbody>';
 }
 toonLight(); build();
