@@ -55,7 +55,7 @@ td:last-child,th:last-child{text-align:right}
   <header>
     <p class="eyebrow">Character style · base figure</p>
     <h1>Base figure study</h1>
-    <p class="lede">A plain starting point for the characters in a toon-shaded low-poly style. Flat planes are lit in three hard tones. The block head has a tall forehead, a square jaw, slit eyes and a wedge nose under a straight-cut block of hair, on a thick neck. The colours are solid, and the face is painted with only a few marks. Clothing, hair styles and gear would layer on top later.</p>
+    <p class="lede">A plain starting point for the characters in a toon-shaded low-poly style. Flat planes are lit in three hard tones. The head is sculpted with realistic anatomy (brow, eye sockets, cheekbones, nose, lips, chin) under a straight-cut block of hair, on a thick neck. The colours are solid, and the face is painted with only a few marks. Clothing, hair styles and gear would layer on top later.</p>
   </header>
   <div class="studio">
     <div id="stage" aria-label="3D view of two base figures"></div>
@@ -91,7 +91,7 @@ td:last-child,th:last-child{text-align:right}
       <h2>What defines the look</h2>
       <ul>
         <li>Toon shading on flat planes. Each form has 8 to 12 sides, and light falls into three hard tones (lit, mid and shadow), so the planes of the jaw, nose, chest and limbs read like a painted poster.</li>
-        <li>A big block of a head: a tall flat forehead, a broad square jaw and chin, eyes that are just long slits under the brow, and a long wedge nose whose shadow side does most of the drawing. The hair is a solid block cut straight across the forehead and down in front of the ears, on a thick neck that catches the jaw's shadow.</li>
+        <li>A face sculpted with real anatomy at low-poly resolution: the eyes sit halfway up the head in sockets under a brow ridge, with cheekbones and hollows below them. The nose has a bridge, tip and nostril wings, and the lips curve forward over the teeth above a defined chin and jaw angle. The paint adds only brows, almond-shaped eyes and lip colour. The hair is a straight-cut block on a thick neck.</li>
         <li>An athletic V-taper: broad shoulders and chest, a narrow waist, a strong neck and long tapering limbs.</li>
         <li>Solid colours with no painted detail, apart from thin lines for the eyes, brows and mouth.</li>
         <li>The same skeleton as the game's animation rig, so the walk cycle and every existing pose apply unchanged.</li>
@@ -162,10 +162,45 @@ function hairBlock(k,edge,rings){ return geo(k,()=>{
     const yy = j===0 ? (c>.6?edge[0]: c>-.1?edge[1]: c>-.8?edge[2]:edge[3]) : y; pos.push(w*pw(Math.sin(a),n),yy,cz+d*pw(c,n)); } });
   for(let j=0;j<all.length-1;j++) for(let i=0;i<seg;i++){ const a=j*(seg+1)+i,b=a+seg+1; idx.push(a,a+1,b,a+1,b+1,b); }
   const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3)); g.setIndex(idx); g.computeVertexNormals(); return g; }); }
-const capG=hairBlock('hairM',[.2,.15,.1,.085],[[.21,.081,.101,.008,2.8],[.236,.08,.1,.012,2.7],[.258,.068,.09,.014,2.5],[.272,.038,.054,.012,2.2],[.277,.003,.003,.01]]);
-const bobG=hairBlock('hairF',[.198,.06,.055,.05],[[.21,.082,.101,.006,2.8],[.236,.08,.1,.01,2.7],[.258,.066,.088,.012,2.5],[.27,.036,.05,.01,2.2],[.274,.003,.003,.008]]);
+const capG=hairBlock('hairM',[.192,.142,.1,.07],[[.198,.081,.106,.006,2.5],[.214,.078,.103,.004,2.5],[.227,.066,.09,0,2.3],[.236,.044,.064,-.006,2.2],[.242,.012,.018,-.01],[.2435,.002,.002,-.01]]);
+const bobG=hairBlock('hairF',[.19,.05,.04,.03],[[.196,.082,.106,.004,2.5],[.214,.079,.103,.002,2.5],[.227,.067,.09,-.002,2.3],[.236,.045,.065,-.006,2.2],[.242,.012,.018,-.01],[.2435,.002,.002,-.01]]);
 const earG=geo('ear',()=>new THREE.SphereGeometry(1,6,4));
-const noseG=geo('nose2',()=>{
+function sculptHead(fem){ return geo('sculpt'+fem,()=>{
+  // side profile of the skull: [height above chin, half-width, half-depth, forward offset]
+  const prof=[[0,.02,.015,.066],[.008,.034,.03,.062],[.025,.05,.06,.045],[.045,.062,.08,.03],[.065,.068,.09,.02],[.09,.072,.096,.012],[.115,.074,.098,.008],[.135,.076,.1,.006],[.16,.077,.101,.003],[.185,.075,.1,0],[.205,.068,.094,-.004],[.222,.055,.08,-.008],[.233,.035,.055,-.01],[.238,.01,.015,-.012],[.2395,.001,.001,-.012]];
+  const at=y=>{ for(let i=0;i<prof.length-1;i++){ const a=prof[i],b=prof[i+1]; if(y<=b[0]){ const t=(y-a[0])/(b[0]-a[0]); return [a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t,a[3]+(b[3]-a[3])*t]; } } return prof[prof.length-1].slice(1); };
+  const ys=[0,.008,.016,.025,.033,.04,.046,.052,.058,.065,.072,.08,.088,.096,.104,.112,.12,.128,.136,.145,.155,.165,.175,.187,.2,.212,.222,.23,.235,.2385,.2395];
+  const seg=24, n=2.3, G=(x,m,sg)=>Math.exp(-((x-m)*(x-m))/(2*sg*sg)), k=fem?.6:1;
+  const disp=(adeg,y)=>{ const A=Math.abs(adeg); return 0
+    -.011*G(A,19,8)*G(y,.118,.011)              // eye sockets (eyes sit halfway up the head)
+    +.006*k*G(A,14,16)*G(y,.137,.007)           // brow ridge
+    +.004*G(A,0,8)*G(y,.104,.022)               // bridge of the nose
+    +.007*G(A,38,12)*G(y,.098,.012)             // cheekbones
+    -.005*G(A,48,12)*G(y,.062,.013)             // cheek hollows
+    +.006*G(A,0,22)*G(y,.054,.016)              // the mouth's forward curve over the teeth
+    +(fem?.005:.003)*G(A,0,11)*G(y,.058,.004)   // upper lip
+    -.003*G(A,0,12)*G(y,.051,.0035)             // line of the mouth
+    +(fem?.005:.0035)*G(A,0,11)*G(y,.045,.004)  // lower lip
+    -.003*G(A,0,12)*G(y,.034,.004)              // fold under the lower lip
+    +.006*k*G(A,0,15)*G(y,.016,.009)            // chin
+    -.004*G(A,68,12)*G(y,.155,.02)              // temples
+    +.004*k*G(A,74,10)*G(y,.032,.012); };       // angle of the jaw
+  const pos=[],uv=[],idx=[], pw=(v)=>Math.sign(v)*Math.pow(Math.abs(v),2/n);
+  ys.forEach(y=>{ const [w,d,cz]=at(y); for(let i=0;i<=seg;i++){ const a=i/seg*TAU+Math.PI, x=w*pw(Math.sin(a)), z=d*pw(Math.cos(a)), l=Math.hypot(x,z)||1, dd=disp((i/seg-.5)*360,y);
+    pos.push(x+x/l*dd, y, cz+z+z/l*dd); uv.push(i/seg, y/.2395); } });
+  for(let j=0;j<ys.length-1;j++) for(let i=0;i<seg;i++){ const a=j*(seg+1)+i,b=a+seg+1; idx.push(a,a+1,b,a+1,b+1,b); }
+  const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3)); g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2)); g.setIndex(idx); g.computeVertexNormals(); return g; }); }
+const noseG=geo('nose3',()=>{
+  // bridge, tip and nostril wings as separate planes; local z is measured from the face surface
+  const R=[0,.13,-.004], Mb=[0,.105,.011], T=[0,.084,.024], U=[0,.077,.018], B=[0,.073,.004];
+  const TL=[-.009,.124,-.006], TR=[.009,.124,-.006], ML=[-.011,.1,.003], MR=[.011,.1,.003], AL=[-.016,.078,-.002], AR=[.016,.078,-.002];
+  const tris=[[TL,R,Mb],[R,TR,Mb],[TL,Mb,ML],[ML,Mb,T],[ML,T,AL],[AL,T,U],[AL,U,B],[TR,MR,Mb],[MR,T,Mb],[MR,AR,T],[AR,U,T],[AR,B,U]];
+  const A=new THREE.Vector3(),Bv=new THREE.Vector3(),C=new THREE.Vector3(), inside=new THREE.Vector3(0,.1,-.03), out=[];
+  for(const t of tris){ A.fromArray(t[0]); Bv.fromArray(t[1]); C.fromArray(t[2]);
+    const nn=Bv.clone().sub(A).cross(C.clone().sub(A)), c=A.clone().add(Bv).add(C).multiplyScalar(1/3);
+    out.push(...(nn.dot(c.sub(inside))<0?[t[0],t[2],t[1]]:t)); }
+  const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(out.flat(),3)); g.computeVertexNormals(); return g; });
+const noseOld=geo('nose2',()=>{
   const tl=[-.008,.15,-.004], tr=[.008,.15,-.004], tip=[0,.092,.034], bl=[-.018,.086,.002], br=[.018,.086,.002], bm=[0,.084,.014];
   const tris=[[tl,tip,bl],[tr,br,tip],[tl,tr,tip],[bl,tip,bm],[bm,tip,br]];
   const A=new THREE.Vector3(),B=new THREE.Vector3(),C=new THREE.Vector3(), inside=new THREE.Vector3(0,.12,-.03), out=[];
@@ -181,13 +216,28 @@ const M=o=>{ const m = ui.shade==='toon' ? new THREE.MeshToonMaterial(Object.ass
                                         : new THREE.MeshStandardMaterial(Object.assign({roughness:.85, metalness:0, flatShading:ui.shade==='flat'},o)); mats.push(m); return m; };
 function tex(w,h,paint){ const c=document.createElement('canvas'); c.width=w; c.height=h; paint(c.getContext('2d'),w,h); const t=new THREE.CanvasTexture(c); t.magFilter=THREE.LinearFilter; return t; }
 const UNDER='#5b504d', BAND='#3c3433';
-function faceTex(skin,fem){ return tex(256,128,(g,w,h)=>{
+function faceTex(skin,fem,hair){ return tex(512,256,(g,w,h)=>{
   g.fillStyle=skin; g.fillRect(0,0,w,h);
-  const cx=w/2, Y=m=>(1-m/.256)*h, X=f=>cx+f*w;
-  const bar=(x0,x1,y,th,col)=>{ g.fillStyle=col; g.beginPath(); g.moveTo(x0,y); g.lineTo(x1,y-th*.2); g.lineTo(x1,y+th*.6); g.lineTo(x0,y+th); g.closePath(); g.fill(); };
-  for(const s of [-1,1]){ const a=X(s*.016), b=X(s*.078); bar(Math.min(a,b),Math.max(a,b),Y(.152),fem?2.6:3.4,'rgba(92,62,34,.95)'); }   // eyes: long slits in the shadow of the brow
-  g.fillStyle='rgba(120,82,46,.85)'; g.fillRect(cx-7,Y(.087),14,2.5);                                                                // nostril shadow
-  if(fem){ g.fillStyle='rgba(176,112,86,.5)'; g.fillRect(cx-6,Y(.064),12,2); }                              // mouth, barely there
+  const cx=w/2, Y=m=>(1-m/.2395)*h, X=f=>cx+f*w;
+  const sk=new THREE.Color(skin), mix=(c,t,a)=>{ const o=sk.clone().lerp(new THREE.Color(c),t); return `rgba(${o.r*255|0},${o.g*255|0},${o.b*255|0},${a})`; };
+  for(const s of [-1,1]){
+    // brow: thick at the inner end, tapering outward along the ridge
+    g.fillStyle=mix(hair,.75,.9); g.beginPath();
+    g.moveTo(X(s*.022),Y(.134)); g.quadraticCurveTo(X(s*.05),Y(fem?.144:.142),X(s*.086),Y(.136));
+    g.lineTo(X(s*.084),Y(.134)); g.quadraticCurveTo(X(s*.05),Y(fem?.139:.136),X(s*.022),Y(.129)); g.closePath(); g.fill();
+    // eye: almond of white, iris, upper lid line and a little lid shadow
+    const ex=X(s*.052), ey=Y(.118), ew=w*.02, eh=h*.012;
+    g.fillStyle=mix('#000',.35,.35); g.beginPath(); g.ellipse(ex,ey-eh*1.2,ew*1.05,eh*.9,0,0,TAU); g.fill();
+    g.fillStyle='#ece6dc'; g.beginPath(); g.moveTo(ex-ew,ey); g.quadraticCurveTo(ex,ey-eh*1.3,ex+ew,ey); g.quadraticCurveTo(ex,ey+eh*1.1,ex-ew,ey); g.fill();
+    g.fillStyle='#4a3524'; g.beginPath(); g.arc(ex+s*1,ey,eh*.85,0,TAU); g.fill();
+    g.fillStyle='#161210'; g.beginPath(); g.arc(ex+s*1,ey,eh*.38,0,TAU); g.fill();
+    g.strokeStyle='rgba(40,26,18,.95)'; g.lineWidth=fem?2.2:1.8; g.beginPath(); g.moveTo(ex-ew,ey); g.quadraticCurveTo(ex,ey-eh*1.35,ex+ew,ey+.5); g.stroke();
+  }
+  // lips: a slightly redder tone over the sculpted lip shapes, darker line between them
+  g.fillStyle=mix(fem?'#b04a44':'#a0574a',fem?.38:.25,1);
+  g.beginPath(); g.ellipse(cx,Y(.058),w*.026,h*.012,0,0,TAU); g.fill();
+  g.beginPath(); g.ellipse(cx,Y(.046),w*.024,h*.014,0,0,TAU); g.fill();
+  g.strokeStyle=mix('#3a1810',.6,.9); g.lineWidth=1.6; g.beginPath(); g.moveTo(cx-w*.027,Y(.0515)); g.quadraticCurveTo(cx,Y(.0505),cx+w*.027,Y(.0515)); g.stroke();
 }); }
 function bandTex(skin,stops){ return tex(4,64,(g,w,h)=>{ g.fillStyle=skin; g.fillRect(0,0,w,h); for(const [a,b,c] of stops){ g.fillStyle=c; g.fillRect(0,(1-b)*h,w,(b-a)*h); } }); }
 
@@ -202,10 +252,11 @@ function figure(fem,skin,hair){
   const torso=Gp(hips,0,.05,0);
   P(F.torso,fem?M({map:bandTex(skin,[[.5,.72,UNDER],[.5,.53,BAND]])}):skinM,torso);
   P(F.neck,skinM,torso,0,.43,-.004);
-  const head=Gp(torso,0,.545,.008), face=Gp(head,0,-.01,0);
-  P(F.head,M({map:faceTex(skin,fem)}),face);
-  P(noseG,skinM,face,0,0,.098,fem?.85:1,fem?.94:1,fem?.85:1);
-  for(const s of [-1,1]) P(earG,skinM,face,s*.074,.13,-.016,.01,.03,.018,0,s*.4,0);
+  const head=Gp(torso,0,.55,.008), face=Gp(head,0,-.01,0);
+  if(fem) face.scale.set(.95,.97,.97);
+  P(sculptHead(fem),M({map:faceTex(skin,fem,hair)}),face);
+  P(noseG,skinM,face,0,0,.112,fem?.85:1,fem?.94:1,fem?.85:1);
+  if(!fem) for(const s of [-1,1]) P(earG,skinM,face,s*.075,.104,-.016,.008,.03,.018,-.12,s*.2,0);   // her bob covers the ears
   const hm=M({color:hair});
   P(fem?bobG:capG,hm,face);
   const sh=[],el=[],lg=[],kn=[];
@@ -252,7 +303,7 @@ const guides=new THREE.Group(); scene.add(guides); guides.visible=false;
 
 // ---------- camera ----------
 const VIEWS={front:{yaw:0,pitch:.02,size:2.05,ty:.92}, three:{yaw:.62,pitch:.06,size:2.05,ty:.92}, side:{yaw:Math.PI/2,pitch:.02,size:2.05,ty:.92}, back:{yaw:Math.PI,pitch:.02,size:2.05,ty:.92},
-  game:{yaw:Math.PI/4,pitch:.6,size:9,ty:.6}, his:{yaw:.55,pitch:.06,size:.55,ty:1.56,fig:0}, her:{yaw:.55,pitch:.06,size:.55,ty:1.54,fig:1}};
+  game:{yaw:Math.PI/4,pitch:.6,size:9,ty:.6}, his:{yaw:.55,pitch:.06,size:.5,ty:1.57,fig:0}, her:{yaw:.55,pitch:.06,size:.5,ty:1.56,fig:1}};
 const V=Object.assign({tx:0},VIEWS.front);
 let W=1,H=1; function resize(){ W=stage.clientWidth; H=stage.clientHeight; renderer.setSize(W,H,false); } new ResizeObserver(resize).observe(stage); resize();
 let drag=null;
