@@ -118,7 +118,7 @@ function genFace(seed,fem){
   // body: a second random stream from the same seed
   const b=rng(seed*97+13), B=(a,c)=>a+(c-a)*b();
   P.body={head:B(.93,1.07), neck:B(.8,1.3), shoulders:fem?B(.88,1.06):B(.9,1.15), torso:B(.94,1.06), waist:B(.88,1.15), hips:fem?B(1,1.12):B(.92,1.06),
-    chest:fem?0:B(0,1), breast:fem?B(0,1):0, glutes:B(0,1), legs:B(.92,1.08), knee:B(.94,1.06), arms:B(.95,1.05), girth:B(.85,1.2)};
+    chest:fem?0:B(0,1), breast:fem?B(0,1):0, glutes:B(0,1), legs:B(.92,1.08), knee:B(.94,1.06), arms:B(.95,1.05), girth:B(.85,1.2), muscle:fem?B(0,.75):B(.15,1)};
   for(const key in P.body) P.body[key]=Math.round(P.body[key]*1000)/1000;
   for(const key in P) if(typeof P[key]==='number') P[key]=Math.round(P[key]*10000)/10000;
   return P; }
@@ -156,17 +156,26 @@ function bodyShape(fem,Bd){ const F=shape(fem), k='b'+fem+JSON.stringify(Bd);
     ? [-1,1].map(s=>({a:side(s)*1.0,y:.285*T,sa:.62,sy:.055,amp:.006+Bd.breast*.03}))
     : [-1,1].map(s=>({a:side(s)*1.05,y:.325*T,sa:.75,sy:.05,amp:Bd.chest*.014}));
   const gluteLobes=[-1,1].map(s=>({a:Math.PI+side(s)*.95,y:fem?-.065:-.075,sa:.7,sy:.06,amp:.004+Bd.glutes*.022}));
-  const tY=[.2,.23,.25,.27,.29,.31,.33,.35].map(y=>y*T), pY=[-.14,-.11,-.09,-.07,-.05,-.03,-.01,.02];
-  return Object.assign({},F,{torso:loftLobes('T'+k,torsoRings,12,tY,chestLobes), pelvis:loftLobes('P'+k,pelvisRings,12,pY,gluteLobes)}); }
-function shape(fem){ const f=fem?.88:1, h=fem?1.08:1, k='f'+fem; const TR=[[-.01,.124*h,.086],[.06,.118*(fem?.92:1),.084],[.14,.128*(fem?.95:1),.09,.004],[.22,.148*f,.1,.012],[.28,.162*f,fem?.104:.108,fem?.014:.02],[.335,.172*f,fem?.1:.1,.012],[.37,.184*f,.094,.008],[.395,.19*f,.086,.002],[.418,.172*f,.075,-.004],[.442,.13*f,.065,-.006],[.462,.088*f,.058,-.008],[.48,.06,.052,-.008]], PR=[[-.18,.03,.034,.004],[-.16,.08*h,.07,.004],[-.12,.13*h,.088],[-.06,.14*h,.095,-.006],[0,.135*h,.09],[.04,.126*h,.087]]; return { torsoRings:TR, pelvisRings:PR,
+  const tY=[.1,.13,.16,.19,.2,.23,.25,.27,.29,.31,.33,.35,.43,.45].map(y=>y*T), pY=[-.14,-.11,-.09,-.07,-.05,-.03,-.01,.02];
+  const m=Math.round(Bd.muscle*20)/20, mk=fem+'_'+m, base=(.35+m)*1.4;   // a little shape even at low tone
+  torsoLobesExtra(chestLobes,T,m);
+  const limb=(name,lobes,extra)=>loftLobes('M'+name+mk,F.rings[name],8,extra,lobes.map(L=>Object.assign({},L,{amp:L.amp*base})));
+  return Object.assign({},F,{torso:loftLobes('T'+k,torsoRings,12,tY,chestLobes), pelvis:loftLobes('P'+k,pelvisRings,12,pY,gluteLobes),
+    upperArm:limb('upperArm',[{a:0,y:-.14,sa:1.0,sy:.09,amp:.008},{a:Math.PI,y:-.1,sa:1.1,sy:.1,amp:.007},{a:Math.PI/2,y:-.03,sa:1.3,sy:.05,amp:.004},{a:-Math.PI/2,y:-.03,sa:1.3,sy:.05,amp:.004}],[-.24,-.2,-.16,-.12,-.06,-.04]),
+    forearm:limb('forearm',[{a:.35,y:-.06,sa:1.1,sy:.07,amp:.006},{a:Math.PI,y:-.07,sa:1.2,sy:.08,amp:.004}],[-.02,-.08,-.16]),
+    thigh:limb('thigh',[{a:0,y:-.2,sa:1.0,sy:.14,amp:.011},{a:0,y:-.35,sa:.7,sy:.05,amp:.005},{a:Math.PI,y:-.18,sa:1.0,sy:.13,amp:.009}],[-.05,-.08,-.18,-.22,-.31,-.34]),
+    shin:limb('shin',[{a:Math.PI,y:-.11,sa:.95,sy:.08,amp:.011},{a:.45,y:-.08,sa:.5,sy:.07,amp:.003}],[-.03,-.09,-.17,-.26])}); }
+// traps on the upper back and a hint of abs, scaled by muscle tone
+function torsoLobesExtra(list,T,m){ list.push({a:Math.PI,y:.44*T,sa:.9,sy:.045,amp:.002+m*.008},{a:0,y:.16*T,sa:.45,sy:.08,amp:m*.004},{a:Math.PI,y:.3*T,sa:.8,sy:.08,amp:m*.004}); }
+function shape(fem){ const f=fem?.88:1, h=fem?1.08:1, k='f'+fem; const TR=[[-.01,.124*h,.086],[.06,.118*(fem?.92:1),.084],[.14,.128*(fem?.95:1),.09,.004],[.22,.148*f,.1,.012],[.28,.162*f,fem?.104:.108,fem?.014:.02],[.335,.172*f,fem?.1:.1,.012],[.37,.184*f,.094,.008],[.395,.19*f,.086,.002],[.418,.172*f,.075,-.004],[.442,.13*f,.065,-.006],[.462,.088*f,.058,-.008],[.48,.06,.052,-.008]], PR=[[-.18,.03,.034,.004],[-.16,.08*h,.07,.004],[-.12,.13*h,.088],[-.06,.14*h,.095,-.006],[0,.135*h,.09],[.04,.126*h,.087]]; const RG={}, L=(n,kk,r,sg)=>{ RG[n]=r; return loft(kk,r,sg); }; return { rings:RG, torsoRings:TR, pelvisRings:PR,
   torso:loft('t'+k,[[-.01,.124*h,.086],[.06,.118*(fem?.92:1),.084],[.14,.128*(fem?.95:1),.09,.004],[.22,.148*f,.1,.012],[.28,.162*f,fem?.104:.108,fem?.014:.02],[.335,.172*f,fem?.1:.1,.012],[.37,.184*f,.094,.008],[.395,.19*f,.086,.002],[.418,.172*f,.075,-.004],[.442,.13*f,.065,-.006],[.462,.088*f,.058,-.008],[.48,.06,.052,-.008]],7),
   pelvis:loft('p'+k,[[-.18,.03,.034,.004],[-.16,.08*h,.07,.004],[-.12,.13*h,.088],[-.06,.14*h,.095,-.006],[0,.135*h,.09],[.04,.126*h,.087]],7),
   neck:loft('n'+k,[[0,.078*f,.066,-.006,2.5],[.05,.067*f,.061,-.006,2.5],[.1,.062*f,.059,-.006,2.5],[.15,.058*f,.057,-.008,2.5],[.2,.054*f,.055,-.012,2.5],[.215,.03,.03,-.012]],6),
-  upperArm:loft('u'+k,[[-.3,.03,.03],[-.28,.038*f,.04],[-.18,.043*f,.047,.003],[-.08,.046*f,.05],[-.02,.048*f,.05],[.012,.042*f,.046],[.026,.026,.032],[.032,.004,.006]],5),
-  forearm:loft('f'+k,[[.03,.02,.02],[.015,.04*f,.04],[-.04,.046*f,.045],[-.12,.038*f,.036],[-.22,.028*f,.024],[-.245,.026*f,.022],[-.255,.012,.012]],5),
+  upperArm:L('upperArm','u'+k,[[-.3,.03,.03],[-.28,.038*f,.04],[-.18,.043*f,.047,.003],[-.08,.046*f,.05],[-.02,.048*f,.05],[.012,.042*f,.046],[.026,.026,.032],[.032,.004,.006]],5),
+  forearm:L('forearm','f'+k,[[.03,.02,.02],[.015,.04*f,.04],[-.04,.046*f,.045],[-.12,.038*f,.036],[-.22,.028*f,.024],[-.245,.026*f,.022],[-.255,.012,.012]],5),
   hand:loft('h'+k,[[-.19,.006,.015],[-.16,.011,.028],[-.09,.014,.04*f],[-.03,.016,.042*f],[.005,.014,.03],[.015,.008,.015]],4),
-  thigh:loft('g'+k,[[.06,.03,.03],[.04,.064*h,.066],[0,.076*h,.08,.004],[-.12,.074*h,.078,.008],[-.26,.066,.07,.006],[-.37,.052,.055,.004],[-.42,.046,.048],[-.44,.025,.025]],6),
-  shin:loft('s'+k,[[.035,.026,.026],[.01,.047,.05],[-.06,.05*f,.056,-.008],[-.14,.048*f,.055,-.012],[-.22,.038,.042,-.006],[-.33,.028,.028],[-.38,.025,.025],[-.4,.016,.016]],5),
+  thigh:L('thigh','g'+k,[[.06,.03,.03],[.04,.064*h,.066],[0,.076*h,.08,.004],[-.12,.074*h,.078,.008],[-.26,.066,.07,.006],[-.37,.052,.055,.004],[-.42,.046,.048],[-.44,.025,.025]],6),
+  shin:L('shin','s'+k,[[.035,.026,.026],[.01,.047,.05],[-.06,.05*f,.056,-.008],[-.14,.048*f,.055,-.012],[-.22,.038,.042,-.006],[-.33,.028,.028],[-.38,.025,.025],[-.4,.016,.016]],5),
   foot:loft('o'+k,[[-.11,.012,.016],[-.09,.03,.026,0,2.4],[-.01,.036*f,.03,0,2.6],[.07,.04*f,.024,0,2.6],[.11,.034*f,.016,0,2.4],[.13,.012,.008]],4),
   head:loft('d'+k,[
     [0,.034*f,.022,.062,3],       // underside of the chin: broad and flat
@@ -257,7 +266,9 @@ const noseOld=geo('nose2',()=>{
 // ---------- materials: solid colours; only the face and underwear bands use tiny textures ----------
 const mats=[];
 const RAMP=(()=>{ const t=new THREE.DataTexture(new Uint8Array([40,40,40, 140,140,140, 255,255,255]),3,1,THREE.RGBFormat); t.minFilter=t.magFilter=THREE.NearestFilter; t.generateMipmaps=false; t.needsUpdate=true; return t; })();
-const M=o=>{ const m = ui.shade==='toon' ? new THREE.MeshToonMaterial(Object.assign({gradientMap:RAMP, flatShading:true},o))
+const ramp=v=>{ const d=new Uint8Array(v.length*3); v.forEach((x,i)=>d.set([x,x,x],i*3)); const t=new THREE.DataTexture(d,v.length,1,THREE.RGBFormat); t.minFilter=t.magFilter=THREE.NearestFilter; t.generateMipmaps=false; t.needsUpdate=true; return t; };
+const RAMPS={toon:RAMP, ink:RAMP, two:ramp([70,255]), painted:ramp([70,125,185,255])};
+const M=o=>{ const m = RAMPS[ui.shade] ? new THREE.MeshToonMaterial(Object.assign({gradientMap:RAMPS[ui.shade], flatShading:true},o))
                                         : new THREE.MeshStandardMaterial(Object.assign({roughness:.85, metalness:0, flatShading:ui.shade==='flat'},o)); mats.push(m); return m; };
 function tex(w,h,paint){ const c=document.createElement('canvas'); c.width=w; c.height=h; paint(c.getContext('2d'),w,h); const t=new THREE.CanvasTexture(c); t.magFilter=THREE.LinearFilter; return t; }
 const UNDER='#5b504d', BAND='#3c3433';
