@@ -244,6 +244,6 @@ function loop(now){
 requestAnimationFrame(loop);
 window.__region={squads,know,route,send,secCentre,setSpeed,camT,
   focus:(x,z)=>{ camT.tx=x; camT.tz=z; camT.dist=2400; camS.tx=x; camS.tz=z; camS.dist=1600; },
-  placeSquad:(i,x,z)=>{ const s=squads[i]; s.x=x; s.z=z; reveal(x,z); refreshCurrent(); drawOverlay(); buildPins(); buildBuildings(); drawSquads(); if(selSec) drawSector(); },
+  placeSquad:(i,x,z,people)=>{ const s=squads[i]; s.x=x; s.z=z; if(people!==undefined) s.people=people; reveal(x,z); refreshCurrent(); drawOverlay(); buildPins(); buildBuildings(); drawSquads(); if(selSec) drawSector(); },
   resize,select:(c,r)=>{ selSec=[c,r]; drawOverlay(); drawSector(); }};
 })();
