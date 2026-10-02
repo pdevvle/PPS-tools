@@ -75,12 +75,19 @@ def build(src,bbox,name,out):
             if k: b['loot']=k; b['what']=t.get('shop') or t.get('amenity')
             S['buildings'].append(b); continue
         if 'highway' in t:
-            S['roads'].append({'pts':g,'cls':t['highway'],'lanes':t.get('lanes'),'surface':t.get('surface')}); continue
+            r={'pts':g,'cls':t['highway'],'lanes':t.get('lanes'),'surface':t.get('surface')}
+            for k in ('bridge','tunnel','layer','name','oneway'):   # bridges and culverts decide how roads meet water
+                if t.get(k): r[k]=t[k]
+            S['roads'].append(r); continue
         if 'barrier' in t: S['barriers'].append({'pts':g,'kind':t['barrier']}); continue
-        if 'waterway' in t: S['water'].append({'pts':g,'kind':t['waterway']}); continue
+        if 'waterway' in t:
+            w={'pts':g,'kind':t['waterway']}
+            for k in ('intermittent','tunnel','layer','name'):
+                if t.get(k): w[k]=t[k]
+            S['water'].append(w); continue
         area=t.get('landuse') or t.get('leisure') or t.get('natural') or (t.get('amenity') if t.get('amenity') in ('parking',) else None)
         if area and g[0]==g[-1]:
-            S['areas'].append({'pts':g[:-1],'kind':area})
+            S['areas'].append({'pts':g[:-1],'kind':area,**({'name':t['name']} if t.get('name') else {})})
             k=poi_kind(t)
             if k: 
                 cx=sum(p[0] for p in g)/len(g); cz=sum(p[1] for p in g)/len(g); S['pois'].append({'p':[round(cx,1),round(cz,1)],'kind':k,'what':t.get('shop') or t.get('amenity'),'name':t.get('name','')})
@@ -119,5 +126,6 @@ def build(src,bbox,name,out):
     json.dump(S,open(out,'w'),separators=(',',':'))
     print(out, len(S['buildings']),'bld',len(S['roads']),'roads',len(S['pois']),'pois',len(S['areas']),'areas','relief',round(max(H)-lo,1),'m')
 
-build('anthem.json',(33.8628,-112.14,33.8682,-112.1335),'Anthem town centre','sector_anthem.json')
-build('newriver.json',(33.9153,-112.1418,33.9207,-112.1353),'New River','sector_newriver.json')
+if __name__=='__main__':
+    build('anthem.json',(33.8628,-112.14,33.8682,-112.1335),'Anthem town centre','sector_anthem.json')
+    build('newriver.json',(33.9153,-112.1418,33.9207,-112.1353),'New River','sector_newriver.json')
