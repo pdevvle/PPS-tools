@@ -33,6 +33,7 @@ Everything people see on the ground: the procedural survivors and raiders with t
 - Buildings are extruded footprints with hip or flat roofs; no doors, windows (except shop glass), porches, AC units, signs.
 - Vehicles: cars were removed for clutter; a small set of wrecks and abandoned cars should return.
 - Props for the base (beds, water tanks, gardens, workbenches, walls you build) once `building.md` names them.
+- Furniture and fittings for procedural interiors (houses, stores, stations) once `interiors.md` lists them.
 
 ## First tasks
 

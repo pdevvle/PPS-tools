@@ -42,8 +42,8 @@ The real ground at walking scale, everywhere in the region: baked offline from O
 1. Split the long build steps (target under 30 ms each) and measure in a real browser.
 2. Ring level of detail for terrain and textures.
 3. Bake more blocks along the corridor; stream between blocks.
-4. Building detail: doors, windows, roof types from footprint and use; enterable shells for shops (needed by combat and loot).
+4. Building detail: roof types and facades from footprint and use. Doors, windows and what is inside belong to `interiors.md`; agree the hook that cuts their openings into your shells.
 
 ## Out of scope
 
-Combat rules (`combat.md`), the region map (`strategy-map.md`), figures (`models.md`).
+Combat rules (`combat.md`), the region map (`strategy-map.md`), figures (`models.md`), building interiors (`interiors.md`).

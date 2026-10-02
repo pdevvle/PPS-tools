@@ -33,6 +33,7 @@ Turn the combat demonstration into the game's combat layer: real-time exploratio
 - No classes, weapons, ammo, grenades, injuries that persist, morale (the panicked ink exists), or loot after a fight.
 - Raiders' AI is greedy per unit; no pod tactics, flanking intent or retreat.
 - Line of sight is a coarse sample along a line at 1.5 m; no partial visibility.
+- No fighting indoors yet: interiors (walls, doors, windows, furniture cover) come from `interiors.md`.
 
 ## First tasks
 
