@@ -1,0 +1,104 @@
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one large stage that streams sectors around the squad, a rail with the streaming map and live costs, then a short sheet on how it works. */
+:root{
+  color-scheme:dark;
+  --bg:#1b1c1e; --panel:#232427; --line:#38393d; --text:#e2e0dc; --muted:#98968f; --accent:#d9bf86;
+  --body:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+html,body{background:var(--bg)}
+body{color:var(--text);font:15px/1.5 var(--body);padding-inline:16px}
+.wrap{max-width:1240px;margin:0 auto;padding-block:20px 36px;display:flex;flex-direction:column;gap:16px}
+header{display:flex;flex-direction:column;gap:4px}
+.eyebrow{font:12px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin:0}
+h1{font:600 clamp(24px,4.4vw,34px)/1.1 var(--body);margin:0;text-wrap:balance}
+.lede{margin:0;max-width:72ch;color:var(--muted)}
+.studio{display:grid;grid-template-columns:minmax(0,1fr) 230px;border:1px solid var(--line);background:var(--panel)}
+#stage{position:relative;height:min(74vh,700px);min-height:400px;overflow:hidden;touch-action:none;cursor:crosshair;background:#9fc6e4}
+#stage canvas{display:block;width:100%;height:100%}
+#labels{position:absolute;inset:0;pointer-events:none}
+.lbl{position:absolute;left:0;top:0;display:flex;align-items:center;gap:6px;white-space:nowrap;background:rgba(24,24,26,.82);color:#f1eee8;border-radius:4px;padding:3px 7px;font:500 12px var(--body)}
+.lbl i{width:9px;height:9px;border-radius:50%;flex:none}
+.lbl span{font:11px var(--mono);color:#b9b6ae;text-transform:uppercase;letter-spacing:.06em}
+.lbl.small{font-size:10.5px;padding:2px 5px}.lbl.small span{display:none}
+.where{position:absolute;left:12px;top:10px;font:600 13px var(--body);color:#1d1c1a;background:rgba(255,255,255,.72);padding:3px 8px;border-radius:4px;pointer-events:none}
+.readout{position:absolute;left:12px;bottom:10px;font:12px/1.5 var(--mono);color:#f1eee8;background:rgba(24,24,26,.78);padding:5px 9px;border-radius:4px;pointer-events:none;font-variant-numeric:tabular-nums}
+.readout em{color:#e0b94a;font-style:normal}
+.fail{position:absolute;left:16px;bottom:16px;color:#ffb4a8;font:13px var(--mono)}
+.rail{border-left:1px solid var(--line);padding:14px;display:flex;flex-direction:column;gap:15px}
+.group{display:flex;flex-direction:column;gap:6px}
+.group>span{font:11px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+#segView{grid-template-columns:repeat(2,1fr)}
+.seg.two{grid-template-columns:1fr}
+.seg button{background:var(--bg);border:1px solid var(--line);color:var(--text);font:500 14px var(--body);padding:5px 8px;cursor:pointer;text-align:left}
+.seg button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+.tg{display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer}
+.tg input{accent-color:var(--accent);width:16px;height:16px}
+button:focus-visible,.tg input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tip{font:12px var(--mono);color:var(--muted);margin:0}
+.sheet{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px}
+.sheet section{min-width:0}
+.sheet h2{font:600 17px var(--body);margin:0 0 6px}
+dl{margin:0;display:grid;gap:2px;font-variant-numeric:tabular-nums}
+dl div{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line);padding:4px 0}
+dt{color:var(--muted)} dd{margin:0;text-align:right}
+.kinds{list-style:none;margin:0;padding:0;display:grid;gap:2px}
+.kinds li{display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line);padding:4px 0}
+.kinds i{width:10px;height:10px;border-radius:50%}
+.kinds b{margin-left:auto;font-weight:500;font-variant-numeric:tabular-nums}
+.sheet ul.plain{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px}
+.credit{font:12px var(--mono);color:var(--muted)}
+.credit a{color:var(--accent)}
+@media (max-width:760px){.studio{grid-template-columns:1fr}.rail{border-left:0;border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}#stage{height:62vh}}
+.mini{display:grid;grid-template-columns:repeat(5,1fr);gap:2px;aspect-ratio:1;position:relative}
+.mini i{background:#2b2c2f;border:1px solid transparent;display:block}
+.mini i[data-s="queued"]{background:#4a4434}
+.mini i[data-s="building"]{background:#8a6a2a}
+.mini i[data-s="ring"]{background:#4f6a4a}
+.mini i[data-s="centre"]{background:#6f8f58;border-color:var(--accent)}
+.mini b{position:absolute;width:7px;height:7px;border-radius:50%;background:#e0a526;border:1px solid #1b1c1e;transform:translate(-50%,-50%);pointer-events:none}
+.key{display:flex;flex-wrap:wrap;gap:4px 10px;font:11px var(--mono);color:var(--muted)}
+.key span{display:flex;align-items:center;gap:4px}.key span::before{content:"";width:9px;height:9px;background:var(--k)}
+.loading[hidden]{display:none}
+.loading{position:absolute;inset:0;display:grid;place-items:center;font:14px var(--mono);color:#1d1c1a;background:rgba(201,180,143,.6);pointer-events:none}
+</style>
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Nightfall · streaming prototype</p>
+    <h1>New River, walking between sectors</h1>
+    <p class="lede">A 3 km block of real New River, Arizona, baked offline into 25 sectors of 600 m that share their edges exactly. The page keeps the 3 by 3 sectors around your squad loaded: the one they stand in at full detail with ink outlines, the eight around it lighter. Walk toward an edge and the next row loads while the far one is dropped. Click the ground to move; paths cross sector edges.</p>
+  </header>
+  <div class="studio">
+    <div id="stage" aria-label="3D view of the streaming sectors">
+      <div id="labels"></div>
+      <div class="where" id="where">New River</div>
+      <div class="readout" id="readout"></div>
+      <div class="loading" id="loading">Loading sectors…</div>
+    </div>
+    <div class="rail">
+      <div class="group"><span>Sectors</span><div class="mini" id="mini" aria-label="Which sectors are loaded"></div>
+        <div class="key"><span style="--k:#6f8f58">centre</span><span style="--k:#4f6a4a">loaded</span><span style="--k:#8a6a2a">building</span><span style="--k:#2b2c2f">dropped</span></div></div>
+      <div class="group"><span>Live cost</span><dl id="cost"></dl></div>
+      <div class="group"><span>View</span><div class="seg" id="segView"><button type="button" data-v="tactical" aria-pressed="true">Tactical</button><button type="button" data-v="street" aria-pressed="false">Street</button><button type="button" data-v="high" aria-pressed="false">High</button></div></div>
+      <div class="group"><span>Layers</span>
+        <label class="tg"><input type="checkbox" id="tglSwim"> Swim gear</label>
+        <label class="tg"><input type="checkbox" id="tglSeams"> Show sector edges</label></div>
+      <p class="tip">Drag to turn · right-drag to pan · wheel to zoom</p>
+    </div>
+  </div>
+  <div class="sheet">
+    <section><h2>How it streams</h2><ul class="plain">
+      <li>The whole block is shaped once, offline: washes, roads, bridges, pads, plants and the movement grid. Each sector file then carries its own slice, so nothing is computed when it loads except meshes.</li>
+      <li>Sector files are fetched on demand and built a step at a time between frames, so loading spreads over several frames instead of freezing one.</li>
+      <li>The centre sector gets ink outlines and creases; the ring around it doesn't. When the squad crosses an edge, outlines move with them.</li>
+      <li>Sectors two away from the squad are dropped and their memory released.</li></ul></section>
+    <section><h2>Block</h2><dl id="block"></dl></section>
+    <section><h2>Credits</h2><p class="credit">Map data © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>, ODbL. Elevation: Terrain Tiles on AWS.</p></section>
+  </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
