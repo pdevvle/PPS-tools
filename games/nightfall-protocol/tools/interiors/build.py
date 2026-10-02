@@ -7,7 +7,8 @@ import os, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 src = open(os.path.join(HERE, 'interiors.src.html')).read()
 sites = open(os.path.join(HERE, 'sites.json')).read()
-frag = src.replace('/*SITES*/[]', sites)
+kit = open(os.path.join(HERE, 'kit.js')).read()
+frag = src.replace('/*SITES*/[]', sites).replace('/*KIT*/', kit)
 page = ('<!doctype html>\n<html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">\n' + frag + '\n</html>\n')
 out = os.path.join(HERE, '..', '..', 'mockups', 'interiors.html')

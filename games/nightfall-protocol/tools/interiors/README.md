@@ -3,7 +3,7 @@
 The mockup for `briefs/interiors.md`, task 1: procedural interiors on real footprints from the New River block.
 
 - `extract.py` cuts the test buildings out of the baked block (`mockups/streaming/block/`). It keeps each footprint, its identity, its tags and the roads and yard walls within 60 m, and writes `sites.json`. It also copies a shop's point of interest (`loot`, `what`) onto the building that sits on it. The bake does not do that yet.
-- `interiors.src.html` holds the generator and the page. `build.py` inlines `sites.json` and writes `mockups/interiors.html`. Pass it a path to also write the Artifact fragment.
+- `interiors.src.html` holds the generator and the page. `kit.js` holds the prop kit: each prop is a builder that returns boxes in its own frame. The builders cover cabinets with doors and drawers, appliances, chairs and tables that vary with noise, cars, Southwest wall decor, and disorder (overturned furniture, hanging doors, pulled drawers, litter). `build.py` inlines `sites.json` and `kit.js` and writes `mockups/interiors.html`. Pass it a path to also write the Artifact fragment.
 
 The generator runs in five seed streams from the building id (`newriver/2_2/0`, plus `#n` when rerolled):
 
