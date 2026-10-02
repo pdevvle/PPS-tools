@@ -8,6 +8,10 @@ These two scripts turn a real place into a game sector: roads, building footprin
 
 The sectors in `data/sectors/` are 600 m squares around Anthem's town centre (Safeway, Ace Hardware, Circle K plaza) and New River (the Roadrunner, the New River wash).
 
+## The pilot region
+
+`regionfetch.sh` downloads the region box (33.80 to 34.09 N, 112.24 to 112.04 W) from Overpass in eight tiles, retrying each until the server answers. `prep_region.py` merges those tiles with the earlier sector downloads and writes `../../data/region/region_i17.json`: a 600 m sector grid with building counts, sites, elevation range and ground type per sector; a 100 m height grid with a 3 km apron; drawable roads, washes, lakes and land use; towns and peaks; and a travel graph built by splitting roads at shared OSM nodes. The committed file was built while only part of the region had downloaded, so the south-west tile and the Anthem and New River surroundings are complete and the rest has terrain only; rerun both scripts to fill it in.
+
 Fetch data once per sector and keep it: the public Overpass servers have usage limits and are not meant to be queried by every player.
 
 ## Licence
