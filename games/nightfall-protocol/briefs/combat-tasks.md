@@ -329,6 +329,10 @@ These are `chooseAction` branches in `rules.js`, tested headless on a fixed seed
 - Raider bodies drop their weapon and remaining ammo as a container on their cell.
 - Everything the fight changed is written to the interior's change record (`{doors:{}, taken:[]}` already exists in `freshRecord`): doors broken, windows broken, items destroyed, bodies. Coming back shows the aftermath.
 
+### Progress
+
+Steps 1 and 2 of 7h are done, and so are the sight and cover rules (7b), breaching (7c) and roles for the sentry and boss (7d); see `tools/combat/README.md`. Diagonal steps never pass through a door frame. Doorway overwatch, fall back and flee (7e), holdouts (7f), loot (7g) and joining the streamed world (step 3) are still to do.
+
 ### 7h. Order of work for 7
 
 1. **Headless first**: in a test page, load the Roadrunner from `tools/interiors/sites.json` with history `den`. Build the combat view and run sight, cover and reach checks. Assert against a hand-checked map: no sight through walls, sight through the open front door, full cover behind the counter.
