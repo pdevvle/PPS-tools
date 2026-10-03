@@ -41,9 +41,18 @@ The world is hybrid: a sector map you plan on, and real-time exploration that dr
 
 ## Time: two clocks
 
-- **World clock** (sun, weather, travel, water, food, sleep): at 1× map speed 10 game minutes pass per real second, so one real hour is 25 game days. 4× fast-forward on the map; tactical exploration and fights run at their own pace and advance the world clock by the time they really take in the world.
+- **World clock** (sun, weather, travel, water, food, sleep): at 1× map speed 10 game minutes pass per real second, so one real hour is 25 game days. 4× fast-forward on the map. Tactical exploration runs close to real time. **In a fight, every character's turn (squad and enemies alike) advances the world clock 5 game minutes**, so a round with 4 soldiers and 3 raiders is 35 minutes and an 8-round fight is about 4.7 game hours: fights cost water, food, daylight and life time like anything else.
 - **Life clock** (ageing, pregnancy, growing up, skills that build over years): **one day of life per real hour of play at 1×**, which is one life day per 25 game days. It is tied to the world clock, so 4× fast-forward on the map ages people four times as fast, and time in fights counts as the world time it takes.
-- Consequences at 1×: about 3–4 life months in a 100-hour campaign. A pregnancy (about 270 life days) takes about 270 hours of play at 1× (about 68 at 4×), and children effectively stay children. Ageing is close to frozen within a campaign: a survivor's age is mostly who they are, not a timer. Population changes mainly through newcomers, departures and deaths; births are rare, late events. The ratio is one constant, so it can be tuned after playtests.
+- Effective ageing depends on how the time is spent:
+
+| What you're doing | World time per real hour | Life days per real hour |
+|---|---|---|
+| Map at 1× | 25 days | 1 |
+| Map at 4× | 100 days | 4 |
+| A fight (7 characters, a turn about every 20 real seconds) | about 1.75 days | about 0.07 |
+| Tactical exploration (near real time) | about 1 hour | about 0 |
+
+- Consequences if everything were played at 1×: about 3–4 life months in a 100-hour campaign. A pregnancy (about 270 life days) takes about 270 hours of play at 1× (about 68 at 4×), and children effectively stay children. Ageing is close to frozen within a campaign: a survivor's age is mostly who they are, not a timer. Population changes mainly through newcomers, departures and deaths; births are rare, late events. The ratio is one constant, so it can be tuned after playtests.
 - Needs (water, food, sleep) run on the world clock; age and lifespan run on the life clock. Systems state which clock each rate uses.
 
 ## Simulation rules
