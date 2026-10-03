@@ -17,9 +17,8 @@ Not started. What exists to build on:
 
 - Where the base is (a real ranch or house near New River) and how big the buildable area is.
 - What can be built: walls and gates, beds and shelter, water storage and collection, gardens, kitchens, workbenches, watch posts.
-- People: needs (water, food, sleep, health, morale), skills, jobs and a work queue.
-- Resources: stockpiles by loot category; what turns into what.
-- Time: how base time relates to the map clock; what happens at the base while squads are away.
+- People and their needs live in `people.md`; stores, production chains and civics in `settlement.md`. This brief owns construction, the base layout and the tasks buildings offer.
+- Time follows the two clocks in the foundation.
 - Defence: raids on the base become tactical fights (with `combat.md`); built walls and posts are real cover.
 
 ## Interfaces

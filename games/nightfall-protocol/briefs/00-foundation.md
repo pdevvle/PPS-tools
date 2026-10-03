@@ -39,6 +39,21 @@ The world is hybrid: a sector map you plan on, and real-time exploration that dr
 - **Knowledge** of a sector: unknown, rumoured, scouted, current. Scouted goes stale after 3 days. Lookouts reveal 1 to 3 sectors around them, more from high ground.
 - **Loot categories**: food, medicine, tools, fuel, gear, water, shelter, goods (derived from what a place really is).
 
+## Time: two clocks
+
+- **World clock** (sun, weather, travel, water, food, sleep): at 1× map speed 10 game minutes pass per real second, so one real hour is 25 game days. 4× fast-forward on the map; tactical exploration and fights run at their own pace and advance the world clock by the time they really take in the world.
+- **Life clock** (ageing, pregnancy, growing up, skills that build over years): **one year of life per real hour of play at 1×**, which is 14.6 life days per game day. It is tied to the world clock, so fast-forwarded travel and long fights advance it too; that is what keeps an hour-per-year pace from feeling glacial.
+- Rough consequences at 1×: pregnancy about 45 minutes of play (18 game days); a child becomes an adult (16 years) in about 16 hours; a 25-year-old reaches old age (60) in about 35 hours. A 40–80 hour campaign spans two generations.
+- Needs (water, food, sleep) run on the world clock; age and lifespan run on the life clock. Systems state which clock each rate uses.
+
+## Simulation rules
+
+- **Tiers.** The player's settlement runs at full detail: every survivor simulated individually (first draft target 15–30 people). Other settlements, raider groups and traders in the region are aggregates (population, stocks, attitude) and become individuals only when visited or fought. The tactical window is the only place with per-frame simulation.
+- **Cadence.** Needs drain at continuous rates settled each game hour; jobs are chosen when a task ends (utility AI); social interactions every few game hours; stores, spoilage and prices daily; demographics and civics daily to seasonal. Continuous rates let any stretch of time be fast-forwarded in one step.
+- **Control.** Indirect for the settlement: the player sets priorities, roles and rules, and survivors decide what to do (RimWorld-style). Direct for squads in the field and in combat.
+- **Portable logic.** Simulation is plain functions over plain data, with no rendering inside, deterministic from seeds, runnable in a worker and later in WebAssembly or native code. Saves record the state and what changed from the generated world, not snapshots of it.
+- **Region.** A few other settlements in the corridor (abstract until visited) plus travelling traders; first draft can start with traders only.
+
 ## Combat values (from the demonstration; combat owns tuning)
 
 Two actions per soldier; an action moves up to 12 "effective metres" (distance divided by the terrain multiplier). Shooting ends the turn. Aim: squad 72, raiders 60. Cover −20 half, −40 full; hunker adds another −20 when in cover; +15 from more than 2 m higher; −1.5 per metre beyond 24 m (to −40); +10 under 8 m; overwatch reaction −15; first-strike free shot +10 against targets without cover. Crit 10%, 40% when flanked. Damage 3–5, +2 on a crit. HP: squad 6, raider 4, raider boss 6. Raiders see 16 m in a 130° cone, 5 m all round; the squad spots at 30 m with line of sight.
