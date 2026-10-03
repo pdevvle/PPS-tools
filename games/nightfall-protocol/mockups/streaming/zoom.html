@@ -171,25 +171,308 @@ const NF=(()=>{ const BLOCK={center:[33.918,-112.13855],half:1500}, RC=REGION.ce
   const inBlock=(x,z)=>{ const [bx,bz]=regionToBlock(x,z); return Math.abs(bx)<BLOCK.half-20&&Math.abs(bz)<BLOCK.half-20; };
   const rect=[[-1,-1],[1,-1],[1,1],[-1,1]].map(([a,b])=>blockToRegion(a*BLOCK.half,b*BLOCK.half));
   return {BLOCK,regionToBlock,blockToRegion,inBlock,rect,mode:'region'}; })();
+// ---------- campaign: the strategic layer's rules (clock, light and heat, travel, water, scavenging, raiders, saving) ----------
+// No rendering, so the same file runs in the pages and in Node (tools/region/test.js). The page draws what this holds.
+const Campaign=(()=>{
+const VERSION=1, SAVE_KEY='nightfall.campaign.v1';
+const K={UNKNOWN:0,RUMOUR:1,SCOUT:2,CURRENT:3}, STALE=3*1440;   // scouted knowledge goes stale after 3 days
+const LOOT=['food','medicine','tools','fuel','gear','water','shelter','goods'];
+// what one unit of each loot category is and what it weighs; base.stock holds these units for the base (building.md)
+const UNIT={food:{name:'rations',kg:1},medicine:{name:'med kits',kg:.5},tools:{name:'parts',kg:2},fuel:{name:'L fuel',kg:.8},gear:{name:'gear',kg:2},water:{name:'L water',kg:1},shelter:{name:'materials',kg:5},goods:{name:'trade goods',kg:1}};
+const CARRY=25, WATER_CAP=6;   // kg a person carries, water included; litres of water a person carries at most
+const SPEED={motorway:5,motorway_link:5,trunk:5,primary:5,secondary:5,tertiary:5,unclassified:5,residential:5,track:4}, OFF=2.5;
+const STEP=5;   // game minutes per simulation step at most
+
+// ---------- light and heat: early summer in the Sonoran desert ----------
+const SUNRISE=5*60+20, SUNSET=19*60+35, T_LO=24, T_HI=40, T_MIN_AT=5.5, T_MAX_AT=16, LAPSE=.0065, T_REF=600, REST_HEAT=.5;
+const mod=m=>((m%1440)+1440)%1440;
+function sunAt(min){ const m=mod(min), h=m/60;
+  const daylight=m<SUNRISE-30||m>SUNSET+30?0:m<SUNRISE+30?(m-SUNRISE+30)/60:m>SUNSET-30?(SUNSET+30-m)/60:1;
+  const phase=daylight===0?'night':daylight<1?(m<720?'dawn':'dusk'):'day';
+  let t;   // coolest just before sunrise, hottest mid-afternoon
+  if(h>=T_MIN_AT&&h<T_MAX_AT) t=T_LO+(T_HI-T_LO)*(1-Math.cos(Math.PI*(h-T_MIN_AT)/(T_MAX_AT-T_MIN_AT)))/2;
+  else { const s=(h>=T_MAX_AT?h-T_MAX_AT:h+24-T_MAX_AT)/(24-T_MAX_AT+T_MIN_AT); t=T_HI-(T_HI-T_LO)*(1-Math.cos(Math.PI*s))/2; }
+  const arc=(m-SUNRISE)/(SUNSET-SUNRISE);   // 0 at sunrise, 1 at sunset
+  return {daylight, phase, tempC:t, elev:Math.max(0,Math.sin(Math.PI*arc)), arc}; }
+const heatOf=tC=>Math.max(0,Math.min(1,(tC-30)/10));   // 0 at 30 °C or cooler, 1 at 40 °C
+// litres per person per hour: 0.5 on the move, up to double in full heat; resting in shade 0.2, up to 0.4
+const waterRate=(moving,heat)=>(moving?.5:.2)*(1+heat);
+// how fast travel goes against the base speeds: darkness slows off-road travel most, heat slows everything, thirst more so
+function paceAt(min,off,heat,thirsty){ const dark=1-sunAt(min).daylight; return (off?1-.4*dark:1-.15*dark)*(1-.25*heat)*(thirsty?.6:1); }
+
+// ---------- the region: terrain, sectors, the travel graph ----------
+let R,D,G,adj,HX,HZ,SEC,homeSec,homeXZ,st=null;
+const hRaw=(x,z)=>{ const fx=(x-D.x0)/D.step, fz=(z-D.z0)/D.step, i=Math.max(0,Math.min(D.nx-2,Math.floor(fx))), j=Math.max(0,Math.min(D.nz-2,Math.floor(fz))), u=Math.min(1,Math.max(0,fx-i)), v=Math.min(1,Math.max(0,fz-j)), h=(a,b)=>D.h[b*D.nx+a];
+  return (h(i,j)*(1-u)+h(i+1,j)*u)*(1-v)+(h(i,j+1)*(1-u)+h(i+1,j+1)*u)*v; };
+const elevAt=(x,z)=>hRaw(x,z)+D.base;
+const tempAt=(min,x,z)=>sunAt(min).tempC-LAPSE*(elevAt(x,z)-T_REF);   // high ground runs cooler
+const secAt=(x,z)=>{ const c=Math.floor((x+HX)/SEC), r=Math.floor((z+HZ)/SEC); return c>=0&&r>=0&&c<R.cols&&r<R.rows?[c,r]:null; };
+const secCentre=(c,r)=>[-HX+(c+.5)*SEC, -HZ+(r+.5)*SEC];
+const sameSec=(a,b)=>!!a&&!!b&&a[0]===b[0]&&a[1]===b[1];
+function init(region){ R=region; D=R.dem; G=R.graph; HX=R.half[0]; HZ=R.half[1]; SEC=R.sector;
+  adj=G.nodes.map(()=>[]);
+  for(const [a,b,len,cls] of G.edges){ const t=len/1000/(SPEED[cls]||4), ha=hRaw(...G.nodes[a]), hb=hRaw(...G.nodes[b]);   // +1 h per 300 m climbed
+    adj[a].push([b,t+Math.max(0,hb-ha)/300]); adj[b].push([a,t+Math.max(0,ha-hb)/300]); }
+  homeSec=secAt(R.home[0]+700,R.home[1]);   // just east of New River, on the ranch side
+  homeXZ=secCentre(...homeSec); }
+function nearestNodes(x,z,k=6){ const best=[]; for(let i=0;i<G.nodes.length;i++){ if(!adj[i].length) continue; const d=Math.hypot(G.nodes[i][0]-x,G.nodes[i][1]-z);
+  if(best.length<k||d<best[best.length-1][1]){ best.push([i,d]); best.sort((a,b)=>a[1]-b[1]); if(best.length>k) best.pop(); } } return best; }
+const offTime=(x0,z0,x1,z1)=>Math.hypot(x1-x0,z1-z0)/1000/OFF+Math.max(0,hRaw(x1,z1)-hRaw(x0,z0))/300;
+function heap(){ const a=[]; return {get size(){ return a.length; },
+  push(t,i){ a.push([t,i]); let k=a.length-1; while(k){ const p=(k-1)>>1; if(a[p][0]<=a[k][0]) break; [a[p],a[k]]=[a[k],a[p]]; k=p; } },
+  pop(){ const top=a[0], last=a.pop(); if(a.length){ a[0]=last; let k=0; for(;;){ const l=2*k+1, r=l+1; let m=k; if(l<a.length&&a[l][0]<a[m][0]) m=l; if(r<a.length&&a[r][0]<a[m][0]) m=r; if(m===k) break; [a[m],a[k]]=[a[k],a[m]]; k=m; } } return top; } }; }
+// fastest way on the road graph (Dijkstra), walking off-road to and from it; each leg keeps its base hours and whether it is off-road
+function route(x0,z0,x1,z1){
+  const direct=offTime(x0,z0,x1,z1), B=new Set(nearestNodes(x1,z1).map(([i])=>i)), dist=new Map(), prev=new Map(), h=heap();
+  for(const [i] of nearestNodes(x0,z0)){ const t=offTime(x0,z0,...G.nodes[i]); if(!dist.has(i)||t<dist.get(i)){ dist.set(i,t); prev.set(i,-1); h.push(t,i); } }
+  let best=direct, bestEnd=-1;
+  while(h.size){ const [t,i]=h.pop(); if(t>dist.get(i)||t>=best) continue;
+    if(B.has(i)){ const tt=t+offTime(...G.nodes[i],x1,z1); if(tt<best){ best=tt; bestEnd=i; } }
+    for(const [j,et] of adj[i]){ const nt=t+et; if(!dist.has(j)||nt<dist.get(j)){ dist.set(j,nt); prev.set(j,i); h.push(nt,j); } } }
+  const pts=[[x0,z0]], segs=[];
+  if(bestEnd>=0){ const chain=[]; for(let i=bestEnd;i!==-1;i=prev.get(i)) chain.push(i); chain.reverse();
+    let tp=0; chain.forEach((i,k)=>{ const t=dist.get(i); pts.push(G.nodes[i].slice()); segs.push({h:t-tp,off:k===0}); tp=t; });
+    pts.push([x1,z1]); segs.push({h:best-tp,off:true}); }
+  else { pts.push([x1,z1]); segs.push({h:direct,off:true}); }
+  let km=0; for(let i=1;i<pts.length;i++) km+=Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1])/1000;
+  return {pts,segs,hours:best,km}; }
+// a trip: progress is measured in base hours, and spent faster or slower as light and heat change
+function makeTrip(rt){ const cum=[0]; for(const s of rt.segs) cum.push(cum[cum.length-1]+s.h); return {pts:rt.pts,segs:rt.segs,cum,total:cum[cum.length-1],done:0}; }
+function segOf(tr,done){ let k=0; while(k<tr.segs.length-1&&tr.cum[k+1]<=done) k++; return k; }
+function tripPos(tr,done=tr.done){ const k=segOf(tr,done), a=tr.pts[k], b=tr.pts[k+1], f=tr.segs[k].h>1e-9?Math.min(1,Math.max(0,(done-tr.cum[k])/tr.segs[k].h)):1;
+  return {x:a[0]+(b[0]-a[0])*f, z:a[1]+(b[1]-a[1])*f, seg:k}; }
+// what a trip will cost from now: arrival time, water and hours spent lying up in the heat (a forecast; raiders aside)
+function forecast(tr,startMin,people,restHeat){ let t=startMin, done=tr.done, water=0, rest=0;
+  while(done<tr.total-1e-9&&t-startMin<14*1440){ const p=tripPos(tr,done), heat=heatOf(tempAt(t,p.x,p.z));
+    if(restHeat&&heat>=REST_HEAT){ water+=waterRate(false,heat)*people*STEP/60; rest+=STEP; t+=STEP; continue; }
+    const pace=paceAt(t,tr.segs[p.seg].off,heat,false), need=(tr.total-done)/pace*60, dt=Math.min(STEP,need);
+    water+=waterRate(true,heat)*people*dt/60; done+=dt/60*pace; t+=dt; }
+  return {arrive:t, hours:(t-startMin)/60, water, rest:rest/60}; }
+
+// ---------- randomness that survives a reload ----------
+function rand(){ let s=st.rng=(st.rng+0x6D2B79F5)>>>0; s=Math.imul(s^s>>>15,s|1); s^=s+Math.imul(s^s>>>7,s|61); return ((s^s>>>14)>>>0)/4294967296; }
+const hash=n=>{ let s=(n*2654435761)>>>0; s=Math.imul(s^s>>>15,s|1); s^=s+Math.imul(s^s>>>7,s|61); return ((s^s>>>14)>>>0)/4294967296; };
+
+// ---------- knowledge ----------
+function lookout(x,z){ const s=secAt(x,z); if(!s) return 1; const [c,r]=s, me=R.sectors[r][c]; let around=0,n=0;
+  for(let dr=-3;dr<=3;dr++) for(let dc=-3;dc<=3;dc++){ const q=R.sectors[r+dr]?.[c+dc]; if(q){ around+=q.lo; n++; } }
+  return Math.min(3,1+Math.floor(Math.max(0,me.hi-around/n)/45)); }   // high ground sees further
+function reveal(x,z){ const s=secAt(x,z); if(!s) return 0; const [c,r]=s, rad=Math.max(1,lookout(x,z)-(sunAt(st.minutes).daylight<.5?1:0));   // one less at night
+  for(let dr=-rad;dr<=rad;dr++) for(let dc=-rad;dc<=rad;dc++){ const kk=st.know[r+dr]?.[c+dc]; if(!kk||Math.hypot(dr,dc)>rad+.4) continue; if(kk.k<K.SCOUT) kk.k=K.SCOUT; kk.seen=st.minutes; }
+  return rad; }
+function refreshCurrent(){ for(const row of st.know) for(const k of row) if(k.k===K.CURRENT) k.k=K.SCOUT;
+  for(const s of st.squads){ const q=secAt(s.x,s.z); if(q){ st.know[q[1]][q[0]].k=K.CURRENT; st.know[q[1]][q[0]].seen=st.minutes; } }
+  st.know[homeSec[1]][homeSec[0]].k=K.CURRENT; st.know[homeSec[1]][homeSec[0]].seen=st.minutes; }
+const stale=kk=>kk.k===K.SCOUT&&st.minutes-kk.seen>=STALE;
+
+// ---------- a new campaign ----------
+function newGame(seed=20261003){
+  st={v:VERSION, minutes:7*60+30, rng:seed>>>0, seq:1, know:R.sectors.map(row=>row.map(()=>({k:0,seen:0}))), squads:[], sites:{}, bands:[], base:{stock:{}}, log:[], enc:null, waitUntil:0};
+  for(const p of R.places) if(['town','village','hamlet'].includes(p.kind)){ const s=p.sector; for(let dr=-2;dr<=2;dr++) for(let dc=-2;dc<=2;dc++){ const kk=st.know[s[1]+dr]?.[s[0]+dc]; if(kk) kk.k=Math.max(kk.k,K.RUMOUR); } }
+  { const [c,r]=homeSec; for(let dr=-7;dr<=7;dr++) for(let dc=-7;dc<=7;dc++){ const kk=st.know[r+dr]?.[c+dc], d=Math.hypot(dr,dc); if(!kk||d>7.4) continue; if(d<=3.4){ kk.k=K.SCOUT; kk.seen=st.minutes; } else kk.k=Math.max(kk.k,K.RUMOUR); } }
+  const [hx,hz]=homeXZ, sq=(name,people,c,x,z)=>({name,people,c,x,z,water:people*WATER_CAP,pack:{},restHeat:false,trip:null,task:null,thirsty:false});
+  st.squads.push(sq('Ranch party',4,'#e0a526',hx,hz), sq('Scouts',2,'#5b9fc4',hx+120,hz+80));
+  spawnBands(4); reveal(hx,hz); refreshCurrent();
+  note('The ranch is quiet. Two squads are ready.');
+  return st; }
+// raider bands: lairs well away from the ranch, near a road, spread apart
+function spawnBands(n){ const nodes=[]; for(let i=0;i<G.nodes.length;i++) if(adj[i].length){ const [x,z]=G.nodes[i]; if(Math.hypot(x-homeXZ[0],z-homeXZ[1])>6000) nodes.push(i); }
+  const lairs=[]; for(let tries=0;lairs.length<n&&tries<400;tries++){ const [x,z]=G.nodes[nodes[Math.floor(rand()*nodes.length)]]; if(lairs.every(([a,b])=>Math.hypot(a-x,b-z)>4500)) lairs.push([x,z]); }
+  for(const [x,z] of lairs){ const size=3+Math.floor(rand()*4); st.bands.push({id:'b'+st.seq++, size, boss:size>=5, x, z, lair:[x,z], trip:null, campUntil:st.minutes+rand()*300, seen:null, cool:{}}); } }
+function note(msg){ st.log.unshift({t:st.minutes,msg}); if(st.log.length>40) st.log.length=40; }
+const fmtT=m=>{ const d=Math.floor(m/1440)+1, h=Math.floor(mod(m)/60), mm=Math.floor(m%60); return `Day ${d} ${String(h).padStart(2,'0')}:${String(mm).padStart(2,'0')}`; };
+const nearestPlace=(x,z)=>{ let best=null,bd=1e12; for(const p of R.places){ const d=Math.hypot(p.p[0]-x,p.p[1]-z); if(d<bd){ bd=d; best=p; } } return best?(bd<1500?best.name:`${(bd/1609).toFixed(1)} mi from ${best.name}`):'open desert'; };
+
+// ---------- squads: carrying, water, orders ----------
+const packKg=sq=>Object.entries(sq.pack).reduce((a,[k,n])=>a+n*UNIT[k].kg,0);
+const capKg=sq=>sq.people*CARRY, waterCap=sq=>sq.people*WATER_CAP;
+const atHome=sq=>sameSec(secAt(sq.x,sq.z),homeSec);
+const busy=sq=>!!(sq.trip||sq.task);
+function send(i,x,z){ const sq=st.squads[i]; if(!sq||sq.task||st.enc) return null; const rt=route(sq.x,sq.z,x,z); sq.trip=makeTrip(rt); note(`${sq.name} set out for ${nearestPlace(x,z)}.`); return sq.trip; }
+function stop(i){ const sq=st.squads[i]; if(sq?.trip){ sq.trip=null; note(`${sq.name} stopped.`); } }
+function unload(sq){ const got=Object.entries(sq.pack).filter(([,n])=>n>0); if(got.length){ for(const [k,n] of got) st.base.stock[k]=(st.base.stock[k]||0)+n; note(`${sq.name} brought home ${got.map(([k,n])=>`${n} ${UNIT[k].name}`).join(', ')}.`); sq.pack={}; }
+  if(sq.water<waterCap(sq)) sq.water=waterCap(sq); sq.thirsty=false; }
+
+// ---------- sites: what is there, how long it takes, what comes back ----------
+const SIZE={supermarket:3,school:3,fire_station:3,storage_rental:3,community_centre:3,place_of_worship:2,car_repair:2,waste_disposal:1,waste_transfer_station:2,storage_tank:2,water_tower:2,fuel:2,convenience:2,restaurant:2,variety_store:2,pharmacy:2,veterinary:2,clothes:1,shoes:1,fast_food:1,shelter:1,toilets:1,parking:1};
+const sizeOf=s=>SIZE[s.what]||1, HOURS=[0,1,2,3];
+function stockOf(i){ let s=st.sites[i]; if(s) return s; const site=R.sites[i], size=sizeOf(site), base=[0,8,16,30][size], r=k=>hash(i*31+k), stock={};
+  stock[site.loot]=Math.round(base*(.6+r(1)*.8)*(site.loot==='water'?6:1));   // tanks and wells hold litres
+  for(let k=0;k<2;k++){ const other=LOOT[Math.floor(r(2+k)*LOOT.length)]; if(other!==site.loot) stock[other]=(stock[other]||0)+Math.round(base*(.15+r(4+k)*.25)); }
+  return st.sites[i]={stock, visits:0, last:0, full:Object.values(stock).reduce((a,b)=>a+b,0)}; }
+// others pick places over as the days go by
+function weather(s){ const days=(st.minutes-(s.last||450))/1440; if(days<=0) return; const f=Math.pow(.985,days); for(const k in s.stock) s.stock[k]=Math.round(s.stock[k]*f); }
+const leftOf=i=>{ const s=st.sites[i]; if(!s) return 1; const n=Object.values(s.stock).reduce((a,b)=>a+b,0); return s.full?n/s.full:0; };
+const scavHours=(i,people,min=st.minutes)=>HOURS[sizeOf(R.sites[i])]*Math.sqrt(4/Math.max(1,people))*(sunAt(min).daylight<.5?1.3:1);   // dark rooms take longer
+function canScavenge(i,si){ const sq=st.squads[i], site=R.sites[si]; if(!sq||!site||busy(sq)||st.enc) return false; const q=secAt(sq.x,sq.z); return sameSec(q,site.sector)&&st.know[q[1]][q[0]].k>=K.SCOUT; }
+function scavenge(i,si){ if(!canScavenge(i,si)) return false; const sq=st.squads[i], h=scavHours(si,sq.people); sq.task={kind:'scavenge',site:si,start:st.minutes,until:st.minutes+h*60};
+  note(`${sq.name} started searching ${siteName(R.sites[si])} (${h.toFixed(1)} h).`); return true; }
+const siteName=s=>s.name||String(s.what).replace(/_/g,' ');
+const ORDER=['medicine','water','food','tools','fuel','gear','goods','shelter'];   // what a squad takes first when it can't carry everything
+function finishScavenge(sq){ const si=sq.task.site, s=stockOf(si); weather(s); const took={};
+  for(const k of ORDER){ const have=s.stock[k]||0; if(!have) continue; const want=Math.ceil(have*.6); let got=0;
+    if(k==='water'){ const fill=Math.max(0,Math.min(want,waterCap(sq)-sq.water)); sq.water+=fill; got+=fill; if(fill) sq.thirsty=false; }   // drink up and fill the bottles first
+    const room=capKg(sq)-sq.water-packKg(sq), n=Math.max(0,Math.min(Math.floor(want-got),Math.floor(room/UNIT[k].kg)));
+    if(n) sq.pack[k]=(sq.pack[k]||0)+n; got+=n;
+    s.stock[k]=Math.max(0,have-Math.ceil(got-1e-9)); if(got>=.5) took[k]=Math.round(got); }
+  s.visits++; s.last=st.minutes; sq.task=null;
+  const got=Object.entries(took).filter(([,n])=>n>0);
+  note(got.length?`${sq.name} searched ${siteName(R.sites[si])}: ${got.map(([k,n])=>`${n} ${UNIT[k].name}`).join(', ')}.`:`${sq.name} searched ${siteName(R.sites[si])} and found nothing worth carrying.`);
+  return took; }
+
+// ---------- raiders ----------
+const RAIDER_HEAT=.6;   // bands lie up in the worst of the heat
+function stepBand(b,dt){ const heat=heatOf(tempAt(st.minutes,b.x,b.z));
+  if(b.trip){ if(heat>=RAIDER_HEAT) return; const tr=b.trip, p=tripPos(tr); tr.done=Math.min(tr.total,tr.done+dt/60*(tr.segs[p.seg].off?1:.9)*(1-.2*heat));   // they know the ground, dark or not
+    const q=tripPos(tr); b.x=q.x; b.z=q.z; if(tr.done>=tr.total-1e-9){ b.trip=null; b.campUntil=st.minutes+(2+rand()*4)*60; } return; }
+  if(st.minutes<b.campUntil||heat>=RAIDER_HEAT) return;
+  for(let tries=0;tries<8;tries++){ const a=rand()*Math.PI*2, d=1500+rand()*3500, x=b.lair[0]+Math.cos(a)*d, z=b.lair[1]+Math.sin(a)*d;   // roam around the lair
+    if(!secAt(x,z)) continue; b.trip=makeTrip(route(b.x,b.z,x,z)); return; }
+  b.campUntil=st.minutes+60; }
+// who sees whom: squads spot further by day and from high ground; raiders spot a moving squad more easily than one holed up
+const squadSight=(sq,min)=>900*(.45+.55*sunAt(min).daylight)*(1+.2*(lookout(sq.x,sq.z)-1));
+const bandSight=(sq,min)=>650*(.5+.5*sunAt(min).daylight)*(sq.trip?1:.6);
+const HOME_SIGHT=1500;
+function spot(){ let enc=null;
+  for(const b of st.bands){ let seen=Math.hypot(b.x-homeXZ[0],b.z-homeXZ[1])<HOME_SIGHT*(.5+.5*sunAt(st.minutes).daylight);
+    st.squads.forEach((sq,i)=>{ const d=Math.hypot(b.x-sq.x,b.z-sq.z), sR=squadSight(sq,st.minutes), bR=bandSight(sq,st.minutes); if(d<sR) seen=true;
+      if(enc||atHome(sq)||(b.cool[i]||0)>st.minutes||(d>=sR&&d>=bR)) return;
+      enc=encounter(b,i,d<sR&&d<bR?'both':d<sR?'squad':'enemy',d); });
+    if(seen) b.seen={x:b.x,z:b.z,t:st.minutes}; }
+  return enc; }
+const ALERT={squad:'unaware',both:'suspicious',enemy:'alert'};
+// the encounter the tactical layer plays out (data shape agreed in briefs/strategy-map.md)
+function encounter(b,i,first,d){ const sq=st.squads[i], s=sunAt(st.minutes), x=(sq.x+b.x)/2, z=(sq.z+b.z)/2, q=secAt(x,z);
+  return {id:'e'+st.seq++, at:st.minutes, where:{x,z,sector:q,ground:q?R.sectors[q[1]][q[0]].type:'desert',place:nearestPlace(x,z)}, light:s.phase, tempC:Math.round(tempAt(st.minutes,x,z)),
+    squad:{index:i,name:sq.name,people:sq.people,pos:[sq.x,sq.z]}, enemy:{kind:'raiders',band:b.id,count:b.size,boss:b.boss,alert:ALERT[first],pos:[b.x,b.z]}, firstSight:first, distance:Math.round(d), forced:false}; }
+const bandOf=id=>st.bands.find(b=>b.id===id);
+function backOff(sq,b,m){ const dx=sq.x-b.x, dz=sq.z-b.z, l=Math.hypot(dx,dz)||1; let x=sq.x+dx/l*m, z=sq.z+dz/l*m; if(!secAt(x,z)){ x=sq.x; z=sq.z; } sq.trip=makeTrip(route(sq.x,sq.z,x,z)); }
+// the player's answer to an encounter: avoid, hide, engage (on baked ground) or fight it out (placeholder until combat reports results)
+function resolve(choice,result){ const e=st.enc; if(!e) return null; const sq=st.squads[e.squad.index], b=bandOf(e.enemy.band); let out='';
+  const forced=why=>{ st.enc={...e, id:'e'+st.seq++, forced:true, enemy:{...e.enemy,alert:'alert'}, firstSight:'enemy'}; note(why); return st.enc; };
+  if(!b||!sq){ st.enc=null; return null; }
+  if(choice==='avoid'){ if(e.forced) return e;
+    if(e.enemy.alert==='alert'&&b.size>sq.people&&rand()<.4) return forced(`The raiders ran ${sq.name} down.`);
+    backOff(sq,b,1500); b.cool[e.squad.index]=st.minutes+180; out=`${sq.name} pulled back from the raiders.`; }
+  else if(choice==='hide'){ if(e.forced) return e;
+    if(e.enemy.alert==='alert'||(e.enemy.alert==='suspicious'&&rand()<.35)) return forced(`The raiders found ${sq.name}.`);
+    sq.task={kind:'hide',until:st.minutes+60,start:st.minutes,resume:sq.trip}; sq.trip=null; b.cool[e.squad.index]=st.minutes+180; out=`${sq.name} lay low and the raiders passed.`; }
+  else if(choice==='fought'){   // back from the tactical ground; combat may say how it went
+    const won=result?result.won!==false:true; if(result&&result.people!==undefined) sq.people=Math.max(0,result.people);
+    if(won){ st.bands=st.bands.filter(o=>o!==b); out=`${sq.name} beat the raiders near ${e.where.place}.`; } else { backOff(sq,b,1500); b.cool[e.squad.index]=st.minutes+240; out=`${sq.name} was driven off.`; } }
+  else if(choice==='auto'){   // placeholder: rough odds from head count, aim and who saw whom first
+    const s=sq.people*72*(e.firstSight==='squad'?1.3:1), r=b.size*60*(e.enemy.alert==='alert'?1.15:1)*(b.boss?1.1:1), won=rand()<s/(s+r);
+    st.minutes+=60; sq.task=null;
+    if(won){ st.bands=st.bands.filter(o=>o!==b); out=`${sq.name} fought off ${b.size} raiders near ${e.where.place}.`; }
+    else { sq.people=Math.max(1,sq.people-1); sq.trip=null; backOff(sq,b,2000); b.cool[e.squad.index]=st.minutes+240; out=`${sq.name} lost a fight with the raiders and fell back; one of them didn't make it.`; } }
+  else return e;
+  sq.water=Math.min(sq.water,waterCap(sq)); st.enc=null; refreshCurrent(); note(out); return null; }
+
+// ---------- the clock ----------
+function stepSquad(sq,i,dt){ const ev={}; if(sq.water>waterCap(sq)) sq.water=waterCap(sq);   // fewer people carry less
+  if(atHome(sq)&&!sq.trip) unload(sq);
+  const heat=heatOf(tempAt(st.minutes,sq.x,sq.z)); let moving=false;
+  if(sq.task){ if(st.minutes>=sq.task.until){ if(sq.task.kind==='scavenge'){ ev.found=finishScavenge(sq); } else { sq.trip=sq.task.resume||null; sq.task=null; } } }
+  else if(sq.trip){ const tr=sq.trip, p=tripPos(tr);
+    if(!(sq.restHeat&&heat>=REST_HEAT)){ moving=true; tr.done=Math.min(tr.total,tr.done+dt/60*paceAt(st.minutes,tr.segs[p.seg].off,heat,sq.thirsty)); }
+    const q=tripPos(tr), was=secAt(sq.x,sq.z); sq.x=q.x; sq.z=q.z;
+    if(!sameSec(was,secAt(sq.x,sq.z))){ reveal(sq.x,sq.z); ev.revealed=true; }
+    if(tr.done>=tr.total-1e-9){ sq.trip=null; reveal(sq.x,sq.z); ev.revealed=true; ev.arrived=true; note(`${sq.name} reached ${nearestPlace(sq.x,sq.z)}.`); if(atHome(sq)) unload(sq); } }
+  if(!atHome(sq)){ sq.water=Math.max(0,sq.water-waterRate(moving,heat)*sq.people*dt/60);
+    if(sq.water<=0&&!sq.thirsty){ sq.thirsty=true; note(`${sq.name} is out of water and slowing down.`); } }
+  return ev; }
+const running=()=>!st.enc&&(st.squads.some(busy)||st.waitUntil>st.minutes);
+// advance the campaign by game minutes while anything is going on; stops early at an encounter or when all is still. Returns what the page needs to redraw.
+function step(minutes){ const out={revealed:false,arrived:false,found:false,encounter:null,elapsed:0};
+  let left=minutes;
+  while(left>1e-9&&running()){ const waitOnly=!st.squads.some(busy), dt=Math.min(STEP,left,waitOnly?st.waitUntil-st.minutes:STEP); left-=dt; out.elapsed+=dt; st.minutes+=dt;
+    st.squads.forEach((sq,i)=>{ const ev=stepSquad(sq,i,dt); if(ev.revealed) out.revealed=true; if(ev.arrived) out.arrived=true; if(ev.found) out.found=true; });
+    for(const b of st.bands) stepBand(b,dt);
+    const enc=spot(); if(enc){ st.enc=enc; out.encounter=enc;
+      note(`${enc.squad.name}: ${enc.enemy.count} raiders near ${enc.where.place} (${enc.firstSight==='squad'?'not seen us yet':enc.firstSight==='both'?'both sides saw each other':'they saw us first'}).`); }
+    if(st.waitUntil&&st.minutes>=st.waitUntil) st.waitUntil=0; }
+  refreshCurrent();
+  return out; }
+// wait (idle squads) until the next dawn or dusk
+function waitTurn(){ const m=mod(st.minutes), marks=[SUNRISE,SUNSET,SUNRISE+1440]; const next=marks.find(t=>t>m+1); st.waitUntil=st.minutes+(next-m); return st.waitUntil; }
+const waitLabel=()=>{ const m=mod(st.minutes); return m>SUNRISE+1&&m<SUNSET-1?'Wait for dusk':'Wait for dawn'; };
+
+// ---------- saving: one JSON blob in the viewer's browser ----------
+function serial(){ const o=JSON.parse(JSON.stringify(st)); o.know={k:st.know.map(row=>row.map(k=>k.k).join('')), seen:st.know.map(row=>row.map(k=>Math.round(k.seen)))}; return o; }
+function save(store){ if(!st||!store) return false; try{ store.setItem(SAVE_KEY,JSON.stringify(serial())); return true; }catch(e){ return false; } }
+function load(store){ if(!store) return false; try{ const raw=store.getItem(SAVE_KEY); if(!raw) return false; const o=JSON.parse(raw);
+    if(o.v!==VERSION||!o.know||o.know.k.length!==R.rows||o.know.k[0].length!==R.cols) return false;
+    o.know=o.know.k.map((row,r)=>[...row].map((ch,c)=>({k:+ch,seen:o.know.seen[r][c]}))); st=o; refreshCurrent(); return true; }catch(e){ return false; } }
+function forget(store){ try{ store&&store.removeItem(SAVE_KEY); }catch(e){} }
+
+return {VERSION,SAVE_KEY,K,LOOT,UNIT,CARRY,WATER_CAP,REST_HEAT,STALE,init,newGame,get state(){ return st; },get home(){ return homeSec; },get homeXZ(){ return homeXZ; },
+  sunAt,heatOf,waterRate,paceAt,tempAt,elevAt,hRaw,secAt,secCentre,route,makeTrip,tripPos,forecast,lookout,reveal,refreshCurrent,stale,fmtT,nearestPlace,
+  packKg,capKg,waterCap,atHome,busy,send,stop,stockOf,leftOf,scavHours,canScavenge,scavenge,siteName,sizeOf,resolve,step,running,waitTurn,waitLabel,
+  squadSight,bandSight,serial,save,load,forget,note};
+})();
+if(typeof module!=='undefined') module.exports=Campaign;
 (function(){
-const R=REGION, stage=document.getElementById('rstage'), labelsEl=document.getElementById('rlabels');
+// The region map: draws the campaign (tools/region/campaign.js) and takes the player's orders. Runs on its own page
+// (mockups/region-map.html) and as the map half of the zoom page, where glue-pre.js has defined NF.
+const ZOOM=typeof NF!=='undefined';
+const R=REGION, stage=document.getElementById(ZOOM?'rstage':'stage'), labelsEl=document.getElementById(ZOOM?'rlabels':'labels');
 if(!window.THREE){ stage.insertAdjacentHTML('beforeend','<p class="fail">The 3D view needs three.js, which could not load. Check your connection and reload.</p>'); return; }
 let renderer; try{ renderer=new THREE.WebGLRenderer({antialias:true}); }catch(e){ stage.insertAdjacentHTML('beforeend','<p class="fail">This browser could not start WebGL.</p>'); return; }
 renderer.setPixelRatio(Math.min(2,devicePixelRatio||1)); renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap; stage.prepend(renderer.domElement);
-const TAU=Math.PI*2, VE=1.6, SEC=R.sector, D=R.dem, HX=R.half[0], HZ=R.half[1];
+const C=Campaign, S=()=>C.state; C.init(R);
+const store=(()=>{ try{ const s=window.localStorage, k='__nf_probe'; s.setItem(k,'1'); s.removeItem(k); return s; }catch(e){ return null; } })();
+const resumed=C.load(store); if(!resumed) C.newGame();
+const TAU=Math.PI*2, VE=1.6, SEC=R.sector, D=R.dem, HX=R.half[0], HZ=R.half[1], K=C.K, KN=['Unknown','Rumoured','Scouted','Current'];
+const TAC_RATE=1, TURN_MIN=5;   // tactical exploration runs in real time; each character's turn in a fight is 5 game minutes (foundation)
 const scene=new THREE.Scene(), cam=new THREE.PerspectiveCamera(36,1,10,200000);
 scene.fog=new THREE.Fog(0xd9c9a8,30000,90000); renderer.setClearColor(0xd9c9a8);
 const hemi=new THREE.HemisphereLight(0xfff3e0,0x6a5a48,.55), sun=new THREE.DirectionalLight(0xfff0d8,1); sun.castShadow=true; sun.shadow.mapSize.set(4096,4096); sun.shadow.bias=-.0006; sun.shadow.normalBias=8;
 Object.assign(sun.shadow.camera,{left:-26000,right:26000,top:26000,bottom:-26000,near:100,far:120000}); scene.add(hemi,sun,sun.target);
 const KIND={food:'#e0a33a',medicine:'#d9534f',tools:'#5b8fd1',fuel:'#a66bd1',gear:'#3fae7f',water:'#3fb6d9',shelter:'#8f8f8f',goods:'#b9a27a'};
 const KLABEL={food:'Food',medicine:'Medicine',tools:'Tools',fuel:'Fuel',gear:'Gear',water:'Water',shelter:'Shelter',goods:'Goods'};
-document.getElementById('siteKey').innerHTML=Object.keys(KIND).map(k=>`<li><i style="background:${KIND[k]}"></i>${KLABEL[k]}</li>`).join('');
+document.getElementById('siteKey').innerHTML=Object.keys(KIND).map(k=>`<li><i style="background:${KIND[k]}"></i>${KLABEL[k]}</li>`).join('')+'<li><i style="background:#6e1a10"></i>Raiders, where you have seen them</li>';
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+// ---------- the campaign's own interface: weather in the HUD, base stock, log, encounters ----------
+document.head.insertAdjacentHTML('beforeend',`<style>
+.hud .sky{font:12px var(--mono);color:#d8d4cc;margin:0 4px 0 -2px;white-space:nowrap}
+.hud .sky.hot{color:#f0a05a}
+.sqcard{display:flex;flex-direction:column;gap:6px;background:var(--bg);border:1px solid var(--line)}
+.sqcard.on{border-color:var(--accent)}
+.sqcard .sqb{border:0;background:none;width:100%}
+.sqcard .sqb .warn{color:#f0a05a}
+.sqctl{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:0 9px 8px;font-size:13px;color:var(--muted)}
+.sqctl label{display:flex;gap:6px;align-items:center;cursor:pointer}
+.sqctl button,.sites button,.newc{background:#2d2f33;border:1px solid var(--line);color:var(--text);font:600 12px var(--mono);padding:3px 8px;cursor:pointer}
+.sites button{margin-left:6px;flex:none}
+.sites button:disabled{opacity:.4;cursor:default}
+.sites .left{margin-left:auto;color:var(--muted);font-size:12px;white-space:nowrap}
+.danger{color:#e46a55;font-size:13px;margin:8px 0 0}
+.stock{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:2px 10px;font-size:13px;font-variant-numeric:tabular-nums}
+.stock li{display:flex;gap:6px;align-items:center}.stock i{width:8px;height:8px;border-radius:50%;flex:none}
+.log{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;font-size:13px;max-height:170px;overflow:auto}
+.log time{font:11px var(--mono);color:var(--muted);display:block}
+.newc{margin-top:6px}
+.lb.band{font:600 11px var(--body);color:#fff;background:rgba(110,26,16,.9);padding:1px 6px;border-radius:3px;text-shadow:none}
+.lb.band.old{background:rgba(110,26,16,.55)}
+.enc{position:absolute;left:50%;top:54px;transform:translateX(-50%);width:min(440px,calc(100% - 24px));background:rgba(24,24,26,.94);border:1px solid #c23b2e;border-radius:6px;padding:12px 14px;color:#f1eee8;z-index:4}
+.enc h3{font:600 17px var(--body);margin:0 0 4px}.enc p{margin:0 0 8px;font-size:14px;color:#d8d4cc}
+.enc .acts{display:flex;flex-wrap:wrap;gap:6px}
+.enc button{background:#2d2f33;border:1px solid var(--line);color:var(--text);font:600 13px var(--body);padding:6px 10px;cursor:pointer;border-radius:3px}
+.enc button.pri{background:var(--accent);border-color:var(--accent);color:#211b10}
+</style>`);
+const hud=stage.querySelector('.hud'), clockEl=document.getElementById('clock');
+clockEl.insertAdjacentHTML('afterend','<span class="sky" id="sky"></span>');
+hud.insertAdjacentHTML('beforeend','<button type="button" id="waitBtn"></button>');
+const skyEl=document.getElementById('sky'), waitBtn=document.getElementById('waitBtn');
+const sqEl=document.getElementById('squads'), secEl=document.getElementById('sector'), rail=sqEl.closest('section').parentElement;
+rail.insertAdjacentHTML('beforeend',`<section style="margin-top:14px"><h2>At the ranch</h2><ul class="stock" id="stock"></ul></section>
+  <section style="margin-top:14px"><h2>Log</h2><ol class="log" id="log"></ol><button type="button" class="newc" id="newBtn">New campaign</button></section>`);
+const stockEl=document.getElementById('stock'), logEl=document.getElementById('log'), newBtn=document.getElementById('newBtn');
+const encEl=document.createElement('div'); encEl.className='enc'; encEl.hidden=true; encEl.setAttribute('role','alertdialog'); stage.appendChild(encEl);
 
 // ---------- terrain ----------
-const hRaw=(x,z)=>{ const fx=(x-D.x0)/D.step, fz=(z-D.z0)/D.step, i=Math.max(0,Math.min(D.nx-2,Math.floor(fx))), j=Math.max(0,Math.min(D.nz-2,Math.floor(fz))), u=Math.min(1,Math.max(0,fx-i)), v=Math.min(1,Math.max(0,fz-j)), h=(a,b)=>D.h[b*D.nx+a];
-  return (h(i,j)*(1-u)+h(i+1,j)*u)*(1-v)+(h(i,j+1)*(1-u)+h(i+1,j+1)*u)*v; };
-const Y=(x,z)=>hRaw(x,z)*VE;
-const elevM=(x,z)=>Math.round(hRaw(x,z)+D.base);
+const hRaw=C.hRaw, Y=(x,z)=>hRaw(x,z)*VE;
 const W=(D.nx-1)*D.step, Hh=(D.nz-1)*D.step;
 const geo=new THREE.PlaneGeometry(W,Hh,D.nx-1,D.nz-1); geo.rotateX(-Math.PI/2);
 { const p=geo.attributes.position; for(let i=0;i<p.count;i++) p.setY(i,D.h[i]*VE); geo.computeVertexNormals(); }
@@ -227,27 +510,24 @@ terrain.position.set(D.x0+W/2,0,D.z0+Hh/2); terrain.receiveShadow=true; scene.ad
 const skirt=new THREE.Mesh(new THREE.PlaneGeometry(400000,400000),new THREE.MeshStandardMaterial({color:0xc4aa82, roughness:1})); skirt.rotation.x=-Math.PI/2; skirt.position.y=-20; scene.add(skirt);
 
 // ---------- knowledge and the sector overlay ----------
-const K={UNKNOWN:0,RUMOUR:1,SCOUT:2,CURRENT:3}, KN=['Unknown','Rumoured','Scouted','Current'];
-const know=R.sectors.map(row=>row.map(()=>({k:0,seen:0})));
-const secAt=(x,z)=>{ const c=Math.floor((x+HX)/SEC), r=Math.floor((z+HZ)/SEC); return c>=0&&r>=0&&c<R.cols&&r<R.rows?[c,r]:null; };
-const secCentre=(c,r)=>[-HX+(c+.5)*SEC, -HZ+(r+.5)*SEC];
+const secAt=C.secAt, secCentre=C.secCentre, home=C.home, [hx0,hz0]=C.homeXZ;
 const OC=document.createElement('canvas'); OC.width=TX; OC.height=TZ; const og=OC.getContext('2d'); const otex=new THREE.CanvasTexture(OC);
 const overlay=new THREE.Mesh(geo,new THREE.MeshBasicMaterial({map:otex, transparent:true, depthWrite:false, polygonOffset:true, polygonOffsetFactor:-4, polygonOffsetUnits:-4}));
 overlay.position.copy(terrain.position); overlay.renderOrder=2; scene.add(overlay);
 const hatch=(()=>{ const c=document.createElement('canvas'); c.width=c.height=16; const g=c.getContext('2d'); g.strokeStyle='rgba(30,26,22,.35)'; g.lineWidth=1.4; g.beginPath(); g.moveTo(0,16); g.lineTo(16,0); g.stroke(); return og.createPattern(c,'repeat'); })();
-let hoverSec=null, selSec=null, clockDay=1;
-function drawOverlay(){
+let hoverSec=null, selSec=null;
+function drawOverlay(){ const know=S().know;
   og.clearRect(0,0,TX,TZ);
   // outside the region: a soft vignette
   og.fillStyle='rgba(40,34,28,.35)'; og.fillRect(0,0,TX,TZ); og.clearRect(X(-HX),Zc(-HZ),X(HX)-X(-HX),Zc(HZ)-Zc(-HZ));
   for(let r=0;r<R.rows;r++) for(let c=0;c<R.cols;c++){ const kk=know[r][c], x0=X(-HX+c*SEC), z0=Zc(-HZ+r*SEC), w=SEC*px+.6;
     if(kk.k===K.UNKNOWN){ og.fillStyle='rgba(38,34,30,.34)'; og.fillRect(x0,z0,w,w); og.fillStyle=hatch; og.fillRect(x0,z0,w,w); }
     else if(kk.k===K.RUMOUR){ og.fillStyle='rgba(60,52,44,.18)'; og.fillRect(x0,z0,w,w); }
-    else if(kk.k===K.SCOUT){ const age=clockDay-kk.seen; if(age>=3){ og.fillStyle='rgba(60,52,44,.16)'; og.fillRect(x0,z0,w,w); } } }
+    else if(C.stale(kk)){ og.fillStyle='rgba(60,52,44,.16)'; og.fillRect(x0,z0,w,w); } }
   og.strokeStyle='rgba(40,32,24,.22)'; og.lineWidth=1; og.beginPath();
   for(let c=0;c<=R.cols;c++){ og.moveTo(X(-HX+c*SEC),Zc(-HZ)); og.lineTo(X(-HX+c*SEC),Zc(HZ)); }
   for(let r=0;r<=R.rows;r++){ og.moveTo(X(-HX),Zc(-HZ+r*SEC)); og.lineTo(X(HX),Zc(-HZ+r*SEC)); } og.stroke();
-  og.setLineDash([10,6]); og.strokeStyle='#e0a526'; og.lineWidth=3; og.beginPath(); NF.rect.forEach(([x,z],i)=>i?og.lineTo(X(x),Zc(z)):og.moveTo(X(x),Zc(z))); og.closePath(); og.stroke(); og.setLineDash([]);
+  if(ZOOM){ og.setLineDash([10,6]); og.strokeStyle='#e0a526'; og.lineWidth=3; og.beginPath(); NF.rect.forEach(([x,z],i)=>i?og.lineTo(X(x),Zc(z)):og.moveTo(X(x),Zc(z))); og.closePath(); og.stroke(); og.setLineDash([]); }
   const box=(s,col,w)=>{ if(!s) return; og.strokeStyle=col; og.lineWidth=w; og.strokeRect(X(-HX+s[0]*SEC)+w/2,Zc(-HZ+s[1]*SEC)+w/2,SEC*px-w,SEC*px-w); };
   box(home,'#3fae7f',3); box(hoverSec,'rgba(255,250,235,.9)',2); box(selSec,'#e0a526',3.5);
   otex.needsUpdate=true; }
@@ -263,8 +543,8 @@ const inkMat=(color,width)=>{ const m=new THREE.MeshBasicMaterial({color, side:T
 const boxG=new THREE.BoxGeometry(1,1,1); boxG.translate(0,.5,0);
 const bMat=new THREE.MeshStandardMaterial({color:0xe2cfae, flatShading:true, roughness:.9}), bInk=inkMat(0x2a211b,.0012);
 let bMesh=null, bInkMesh=null;
-function buildBuildings(){
-  if(bMesh){ scene.remove(bMesh); scene.remove(bInkMesh); }
+function buildBuildings(){ const know=S().know;
+  if(bMesh){ scene.remove(bMesh); scene.remove(bInkMesh); bMesh.dispose(); bInkMesh.dispose(); }
   const list=R.buildings.filter(b=>{ const s=secAt(b[0],b[1]); return s && know[s[1]][s[0]].k>=K.RUMOUR; });
   bMesh=new THREE.InstancedMesh(boxG,bMat,Math.max(1,list.length)); bInkMesh=new THREE.InstancedMesh(boxG,bInk,Math.max(1,list.length));
   const m=new THREE.Matrix4(), q=new THREE.Quaternion(), col=new THREE.Color(), TONES=[0xe2cfae,0xd6bf9a,0xcfb48e,0xb5653f,0xbfa182];
@@ -275,98 +555,120 @@ const labels=[];
 for(const p of R.places) if(['town','village','hamlet','city'].includes(p.kind)) labels.push({el:lab('town',p.name),x:p.p[0],z:p.p[1],dy:120,kind:'town'});
 for(const p of R.peaks) if(p.name) labels.push({el:lab('peak',`${p.name}<small>${Math.round(p.h*3.281).toLocaleString()} ft</small>`),x:p.p[0],z:p.p[1],dy:60,kind:'peak'});
 { const mw=R.roads.filter(r=>r.cls==='motorway'); if(mw.length){ const r=mw[Math.floor(mw.length/2)], p=r.pts[Math.floor(r.pts.length/2)]; labels.push({el:lab('road','I-17'),x:p[0],z:p[1],dy:40,kind:'road'}); } }
-// site pins
+// site pins: grey while only rumoured, the loot colour once scouted, dimmer as a place is picked over
 const pinG=new THREE.OctahedronGeometry(1,0), pins=new THREE.Group(); scene.add(pins);
-const pinInk=inkMat(0x1d1814,.0016);
-function buildPins(){ while(pins.children.length) pins.remove(pins.children[0]);
-  for(const s of R.sites){ const kk=know[s.sector[1]][s.sector[0]].k; if(kk<K.RUMOUR) continue; const known=kk>=K.SCOUT;
-    const m=new THREE.Mesh(pinG,new THREE.MeshStandardMaterial({color:known?KIND[s.loot]:'#7d7468', flatShading:true})); m.scale.set(26,40,26); m.position.set(s.p[0],Y(s.p[0],s.p[1])+70,s.p[1]); m.add(new THREE.Mesh(pinG,pinInk)); m.userData.site=s; pins.add(m); } }
+const pinInk=inkMat(0x1d1814,.0016), pinMats=new Map(), pinMat=(c,o)=>{ const k=c+o; if(!pinMats.has(k)) pinMats.set(k,new THREE.MeshStandardMaterial({color:c, flatShading:true, transparent:o<1, opacity:o})); return pinMats.get(k); };
+function buildPins(){ const know=S().know; while(pins.children.length) pins.remove(pins.children[0]);
+  R.sites.forEach((s,i)=>{ const kk=know[s.sector[1]][s.sector[0]].k; if(kk<K.RUMOUR) return; const known=kk>=K.SCOUT, left=C.leftOf(i);
+    const m=new THREE.Mesh(pinG,pinMat(known?KIND[s.loot]:'#7d7468',left<.05?.35:1)); m.scale.set(26,40,26); m.position.set(s.p[0],Y(s.p[0],s.p[1])+70,s.p[1]); m.add(new THREE.Mesh(pinG,pinInk)); m.userData.site=s; pins.add(m); }); }
 
-// ---------- travel graph ----------
-const G=R.graph, adj=G.nodes.map(()=>[]);
-const SPEED={motorway:5,motorway_link:5,trunk:5,primary:5,secondary:5,tertiary:5,unclassified:5,residential:5,track:4}, OFF=2.5;
-for(const [a,b,len,cls] of G.edges){ const sp=SPEED[cls]||4, t=len/1000/sp; adj[a].push([b,t,len]); adj[b].push([a,t,len]); }
-function nearestNodes(x,z,k=6){ const best=[]; G.nodes.forEach(([nx,nz],i)=>{ if(!adj[i].length) return; const d=Math.hypot(nx-x,nz-z); if(best.length<k||d<best[best.length-1][1]){ best.push([i,d]); best.sort((a,b)=>a[1]-b[1]); if(best.length>k) best.pop(); } }); return best; }
-const offTime=(x0,z0,x1,z1)=>{ const d=Math.hypot(x1-x0,z1-z0), climb=Math.max(0,hRaw(x1,z1)-hRaw(x0,z0)); return d/1000/OFF+climb/300; };   // a rule of thumb: +1 h per 300 m climbed
-function route(x0,z0,x1,z1){
-  const direct=offTime(x0,z0,x1,z1), A=nearestNodes(x0,z0), B=new Map(nearestNodes(x1,z1).map(([i,d])=>[i,d]));
-  const dist=new Map(), prev=new Map(), heap=[]; const push=(i,t)=>{ heap.push([t,i]); heap.sort((a,b)=>a[0]-b[0]); };
-  for(const [i] of A){ const [nx,nz]=G.nodes[i], t=offTime(x0,z0,nx,nz); if(!dist.has(i)||t<dist.get(i)){ dist.set(i,t); push(i,t); } }
-  let best=direct, bestEnd=-1;
-  while(heap.length){ const [t,i]=heap.shift(); if(t>dist.get(i)||t>=best) continue;
-    if(B.has(i)){ const [nx,nz]=G.nodes[i], tt=t+offTime(nx,nz,x1,z1); if(tt<best){ best=tt; bestEnd=i; } }
-    for(const [j,et] of adj[i]){ const nt=t+et; if(!dist.has(j)||nt<dist.get(j)){ dist.set(j,nt); prev.set(j,i); push(j,nt); } } }
-  const pts=[[x1,z1]]; if(bestEnd>=0){ let i=bestEnd; while(i!==undefined){ pts.push(G.nodes[i]); i=prev.get(i); } } pts.push([x0,z0]); pts.reverse();
-  let km=0; for(let i=1;i<pts.length;i++) km+=Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1])/1000;
-  return {pts, hours:best, km}; }
-
-// ---------- squads ----------
-const home=secAt(R.home[0]+700,R.home[1]);   // just east of New River, on the ranch side
-const [hx0,hz0]=secCentre(...home);
-const squads=[{name:'Ranch party',people:4,c:'#e0a526',x:hx0,z:hz0},{name:'Scouts',people:2,c:'#5b9fc4',x:hx0+120,z:hz0+80}];
+// ---------- squads and raiders on the map ----------
 const tokG=(()=>{ const g=new THREE.CylinderGeometry(55,70,30,6); g.translate(0,15,0); const p=new THREE.ConeGeometry(45,150,6); p.translate(0,105,0); const pos=[]; for(const gg of [g,p]){ const n=gg.toNonIndexed(); pos.push(...n.attributes.position.array); } const out=new THREE.BufferGeometry(); out.setAttribute('position',new THREE.Float32BufferAttribute(pos,3)); out.computeVertexNormals(); return out; })();
-let selSquad=0;
-for(const s of squads){ s.mesh=new THREE.Mesh(tokG,new THREE.MeshStandardMaterial({color:s.c, flatShading:true})); s.ink=inkMat(0x1d1814,.0022); s.mesh.add(new THREE.Mesh(tokG,s.ink)); s.mesh.castShadow=true; scene.add(s.mesh);
-  s.el=lab('sq',s.name); s.el.style.setProperty('--c',s.c); s.path=null; s.line=null; }
-function reveal(x,z){ const s=secAt(x,z); if(!s) return; const [c,r]=s, me=R.sectors[r][c];
-  let around=0,n=0; for(let dr=-3;dr<=3;dr++) for(let dc=-3;dc<=3;dc++){ const q=R.sectors[r+dr]?.[c+dc]; if(q){ around+=q.lo; n++; } }
-  const rad=Math.min(3,1+Math.floor(Math.max(0,me.hi-around/n)/45));   // high ground sees further
-  for(let dr=-rad;dr<=rad;dr++) for(let dc=-rad;dc<=rad;dc++){ const kk=know[r+dr]?.[c+dc]; if(!kk) continue; if(Math.hypot(dr,dc)>rad+.4) continue; if(kk.k<K.SCOUT){ kk.k=K.SCOUT; } kk.seen=clockDay; }
-  return rad; }
-function refreshCurrent(){ for(const row of know) for(const k of row) if(k.k===K.CURRENT) k.k=K.SCOUT;
-  const mark=s=>{ const q=secAt(s.x,s.z); if(q) know[q[1]][q[0]].k=K.CURRENT; }; squads.forEach(mark); know[home[1]][home[0]].k=K.CURRENT; }
-// starting knowledge: home and its surroundings, rumours of the towns
-for(const p of R.places) if(['town','village','hamlet'].includes(p.kind)){ const s=p.sector; for(let dr=-2;dr<=2;dr++) for(let dc=-2;dc<=2;dc++){ const kk=know[s[1]+dr]?.[s[0]+dc]; if(kk) kk.k=Math.max(kk.k,K.RUMOUR); } }
-// you know the land around the ranch; further out you have only heard things
-{ const [c,r]=home; for(let dr=-7;dr<=7;dr++) for(let dc=-7;dc<=7;dc++){ const kk=know[r+dr]?.[c+dc], d=Math.hypot(dr,dc); if(!kk||d>7.4) continue; if(d<=3.4){ kk.k=K.SCOUT; kk.seen=1; } else kk.k=Math.max(kk.k,K.RUMOUR); } }
-reveal(hx0,hz0); refreshCurrent();
-
-// ---------- clock ----------
-let minutes=7*60+30, speed=1;  // game minutes; 1× = 10 game minutes per real second
-const clockEl=document.getElementById('clock');
-const fmtT=m=>{ const d=Math.floor(m/1440)+1, h=Math.floor(m%1440/60), mm=Math.floor(m%60); return `Day ${d} ${String(h).padStart(2,'0')}:${String(mm).padStart(2,'0')}`; };
-function waterFor(startMin,hours,people){ let L=0; for(let t=0;t<hours;t+=.25){ const h=((startMin/60+t)%24); L+=(h>=10&&h<18?1:.5)*.25; } return L*people; }
-function lightFor(m){ const h=(m%1440)/60, day=Math.max(0,Math.sin((h-6)/12*Math.PI)), az=(h-6)/12*Math.PI;
-  sun.intensity=.3+day*.85; hemi.intensity=.42+day*.3; sun.color.setHSL(.08,.6,.55+day*.35); hemi.color.setHSL(.08+(1-day)*.5,.35,.62+day*.25);
-  const night=1-Math.min(1,day*3); renderer.setClearColor(new THREE.Color(0xd9c9a8).lerp(new THREE.Color(0x2a3248),night*.7)); scene.fog.color.copy(renderer.getClearColor(new THREE.Color()));
-  sun.position.set(Math.cos(az)*40000,8000+day*50000,-12000+Math.sin(az)*6000); sun.target.position.set(0,0,0); }
-
-// ---------- panel ----------
-const secEl=document.getElementById('sector'), sqEl=document.getElementById('squads');
-function nearestPlace(x,z){ let best=null,bd=1e12; for(const p of R.places){ const d=Math.hypot(p.p[0]-x,p.p[1]-z); if(d<bd){ bd=d; best=p; } } return best?(bd<1500?best.name:`${(bd/1609).toFixed(1)} mi from ${best.name}`):'open desert'; }
-function drawSquads(){ sqEl.innerHTML=squads.map((s,i)=>{ const q=secAt(s.x,s.z); const st=s.path?`moving · ${Math.max(0,(s.arrive-minutes)/60).toFixed(1)} h left`:`at ${q?nearestPlace(s.x,s.z):'?'}`;
-  return `<button type="button" class="sqb" data-i="${i}" aria-pressed="${i===selSquad}"><b><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${s.c};margin-right:7px"></span>${s.name}</b><span>${s.people} people · ${st}</span></button>`; }).join(''); }
-sqEl.addEventListener('click',e=>{ const b=e.target.closest('.sqb'); if(!b) return; selSquad=+b.dataset.i; squads.forEach((s,i)=>s.ink.color.setHex(i===selSquad?0xe0a526:0x1d1814)); drawSquads(); if(selSec) drawSector(); });
-squads.forEach((s,i)=>s.ink.color.setHex(i===selSquad?0xe0a526:0x1d1814));
-let preview=null;
-function drawSector(){
-  const [c,r]=selSec, s=R.sectors[r][c], kk=know[r][c], [cx,cz]=secCentre(c,r), known=kk.k>=K.SCOUT;
-  const sites=s.sites.map(i=>R.sites[i]);
-  const sq=squads[selSquad], rt=route(sq.x,sq.z,cx,cz); preview=rt; drawPreview();
-  const water=waterFor(minutes,rt.hours,sq.people), TYPE={town:'Town',homes:'Scattered homes',rough:'Rough hills',desert:'Open desert'};
-  secEl.innerHTML=`<h2>Sector ${String.fromCharCode(65+c%26)}${c>=26?String.fromCharCode(65+Math.floor(c/26)-1):''}-${r+1}</h2><h3>${(t=>t[0].toUpperCase()+t.slice(1))(nearestPlace(cx,cz))}</h3>
-   <dl><div><dt>Knowledge</dt><dd>${KN[kk.k]}${kk.k===K.SCOUT&&clockDay-kk.seen>=3?' (stale)':''}</dd></div>
-   <div><dt>Ground</dt><dd>${kk.k>=K.RUMOUR?TYPE[s.type]:'?'}</dd></div>
-   <div><dt>Elevation</dt><dd>${Math.round(s.lo*3.281).toLocaleString()}–${Math.round(s.hi*3.281).toLocaleString()} ft</dd></div>
-   <div><dt>Buildings</dt><dd>${kk.k>=K.RUMOUR?s.b:'?'}</dd></div>
-   <div><dt>Sites</dt><dd>${known?sites.length:kk.k===K.RUMOUR&&sites.length?'some':'?'}</dd></div></dl>
-   ${known&&sites.length?`<ul class="sites">${sites.slice(0,40).map(t=>`<li><i style="background:${KIND[t.loot]}"></i>${t.name||t.what.replace(/_/g,' ')}<span style="margin-left:auto;color:var(--muted);font-size:12px">${KLABEL[t.loot]}</span></li>`).join('')}</ul>`:''}
-   <button type="button" class="go" id="goBtn" ${sq.path?'disabled':''}>Send ${sq.name} here</button>
-   <p class="eta">${rt.km.toFixed(1)} km · ${rt.hours.toFixed(1)} h · ${water.toFixed(1)} L water${(()=>{ const h=(minutes%1440)/60; return h>=10&&h<18?' · midday heat doubles water use':''; })()}</p>`;
-  document.getElementById('goBtn').onclick=()=>send(sq,rt); }
-// route ribbon on the terrain
+const bandG=(()=>{ const g=new THREE.ConeGeometry(60,120,4); g.translate(0,60,0); return g; })();
+let selSquad=0; const views=[];
 const routeMat=new THREE.MeshBasicMaterial({color:0xe0a526, transparent:true, opacity:.9, depthWrite:false, polygonOffset:true, polygonOffsetFactor:-6, polygonOffsetUnits:-6});
 function ribbon(pts,w,mat){ const dense=[]; for(let i=0;i<pts.length-1;i++){ const a=pts[i], b=pts[i+1], n=Math.max(1,Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])/60)); for(let k=0;k<n;k++) dense.push([a[0]+(b[0]-a[0])*k/n,a[1]+(b[1]-a[1])*k/n]); } dense.push(pts[pts.length-1]);
   const pos=[]; for(let i=0;i<dense.length-1;i++){ const a=dense[i], b=dense[i+1], dx=b[0]-a[0], dz=b[1]-a[1], l=Math.hypot(dx,dz)||1, nx=-dz/l*w, nz=dx/l*w, ya=Y(a[0],a[1])+6, yb=Y(b[0],b[1])+6;
     pos.push(a[0]+nx,ya,a[1]+nz, b[0]+nx,yb,b[1]+nz, b[0]-nx,yb,b[1]-nz, a[0]+nx,ya,a[1]+nz, b[0]-nx,yb,b[1]-nz, a[0]-nx,ya,a[1]-nz); }
   const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3)); const m=new THREE.Mesh(g,mat); m.renderOrder=3; return m; }
+function syncViews(){   // one token, label and route ribbon per squad in the campaign
+  S().squads.forEach((s,i)=>{ let v=views[i]; if(!v){ v=views[i]={mesh:new THREE.Mesh(tokG,new THREE.MeshStandardMaterial({color:s.c, flatShading:true})), ink:inkMat(0x1d1814,.0022), el:lab('sq','')}; v.mesh.add(new THREE.Mesh(tokG,v.ink)); v.mesh.castShadow=true; scene.add(v.mesh); }
+    v.el.textContent=s.name; v.el.style.setProperty('--c',s.c); v.mesh.material.color.set(s.c); v.ink.color.setHex(i===selSquad?0xe0a526:0x1d1814);
+    if(v.trip!==s.trip){ if(v.line){ scene.remove(v.line); v.line.geometry.dispose(); v.line.material.dispose(); v.line=null; } v.trip=s.trip;
+      if(s.trip){ v.line=ribbon(s.trip.pts,14,new THREE.MeshBasicMaterial({color:new THREE.Color(s.c), transparent:true, opacity:.75, depthWrite:false, polygonOffset:true, polygonOffsetFactor:-6, polygonOffsetUnits:-6})); scene.add(v.line); } } }); }
+const bandViews=new Map(), bandMat=new THREE.MeshStandardMaterial({color:0x6e1a10, flatShading:true}), bandGhost=new THREE.MeshStandardMaterial({color:0x6e1a10, flatShading:true, transparent:true, opacity:.4}), bandInk=inkMat(0x1d1814,.002);
+const SEEN_FOR=12*60;   // a last sighting stays on the map this long
+function syncBands(){ const st=S(), live=new Set();
+  for(const b of st.bands){ live.add(b.id); let v=bandViews.get(b.id); if(!v){ v={mesh:new THREE.Mesh(bandG,bandMat), el:lab('band','')}; v.mesh.add(new THREE.Mesh(bandG,bandInk)); scene.add(v.mesh); bandViews.set(b.id,v); }
+    const now=b.seen&&b.seen.t>=st.minutes-.01, show=b.seen&&st.minutes-b.seen.t<SEEN_FOR;
+    v.mesh.visible=!!show; v.el.style.display=show?'':'none'; v.show=!!show;
+    if(show){ v.mesh.material=now?bandMat:bandGhost; v.x=now?b.x:b.seen.x; v.z=now?b.z:b.seen.z; v.el.className='lb band'+(now?'':' old'); v.el.textContent=now?`Raiders · ${b.size}`:`Raiders · seen ${Math.max(1,Math.round((st.minutes-b.seen.t)/60))} h ago`; } }
+  for(const [id,v] of bandViews) if(!live.has(id)){ scene.remove(v.mesh); v.el.remove(); bandViews.delete(id); } }
+
+// ---------- light ----------
+function lightFor(m){ const s=C.sunAt(m), day=s.elev, az=s.arc*Math.PI;
+  sun.intensity=.3+day*.85; hemi.intensity=.42+day*.3; sun.color.setHSL(.08,.6,.55+day*.35); hemi.color.setHSL(.08+(1-s.daylight)*.5,.35,.62+day*.25);
+  const night=1-Math.min(1,s.daylight*1.5); renderer.setClearColor(new THREE.Color(0xd9c9a8).lerp(new THREE.Color(0x2a3248),night*.7)); scene.fog.color.copy(renderer.getClearColor(new THREE.Color()));
+  sun.position.set(Math.cos(az)*40000,8000+day*50000,-12000+Math.sin(az)*6000); sun.target.position.set(0,0,0); }
+const PHASE={night:'Night',dawn:'Dawn',day:'Day',dusk:'Dusk'};
+function drawSky(){ const st=S(), sq=st.squads[selSquad]||{x:hx0,z:hz0}, s=C.sunAt(st.minutes), t=C.tempAt(st.minutes,sq.x,sq.z), heat=C.heatOf(t);
+  clockEl.textContent=C.fmtT(st.minutes); skyEl.textContent=`${PHASE[s.phase]} · ${Math.round(t)} °C${heat>=C.REST_HEAT?' · heat':''}`; skyEl.classList.toggle('hot',heat>=C.REST_HEAT);
+  waitBtn.textContent=st.waitUntil>st.minutes?'Waiting…':C.waitLabel(); waitBtn.setAttribute('aria-pressed',String(st.waitUntil>st.minutes)); }
+
+// ---------- panels ----------
+const fmtH=h=>h<1?`${Math.max(1,Math.round(h*60))} min`:`${h.toFixed(1)} h`;
+function status(s){ const st=S();
+  if(s.task?.kind==='scavenge') return `searching ${esc(C.siteName(R.sites[s.task.site]))} · ${fmtH((s.task.until-st.minutes)/60)} left`;
+  if(s.task?.kind==='hide') return `lying low · ${fmtH((s.task.until-st.minutes)/60)}`;
+  if(s.trip){ const heat=C.heatOf(C.tempAt(st.minutes,s.x,s.z)); if(s.restHeat&&heat>=C.REST_HEAT) return 'lying up in the heat';
+    const f=C.forecast(s.trip,st.minutes,s.people,s.restHeat); return `moving · arrives ${C.fmtT(f.arrive).slice(-5)} (${fmtH(f.hours)})`; }
+  return C.atHome(s)?'at the ranch':`at ${esc(C.nearestPlace(s.x,s.z))}`; }
+function drawSquads(){ const st=S();
+  sqEl.innerHTML=st.squads.map((s,i)=>{ const on=i===selSquad, kg=C.packKg(s), wc=C.waterCap(s), low=s.water<wc*.25;
+    return `<div class="sqcard${on?' on':''}"><button type="button" class="sqb" data-i="${i}" aria-pressed="${on}"><b><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${s.c};margin-right:7px"></span>${esc(s.name)}</b>
+      <span>${s.people} people · ${status(s)}</span>
+      <span${low?' class="warn"':''}>water ${s.water.toFixed(1)} / ${wc} L${s.thirsty?' · thirsty':''} · pack ${kg.toFixed(0)} / ${(C.capKg(s)-s.water).toFixed(0)} kg</span></button>
+      ${on?`<div class="sqctl"><label><input type="checkbox" data-rest="${i}"${s.restHeat?' checked':''}> Lie up in the heat</label>${s.trip?`<button type="button" data-stop="${i}">Stop</button>`:''}</div>`:''}</div>`; }).join(''); }
+sqEl.addEventListener('click',e=>{ const st=e.target.closest('[data-stop]'); if(st){ C.stop(+st.dataset.stop); changed(); return; }
+  const b=e.target.closest('.sqb'); if(!b) return; selSquad=+b.dataset.i; syncViews(); drawSquads(); drawSky(); if(selSec) drawSector(); });
+sqEl.addEventListener('change',e=>{ const r=e.target.closest('[data-rest]'); if(!r) return; S().squads[+r.dataset.rest].restHeat=r.checked; changed(); });
+function drawStock(){ const st=S(), have=C.LOOT.filter(k=>st.base.stock[k]>0);
+  stockEl.innerHTML=have.length?have.map(k=>`<li><i style="background:${KIND[k]}"></i>${st.base.stock[k]} ${C.UNIT[k].name}</li>`).join(''):'<li style="grid-column:1/-1;color:var(--muted)">Nothing brought home yet.</li>'; }
+function drawLog(){ logEl.innerHTML=S().log.slice(0,12).map(l=>`<li><time>${C.fmtT(l.t)}</time>${esc(l.msg)}</li>`).join(''); }
+let preview=null;
+function drawSector(){ const st=S();
+  const [c,r]=selSec, s=R.sectors[r][c], kk=st.know[r][c], [cx,cz]=secCentre(c,r), known=kk.k>=K.SCOUT;
+  const sq=st.squads[selSquad], rt=C.route(sq.x,sq.z,cx,cz), tr=C.makeTrip(rt); preview=rt; drawPreview();
+  const f=C.forecast(tr,st.minutes,sq.people,sq.restHeat), TYPE={town:'Town',homes:'Scattered homes',rough:'Rough hills',desert:'Open desert'};
+  const siteRows=s.sites.map(i=>{ const t=R.sites[i], left=C.leftOf(i), can=C.canScavenge(selSquad,i);
+    const state=st.sites[i]?(left<.05?'searched out':`${Math.round(left*100)}% left`):'untouched';
+    return `<li><i style="background:${KIND[t.loot]}"></i>${esc(C.siteName(t))}<span class="left">${KLABEL[t.loot]} · ${state}</span>${can?`<button type="button" data-scav="${i}" title="Search with ${esc(sq.name)}">Search ${fmtH(C.scavHours(i,sq.people))}</button>`:''}</li>`; });
+  const seen=st.bands.filter(b=>b.seen&&st.minutes-b.seen.t<C.STALE&&String(secAt(b.seen.x,b.seen.z))===String(selSec));
+  const short=f.water>sq.water+.05, inSec=String(secAt(sq.x,sq.z))===String(selSec);
+  secEl.innerHTML=`<h2>Sector ${String.fromCharCode(65+c%26)}${c>=26?String.fromCharCode(65+Math.floor(c/26)-1):''}-${r+1}</h2><h3>${esc((t=>t[0].toUpperCase()+t.slice(1))(C.nearestPlace(cx,cz)))}</h3>
+   <dl><div><dt>Knowledge</dt><dd>${KN[kk.k]}${C.stale(kk)?' (stale)':''}</dd></div>
+   <div><dt>Ground</dt><dd>${kk.k>=K.RUMOUR?TYPE[s.type]:'?'}</dd></div>
+   <div><dt>Elevation</dt><dd>${Math.round(s.lo*3.281).toLocaleString()}–${Math.round(s.hi*3.281).toLocaleString()} ft</dd></div>
+   <div><dt>Buildings</dt><dd>${kk.k>=K.RUMOUR?s.b:'?'}</dd></div>
+   <div><dt>Sites</dt><dd>${known?s.sites.length:kk.k===K.RUMOUR&&s.sites.length?'some':'?'}</dd></div></dl>
+   ${seen.length?`<p class="danger">Raiders seen here ${C.fmtT(Math.max(...seen.map(b=>b.seen.t)))}</p>`:''}
+   ${known&&s.sites.length?`<ul class="sites">${siteRows.slice(0,40).join('')}</ul>`:''}
+   ${inSec?'':`<button type="button" class="go" id="goBtn" ${sq.task||st.enc?'disabled':''}>${sq.trip?'Send '+esc(sq.name)+' here instead':'Send '+esc(sq.name)+' here'}</button>
+   <p class="eta">${rt.km.toFixed(1)} km · ${fmtH(f.hours)}${f.rest>0?` (${fmtH(f.rest)} lying up)`:''} · arrives ${C.fmtT(f.arrive)} · ${f.water.toFixed(1)} L water${short?` <span style="color:#f0a05a">· carrying ${sq.water.toFixed(1)} L</span>`:''}</p>`}`;
+  const go=document.getElementById('goBtn'); if(go) go.onclick=()=>{ C.send(selSquad,cx,cz); if(speed===0) setSpeed(1); changed(); }; }
+secEl.addEventListener('click',e=>{ const b=e.target.closest('[data-scav]'); if(!b) return; if(C.scavenge(selSquad,+b.dataset.scav)){ if(speed===0) setSpeed(1); changed(); } });
 let prevMesh=null;
-function drawPreview(){ if(prevMesh){ scene.remove(prevMesh); prevMesh.geometry.dispose(); prevMesh=null; } if(preview && !squads[selSquad].path){ prevMesh=ribbon(preview.pts,22,routeMat); scene.add(prevMesh); } }
-function send(sq,rt){ sq.path=rt.pts; sq.seg=0; sq.depart=minutes; sq.arrive=minutes+rt.hours*60; sq.total=rt.hours*60;
-  // time along the polyline is spread by distance
-  const L=[0]; for(let i=1;i<rt.pts.length;i++) L.push(L[i-1]+Math.hypot(rt.pts[i][0]-rt.pts[i-1][0],rt.pts[i][1]-rt.pts[i-1][1])); sq.L=L;
-  sq.line=ribbon(rt.pts,14,new THREE.MeshBasicMaterial({color:new THREE.Color(sq.c), transparent:true, opacity:.75, depthWrite:false, polygonOffset:true, polygonOffsetFactor:-6, polygonOffsetUnits:-6})); scene.add(sq.line);
-  if(speed===0) setSpeed(1); drawPreview(); drawSquads(); drawSector(); }
+function drawPreview(){ if(prevMesh){ scene.remove(prevMesh); prevMesh.geometry.dispose(); prevMesh=null; } const sq=S().squads[selSquad];
+  if(preview && !sq.task && String(secAt(sq.x,sq.z))!==String(selSec)){ prevMesh=ribbon(preview.pts,22,routeMat); scene.add(prevMesh); } }
+
+// ---------- encounters ----------
+const LIGHT={day:'In daylight',dawn:'At dawn',dusk:'At dusk',night:'In the dark'};
+const canDive=e=>ZOOM&&NF.inBlock(e.where.x,e.where.z);
+function drawEncounter(){ const e=S().enc; encEl.hidden=!e; if(!e) return;
+  const first=e.firstSight==='squad'?'They have not seen you yet.':e.firstSight==='both'?'Both sides saw each other at once.':'They saw you first.';
+  encEl.innerHTML=`<h3>Raiders near ${esc(e.where.place)}</h3>
+    <p>${esc(e.squad.name)} (${e.squad.people}) against ${e.enemy.count} raiders${e.enemy.boss?' with a boss':''}, ${e.distance} m off. ${first} ${LIGHT[e.light]}, ${e.tempC} °C.${e.forced?' There is no slipping away now.':''}</p>
+    <div class="acts">${canDive(e)?'<button type="button" class="pri" data-a="dive">Go tactical</button>':''}<button type="button"${canDive(e)?'':' class="pri"'} data-a="auto" title="A rough outcome from head count and who saw whom first, until the tactical ground covers the whole corridor">Fight it out (quick)</button>
+    ${e.forced?'':'<button type="button" data-a="avoid">Pull back</button><button type="button" data-a="hide">Lie low</button>'}</div>`; }
+encEl.addEventListener('click',ev=>{ const b=ev.target.closest('[data-a]'); if(!b) return; const e=S().enc; if(!e) return;
+  if(b.dataset.a==='dive'){ const sq=S().squads[e.squad.index]; sq.trip=null; sq.task=null; selSquad=e.squad.index; NF.encounter=e; pendingFight=e.id; save(true);
+    NF.enterTactical(sq.x,sq.z,{x:sq.x,z:sq.z,name:sq.name,people:sq.people,index:e.squad.index,encounter:e}); return; }
+  C.resolve(b.dataset.a); changed(); });
+let pendingFight=null;
+
+// ---------- orders, saving ----------
+let dirty=false, saveT=0;
+function save(now){ if(now||dirty){ C.save(store); dirty=false; saveT=0; } }
+function changed(){ dirty=true; syncViews(); syncBands(); drawSquads(); drawStock(); drawLog(); drawSky(); drawEncounter(); if(selSec) drawSector(); else drawPreview(); }
+let knowDirty=false;
+function apply(out){ if(!out||!out.elapsed&&!out.encounter) return; dirty=true; if(out.revealed) knowDirty=true; if(out.found) buildPins();
+  if(out.encounter){ setSpeed(0); camT.tx=out.encounter.where.x; camT.tz=out.encounter.where.z; camT.dist=Math.min(camT.dist,7000); }
+  syncViews(); syncBands(); drawEncounter(); if(out.arrived||out.found||out.encounter){ drawStock(); drawLog(); drawSquads(); if(selSec) drawSector(); } }
+waitBtn.onclick=()=>{ const st=S(); if(st.waitUntil>st.minutes) st.waitUntil=0; else { C.waitTurn(); if(speed===0) setSpeed(1); } changed(); };
+let armed=0; newBtn.onclick=()=>{ if(Date.now()-armed>3000){ armed=Date.now(); newBtn.textContent='Click again to start over'; setTimeout(()=>{ if(Date.now()-armed>=3000) newBtn.textContent='New campaign'; },3100); return; }
+  armed=0; newBtn.textContent='New campaign'; C.forget(store); C.newGame(); selSec=null; secEl.innerHTML='<p class="empty">Click a sector on the map.</p>'; preview=null;
+  knowDirty=true; lightFor(S().minutes); changed(); save(true); };
+addEventListener('pagehide',()=>save(true)); document.addEventListener('visibilitychange',()=>{ if(document.hidden) save(true); });
 
 // ---------- camera and input ----------
 const camS={yaw:-.35,pitch:.62,dist:16000,tx:hx0*.4,tz:hz0*.4}, camT=Object.assign({},camS);
@@ -382,43 +684,54 @@ renderer.domElement.addEventListener('pointermove',e=>{ if(!drag){ const p=pick(
 renderer.domElement.addEventListener('pointerup',e=>{ const d=drag; drag=null; if(!d||d.moved||d.b!==0) return; const p=pick(e); const s=p&&secAt(p.x,p.z); if(!s) return; selSec=s; drawOverlay(); drawSector(); });
 let push=0;
 renderer.domElement.addEventListener('wheel',e=>{ e.preventDefault(); const want=camT.dist*Math.exp(e.deltaY*.0012);
-  if(want<1500 && camT.dist<=1520){ push+=-e.deltaY; if(push>240){ push=0; dive(camT.tx,camT.tz); } } else push=0;
+  if(ZOOM&&want<1500 && camT.dist<=1520){ push+=-e.deltaY; if(push>240){ push=0; dive(camT.tx,camT.tz); } } else push=0;
   camT.dist=Math.max(1500,Math.min(60000,want)); },{passive:false});
-renderer.domElement.addEventListener('dblclick',e=>{ const p=pick(e); if(p) dive(p.x,p.z); });
 function dive(x,z){ if(!NF.inBlock(x,z)){ NF.tip('Tactical ground is baked only for the gold New River block so far'); camT.tx=(NF.rect[0][0]+NF.rect[2][0])/2; camT.tz=(NF.rect[0][1]+NF.rect[2][1])/2; camT.dist=Math.max(camT.dist,3200); return; }
-  const sq=squads[selSquad], here=!sq.path&&NF.inBlock(sq.x,sq.z)?sq:squads.find(o=>!o.path&&NF.inBlock(o.x,o.z));
-  NF.enterTactical(x,z,here?{x:here.x,z:here.z,name:here.name,people:here.people,index:squads.indexOf(here)}:null); }
-document.getElementById('diveBtn').onclick=()=>{ const sq=squads[selSquad]; dive(NF.inBlock(sq.x,sq.z)?sq.x:camT.tx, NF.inBlock(sq.x,sq.z)?sq.z:camT.tz); };
+  if(S().enc){ NF.tip('Answer the encounter first'); return; }
+  const sqs=S().squads, sq=sqs[selSquad], free=o=>!C.busy(o)&&NF.inBlock(o.x,o.z), here=free(sq)?sq:sqs.find(free);
+  NF.encounter=null; NF.enterTactical(x,z,here?{x:here.x,z:here.z,name:here.name,people:here.people,index:sqs.indexOf(here)}:null); }
+if(ZOOM){ renderer.domElement.addEventListener('dblclick',e=>{ const p=pick(e); if(p) dive(p.x,p.z); });
+  document.getElementById('diveBtn').onclick=()=>{ const sq=S().squads[selSquad]; dive(NF.inBlock(sq.x,sq.z)?sq.x:camT.tx, NF.inBlock(sq.x,sq.z)?sq.z:camT.tz); }; }
 document.getElementById('homeBtn').onclick=()=>{ camT.tx=hx0; camT.tz=hz0; camT.dist=6000; };
+let speed=1;   // 1× = 10 game minutes per real second
 function setSpeed(v){ speed=v; document.querySelectorAll('.hud button[data-s]').forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.s===v))); }
 document.querySelectorAll('.hud button[data-s]').forEach(b=>b.onclick=()=>setSpeed(+b.dataset.s));
+if(resumed) setSpeed(0);   // a resumed campaign waits for the player
 
 // ---------- frame loop ----------
-buildBuildings(); buildPins(); drawOverlay(); drawSquads(); lightFor(minutes);
-const tmp=new THREE.Vector3(); let last=performance.now(), knowDirty=false, uiAcc=0;
+syncViews(); syncBands(); buildBuildings(); buildPins(); drawOverlay(); drawSquads(); drawStock(); drawLog(); drawSky(); drawEncounter(); lightFor(S().minutes);
+if(resumed){ C.note('Campaign resumed.'); drawLog(); }
+const tmp=new THREE.Vector3(); let last=performance.now(), uiAcc=0;
 function loop(now){
-  requestAnimationFrame(loop); const dt=Math.min(.1,(now-last)/1000); last=now; if(NF.mode!=='region') return;
-  const moving=squads.some(s=>s.path);
-  if(moving && speed>0){ minutes+=dt*10*speed; clockDay=Math.floor(minutes/1440)+1; lightFor(minutes); }
-  for(const s of squads){ if(s.path){ const f=Math.min(1,(minutes-s.depart)/s.total), target=f*s.L[s.L.length-1]; while(s.seg<s.L.length-2 && s.L[s.seg+1]<target) s.seg++;
-      const a=s.path[s.seg], b=s.path[s.seg+1], seg=(s.L[s.seg+1]-s.L[s.seg])||1, t=Math.min(1,(target-s.L[s.seg])/seg); s.x=a[0]+(b[0]-a[0])*t; s.z=a[1]+(b[1]-a[1])*t;
-      const q=secAt(s.x,s.z); if(q && String(q)!==String(s.lastSec)){ s.lastSec=q; reveal(s.x,s.z); refreshCurrent(); knowDirty=true; }
-      if(f>=1){ s.path=null; scene.remove(s.line); s.line.geometry.dispose(); reveal(s.x,s.z); refreshCurrent(); knowDirty=true; drawSquads(); if(selSec) drawSector(); } }
-    s.mesh.position.set(s.x,Y(s.x,s.z),s.z); s.mesh.rotation.y+=dt*.6; }
+  requestAnimationFrame(loop); const dt=Math.min(.1,(now-last)/1000); last=now; if(ZOOM&&NF.mode!=='region') return;
+  const st=S(), run=C.running()&&speed>0;
+  if(run){ apply(C.step(dt*10*speed)); lightFor(st.minutes); }
   if(knowDirty){ knowDirty=false; drawOverlay(); buildPins(); buildBuildings(); }
-  uiAcc+=dt; if(uiAcc>.5){ uiAcc=0; clockEl.textContent=fmtT(minutes); if(moving) drawSquads(); }
+  st.squads.forEach((s,i)=>{ const v=views[i]; v.mesh.position.set(s.x,Y(s.x,s.z),s.z); v.mesh.rotation.y+=dt*.6; });
+  for(const [id,v] of bandViews) if(v.show) v.mesh.position.set(v.x,Y(v.x,v.z),v.z);
+  uiAcc+=dt; if(uiAcc>.5){ uiAcc=0; drawSky(); if(run){ drawSquads(); syncBands(); } }
+  saveT+=dt; if(saveT>2) save();
   const k=1-Math.exp(-dt*5); for(const key in camS){ if(key==='yaw'){ const d=Math.atan2(Math.sin(camT.yaw-camS.yaw),Math.cos(camT.yaw-camS.yaw)); camS.yaw+=d*k; } else camS[key]+=(camT[key]-camS[key])*k; }
   const ty=Y(camS.tx,camS.tz); cam.position.set(camS.tx+Math.sin(camS.yaw)*Math.cos(camS.pitch)*camS.dist, ty+Math.sin(camS.pitch)*camS.dist, camS.tz+Math.cos(camS.yaw)*Math.cos(camS.pitch)*camS.dist); cam.lookAt(camS.tx,ty,camS.tz);
   renderer.render(scene,cam);
   const place=(el,x,z,dy)=>{ tmp.set(x,Y(x,z)+dy,z).project(cam); const on=tmp.z<1&&Math.abs(tmp.x)<1.05&&Math.abs(tmp.y)<1.05; el.style.display=on?'':'none'; if(on) el.style.transform=`translate(${(tmp.x+1)/2*Wd}px,${(1-tmp.y)/2*Ht}px) translate(-50%,-100%)`; };
   for(const l of labels){ const show=l.kind!=='peak'||camS.dist<40000; if(!show){ l.el.style.display='none'; continue; } place(l.el,l.x,l.z,l.dy); }
-  squads.forEach((s,i)=>{ place(s.el,s.x,s.z,260); const near=squads.slice(0,i).filter(o=>Math.hypot(o.x-s.x,o.z-s.z)<camS.dist*.04).length; if(near) s.el.style.transform+=` translateY(${near*-26}px)`; });
+  st.squads.forEach((s,i)=>{ const v=views[i]; place(v.el,s.x,s.z,260); const near=st.squads.slice(0,i).filter(o=>Math.hypot(o.x-s.x,o.z-s.z)<camS.dist*.04).length; if(near) v.el.style.transform+=` translateY(${near*-26}px)`; });
+  for(const v of bandViews.values()) if(v.show) place(v.el,v.x,v.z,150);
 }
 requestAnimationFrame(loop);
-window.__region={squads,know,route,send,secCentre,setSpeed,camT,
+// back from the tactical ground: the clock catches up (real time exploring, 5 minutes per fight turn that combat reports) and an encounter fought there is settled
+function back(realSeconds,result){ const st=S();
+  if(pendingFight&&st.enc&&st.enc.id===pendingFight) C.resolve('fought',result); pendingFight=null; NF.encounter=null;
+  advanceBy(Math.max(0,realSeconds)*TAC_RATE/60+(result&&result.turns>0?result.turns*TURN_MIN:0)); knowDirty=true; changed(); save(true); }
+// let a stretch of game time pass now, whether or not a squad is busy (other squads keep travelling)
+function advanceBy(m){ const st=S(), keep=st.waitUntil; if(!(m>0)) return null; st.waitUntil=Math.max(keep,st.minutes+m); const out=C.step(m); st.waitUntil=keep>st.minutes?keep:0; apply(out); lightFor(st.minutes); drawSky(); return out; }
+window.__region={get squads(){ return S().squads; }, get know(){ return S().know; }, campaign:C, setSpeed, camT, secCentre, back,
+  route:(x0,z0,x1,z1)=>C.route(x0,z0,x1,z1), send:(i,x,z)=>{ const t=C.send(i,x,z); changed(); return t; },
   focus:(x,z)=>{ camT.tx=x; camT.tz=z; camT.dist=2400; camS.tx=x; camS.tz=z; camS.dist=1600; },
-  placeSquad:(i,x,z,people)=>{ const s=squads[i]; s.x=x; s.z=z; if(people!==undefined) s.people=people; reveal(x,z); refreshCurrent(); drawOverlay(); buildPins(); buildBuildings(); drawSquads(); if(selSec) drawSector(); },
-  resize,select:(c,r)=>{ selSec=[c,r]; drawOverlay(); drawSector(); }};
+  placeSquad:(i,x,z,people)=>{ const s=S().squads[i]; s.x=x; s.z=z; s.trip=null; if(people!==undefined){ s.people=people; s.water=Math.min(s.water,C.waterCap(s)); } C.reveal(x,z); C.refreshCurrent(); drawOverlay(); buildPins(); buildBuildings(); changed(); },
+  advance:advanceBy,
+  save:()=>save(true), resize, select:(c,r)=>{ selSec=[c,r]; drawOverlay(); drawSector(); }};
 })();
 // Nightfall sector core: everything about a block of real terrain that doesn't need a renderer.
 // The offline bake (Node) runs it over a whole block so sector edges match; the browser reads its output.
@@ -1658,11 +1971,12 @@ const swap=fn=>{ fade.classList.add('on'); setTimeout(()=>{ fn(); requestAnimati
 NF.enterTactical=(x,z,sq)=>{ if(NF.mode!=='region') return; if(!NF.tacEnter){ NF.tip('The tactical data is still loading'); return; }
   const [bx,bz]=NF.regionToBlock(x,z), s=sq?{...sq,...(([qx,qz])=>({x:qx,z:qz}))(NF.regionToBlock(sq.x,sq.z))}:null;
   if(!s) NF.tip('No squad is in this block: you can look around, but send a squad here on the map to walk it');
-  swap(()=>{ NF.mode='tactical'; rs.hidden=true; rr.hidden=true; ts.hidden=false; rt.hidden=false; NF.tacEnter(s?s.x:bx, s?s.z:bz, s); }); };
+  swap(()=>{ NF.mode='tactical'; NF.tacT0=performance.now(); rs.hidden=true; rr.hidden=true; ts.hidden=false; rt.hidden=false; NF.tacEnter(s?s.x:bx, s?s.z:bz, s); }); };
 NF.exitTactical=()=>{ if(NF.mode!=='tactical') return; if(NF.tacBusy&&NF.tacBusy()){ NF.tip('Finish the fight before leaving the ground'); return; } const st=NF.tacState();
   swap(()=>{ NF.mode='region'; ts.hidden=true; rt.hidden=true; rs.hidden=false; rr.hidden=false; window.__region.resize();
     if(st.squad){ const [x,z]=NF.blockToRegion(st.squad.x,st.squad.z); window.__region.placeSquad(st.squad.index,x,z,st.squad.people); }
-    const [rx,rz]=NF.blockToRegion(st.x,st.z); window.__region.focus(rx,rz); }); };
+    const [rx,rz]=NF.blockToRegion(st.x,st.z); window.__region.focus(rx,rz);
+    window.__region.back((performance.now()-NF.tacT0)/1000, NF.tacResult?NF.tacResult():undefined); }); };   // the map clock catches up
 document.getElementById('upBtn').onclick=()=>NF.exitTactical();
 })();
 
