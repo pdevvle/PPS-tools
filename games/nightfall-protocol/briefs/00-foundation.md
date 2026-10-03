@@ -4,7 +4,7 @@ Owned by the home conversation. Topic conversations follow this; propose changes
 
 ## The game
 
-An XCOM 2-inspired survival tactics game set in real places. The pilot region is the I-17 corridor north of Phoenix, Arizona: Desert Hills and Anthem north past New River towards Black Canyon City, about 18 by 32 km. A small group of survivors runs a home base and sends squads out.
+An XCOM 2-inspired survival tactics game set in real places, in **post-apocalyptic America, years after a solar flare fried the grid and all electronics** and society broke down. The harsh Sonoran Desert has been left to isolated nomads, fierce cartel-descended gangs, armed militias and lonely survivors (see `lore.md`). The pilot region is the I-17 corridor north of Phoenix, Arizona: Desert Hills and Anthem north past New River towards Black Canyon City, about 18 by 32 km. A small group of survivors runs a home base and sends squads out.
 
 Three layers compete for the player's attention:
 
