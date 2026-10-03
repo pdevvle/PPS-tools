@@ -15,7 +15,7 @@ Nightfall Protocol is being built in parallel conversations. This folder is how 
 | `building.md` | The base: building, survivors' jobs, resources (the logistic layer) | not started |
 | `people.md` | Survivors' individual simulation: needs, health, age, mood, relationships, reproduction | not started |
 | `settlement.md` | Stores, barter and trade, roles, rules and civics | not started |
-| `lore.md` | Setting, history, factions, item and place lore that feeds loot | setting decided, synopsis to come |
+| `lore.md` | Setting, history, factions, item and place lore that feeds loot | backstory in, four open questions |
 | `interiors.md` | Procedural interiors for every building: plans, doors, furniture, loot | not started |
 
 ## Starting a topic conversation
