@@ -1,0 +1,99 @@
+<title>I-17 Corridor Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a full-width map stage with an overlay clock and a right-hand rail for the selected sector and squads; a short legend sheet below. Dark frame so the desert carries the colour. */
+:root{
+  color-scheme:dark;
+  --bg:#1b1c1e; --panel:#232427; --line:#38393d; --text:#e2e0dc; --muted:#98968f; --accent:#e0a526; --cool:#5b9fc4;
+  --body:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+html,body{background:var(--bg)}
+body{color:var(--text);font:15px/1.5 var(--body);padding-inline:16px}
+.wrap{max-width:1320px;margin:0 auto;padding-block:18px 34px;display:flex;flex-direction:column;gap:14px}
+header{display:flex;flex-direction:column;gap:3px}
+.eyebrow{font:12px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin:0}
+h1{font:600 clamp(24px,4.2vw,32px)/1.1 var(--body);margin:0;text-wrap:balance}
+.lede{margin:0;max-width:78ch;color:var(--muted)}
+.studio{display:grid;grid-template-columns:minmax(0,1fr) 290px;border:1px solid var(--line);background:var(--panel)}
+#stage{position:relative;height:min(76vh,760px);min-height:420px;overflow:hidden;touch-action:none;cursor:pointer;background:#c9b48f}
+#stage canvas{display:block;width:100%;height:100%}
+#labels{position:absolute;inset:0;pointer-events:none}
+.lb{position:absolute;left:0;top:0;white-space:nowrap;transform:translate(-50%,-100%);font:600 13px var(--body);color:#1d1814;text-shadow:0 0 3px #f3e7cf,0 0 3px #f3e7cf,0 0 6px #f3e7cf}
+.lb.town{font-size:15px;letter-spacing:.06em;text-transform:uppercase}
+.lb.peak{font-weight:500;font-size:12px}
+.lb.peak small{display:block;font:11px var(--mono);text-align:center}
+.lb.road{font:600 11px var(--mono);color:#f3e7cf;background:#2a2622;padding:1px 5px;border-radius:3px;text-shadow:none}
+.lb.sq{font:600 12px var(--body);color:#fff;background:rgba(24,24,26,.85);padding:2px 7px;border-radius:4px;text-shadow:none;border:1px solid var(--c)}
+.lb.site{font:500 11px var(--body);color:#f1eee8;background:rgba(24,24,26,.78);padding:1px 6px;border-radius:3px;text-shadow:none}
+.hud{position:absolute;left:12px;top:10px;display:flex;gap:6px;align-items:center;background:rgba(24,24,26,.85);border-radius:6px;padding:6px 8px;font:13px var(--mono);font-variant-numeric:tabular-nums}
+.hud b{font:600 15px var(--mono);margin-right:6px}
+.hud button{background:#2d2f33;border:1px solid var(--line);color:var(--text);font:600 12px var(--mono);padding:3px 7px;cursor:pointer}
+.hud button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+.hint{position:absolute;right:12px;bottom:10px;font:12px var(--mono);color:#f1eee8;background:rgba(24,24,26,.75);padding:4px 8px;border-radius:4px;pointer-events:none}
+.fail{position:absolute;left:16px;bottom:16px;color:#7a1d12;font:13px var(--mono)}
+.rail{border-left:1px solid var(--line);padding:14px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.rail h2{font:600 12px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 6px}
+.squads{display:flex;flex-direction:column;gap:6px}
+.sqb{display:flex;flex-direction:column;align-items:flex-start;text-align:left;background:var(--bg);border:1px solid var(--line);color:var(--text);padding:7px 9px;cursor:pointer;font:inherit}
+.sqb[aria-pressed="true"]{border-color:var(--accent)}
+.sqb b{font:600 15px var(--body)}
+.sqb span{font:12px var(--mono);color:var(--muted)}
+.sector dl{margin:0;display:grid;gap:1px;font-variant-numeric:tabular-nums}
+.sector dl div{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line);padding:3px 0;font-size:14px}
+.sector dt{color:var(--muted)} .sector dd{margin:0;text-align:right}
+.sector h3{font:600 18px var(--body);margin:0 0 6px}
+.sites{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:3px;max-height:150px;overflow:auto}
+.sites li{display:flex;gap:7px;align-items:center;font-size:14px}
+.sites i{width:9px;height:9px;border-radius:50%;flex:none}
+.go{margin-top:10px;width:100%;background:var(--accent);border:0;color:#211b10;font:600 15px var(--body);padding:8px;cursor:pointer}
+.go:disabled{opacity:.45;cursor:default}
+.eta{font:12px var(--mono);color:var(--muted);margin:6px 0 0}
+.empty{color:var(--muted);font-size:14px;margin:0}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.sheet{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px}
+.sheet section{min-width:0}
+.sheet h2{font:600 16px var(--body);margin:0 0 6px}
+.key{list-style:none;margin:0;padding:0;display:grid;gap:4px;font-size:14px}
+.key li{display:flex;gap:8px;align-items:center}
+.key i{width:16px;height:12px;flex:none;border:1px solid #0006}
+.credit{font:12px var(--mono);color:var(--muted)}
+.credit a{color:var(--accent)}
+@media (max-width:860px){.studio{grid-template-columns:1fr}.rail{border-left:0;border-top:1px solid var(--line)}#stage{height:64vh}.hint{display:none}}
+</style>
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Nightfall · strategic layer prototype</p>
+    <h1>I-17 corridor, Arizona</h1>
+    <p class="lede">The pilot region as a stylised 3D landscape, built from real OpenStreetMap data and elevation and cut into 600 m sectors. Knowledge of each sector fades from current to scouted to rumoured to unknown. Pick a squad, click a sector and send them: they follow real roads, the clock runs, and they reveal what they pass. Mind the heat and the water, search the places you find and bring the haul home, and watch for raiders. The campaign saves in this browser.</p>
+  </header>
+  <div class="studio">
+    <div id="stage" aria-label="3D map of the region">
+      <div id="labels"></div>
+      <div class="hud"><b id="clock">Day 1 07:30</b><button type="button" data-s="0" aria-pressed="false">❚❚</button><button type="button" data-s="1" aria-pressed="true">1×</button><button type="button" data-s="4" aria-pressed="false">4×</button><button type="button" id="homeBtn">Home</button></div>
+      <div class="hint">Drag to turn · right-drag to pan · wheel to zoom · click a sector</div>
+    </div>
+    <div class="rail">
+      <section><h2>Squads</h2><div class="squads" id="squads"></div></section>
+      <section class="sector" id="sector"><p class="empty">Click a sector on the map.</p></section>
+    </div>
+  </div>
+  <div class="sheet">
+    <section><h2>Knowledge</h2><ul class="key">
+      <li><i style="background:#c9b48f"></i>Current: a squad is there, or it is yours</li>
+      <li><i style="background:#c9b48f;opacity:.75"></i>Scouted: sites and loot known, may be out of date</li>
+      <li><i style="background:#8b7d66"></i>Rumoured: town names and rough danger</li>
+      <li><i style="background:#4a4640"></i>Unknown: terrain and roads only</li></ul></section>
+    <section><h2>Sites</h2><ul class="key" id="siteKey"></ul></section>
+    <section><h2>Travel</h2><ul class="key">
+      <li>Paved road 5 km/h · dirt 4 km/h · open desert 2.5 km/h, slower uphill</li>
+      <li>Darkness slows off-road travel; heat slows everyone, thirst more so</li>
+      <li>Water: 0.5 L per person per hour on the move, up to double in the heat; resting in shade 0.2–0.4 L</li>
+      <li>Lookouts reveal 1 to 3 sectors around them, more from high ground, one less at night</li></ul>
+      <p class="credit">Map data © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>, ODbL. Elevation: Terrain Tiles on AWS.</p></section>
+  </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>

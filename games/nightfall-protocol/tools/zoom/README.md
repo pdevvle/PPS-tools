@@ -2,11 +2,11 @@
 
 `mockups/streaming/zoom.html` puts the region map and the streamed tactical ground in one page. It shares `mockups/streaming/block/` with the streaming prototype, so serve that folder over HTTP.
 
-- `region-z.js` is the region map (`region-map.html`'s script) with the stage renamed, the baked block outlined, and a dive: past the closest zoom (or on a double-click, or Go tactical) it hands the point and any squad standing in the block to the tactical layer.
+- `../region/campaign.js` and `../region/region-main.js` are the region map, the same files as the standalone `region-map.html`. When `NF` is defined, the map outlines the baked block and adds a dive: past the closest zoom, on a double-click or with Go tactical, it hands the point and any idle squad in the block to the tactical layer. From an encounter it hands over the encounter as well, as `NF.encounter`.
 - `stream-z.js` is `tools/stream/stream-main.js` that starts only when entered, follows the camera when no squad came down, and climbs back to the map past its widest zoom.
-- `glue-pre.js` converts between the region frame (centred on 33.945 N, 112.14 W) and the block frame (centred on New River); `glue-post.js` swaps the stages with a short fade and writes the squad's tactical position back to the map.
+- `glue-pre.js` converts between the region frame (centred on 33.945 N, 112.14 W) and the block frame (centred on New River). `glue-post.js` swaps the stages with a short fade and writes the squad's tactical position back to the map. It then calls `__region.back(realSeconds, NF.tacResult?.())`, which runs the map clock forward for the time spent on the ground and settles an encounter that was fought there. Exploration runs in near real time; a fight adds 5 game minutes per character turn once combat reports `turns` in its result.
 
-Assemble: `zoom-head.html`, `const REGION=<data/region/region_i17.json>;`, `glue-pre.js`, `region-z.js`, `../stream/sector-core.js`, `../stream/figure-kit.js`, `stream-z.js`, `glue-post.js`, then close the script.
+Assemble with `./build.sh`, which `../region/build.sh` also runs. It concatenates `zoom-head.html`, `const REGION=<data/region/region_i17.json>;`, `glue-pre.js`, `../region/campaign.js`, `../region/region-main.js`, `../stream/sector-core.js`, `../stream/figure-kit.js`, `../motion/motion.js`, `stream-z.js` and `glue-post.js`, then closes the script.
 
 ## Combat demonstration
 

@@ -113,6 +113,26 @@ for i, note in A_PICKS:
     site['roads'] = roads; site['walls'] = walls; site['centre'] = [round(cx, 2), round(cz, 2)]
     sites.append(site)
 
+# ---- Buildings outside the baked sector, cached from the OSM API by fetch_osm.py.
+# 42015 North Venture Drive is tagged building=house in OSM with no level count; it is a
+# multi-storey office block, so the mockup builds it as three storeys of offices (assumed).
+EXTRA = os.path.join(HERE, 'osm_extra.json')
+if os.path.exists(EXTRA):
+    for x in json.load(open(EXTRA)):
+        pts = x['pts']
+        cx = sum(p[0] for p in pts) / len(pts)
+        cz = sum(p[1] for p in pts) / len(pts)
+        roads = []
+        for rd in x['roads']:
+            if min(seg_dist((cx, cz), rd['pts'][k], rd['pts'][k + 1]) for k in range(len(rd['pts']) - 1)) < REACH + 60:
+                roads.append({'cls': rd['cls'], 'name': rd['name'], 'w': ROAD_W.get(rd['cls'], 6),
+                              'drive': rd['cls'] not in ('path', 'footway'), 'pts': rd['pts']})
+        t = x['tags']
+        sites.append({'id': f"anthem/osm/{x['way']}", 'area': 'Anthem', 'block': 'anthem', 'sector': [0, 0], 'index': x['way'], 'note': x['note'] + ' (tagged building=' + t.get('building', '?') + ' in OSM, built here as offices)',
+                      'pts': pts, 'type': 'commercial', 'levels': 3, 'levelsAssumed': True, 'height': None,
+                      'name': t.get('name') or (t.get('addr:housenumber', '') + ' N Venture Dr offices'), 'loot': None, 'what': '', 'house': False,
+                      'tenants': [], 'roads': roads, 'walls': [], 'water': x['water'], 'centre': [round(cx, 2), round(cz, 2)]})
+
 out = os.path.join(HERE, 'sites.json')
 json.dump(sites, open(out, 'w'), separators=(',', ':'))
 print(out, os.path.getsize(out), 'bytes')

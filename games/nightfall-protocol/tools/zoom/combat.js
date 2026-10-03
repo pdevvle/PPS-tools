@@ -77,7 +77,7 @@ const CB=(()=>{
   function moveUnit(u,cells){ return new Promise(res=>{ u.route=cells.map(c=>({x:cx(c),z:cz(c),c})); u.rk=1; u.done=res; }); }
   async function shoot(a,b,opt={}){ const o=odds(a,b,opt); a.face=Math.atan2(b.x-a.x,b.z-a.z); a.aiming=true; await wait(380);
     const hit=Math.random()*100<o.aim, crit=hit&&Math.random()*100<o.crit, dmg=hit?(3+Math.floor(Math.random()*3)+(crit?2:0)):0;
-    tracer(a,b,hit); b.flinch=hit?1:0; a.recoil=1;
+    tracer(a,b,hit); if(hit) Motion.kick(b.fig,'hit'); Motion.kick(a.fig,'recoil');
     pop(b.x,heightAt(b.x,b.z)+2.3,b.z,hit?(crit?`CRIT −${dmg}`:`−${dmg}`):'Miss',hit?(crit?'crit':''):'miss');
     if(hit){ b.hp-=dmg; if(b.hp<=0){ b.hp=0; b.alive=false; b.ow=false; } } b.unaware=false; ink(b);
     await wait(450); a.aiming=false; drawBar(); return hit; }
@@ -89,7 +89,7 @@ const CB=(()=>{
     C.units=figs.map((f,i)=>{ let c=cellOf(f.x,f.z); if(nodeSpeed(c)<=0) c=nearestPassable(c); return {team:'squad',fig:f,name:NAMES[i%NAMES.length],hp:6,max:6,ap:2,alive:true,x:cx(c),z:cz(c),cell:c,face:f.root.rotation.y,free:first==='squad'}; });
     for(const r of pod.units){ r.unaware=first==='squad'; C.units.push(r); }
     const occ=new Set(); for(const u of C.units){ if(occ.has(u.cell)){ u.cell=nearestFree(u.cell,occ); u.x=cx(u.cell); u.z=cz(u.cell); } occ.add(u.cell); }
-    C.round=1; C.units.forEach(ink);
+    C.round=1; C.free=first==='squad'; C.units.forEach(ink);
     if(first==='squad'){ flash('First strike','The raiders haven\'t seen you. Every soldier gets one free shot (+10 aim, no cover for them) before they react.',true); }
     else { flash('Spotted','The raiders saw you first and scramble for cover.',false); C.turn='raider'; await wait(900); for(const r of C.units.filter(u=>u.team==='raider'&&u.alive)){ r.ap=1; await raiderAct(r,true); } }
     beginSquadTurn(); };
@@ -169,21 +169,18 @@ const CB=(()=>{
           banner.className='cb-banner ours'; banner.innerHTML='<b>Contact</b>Three raiders round a fire under the bridge. They haven\'t seen you.<br><button type="button" class="pri" data-c="go">Engage: first strike</button><button type="button" data-c="no">Hold back</button>'; banner.hidden=false; } } }
     else for(const r of pod.units) if(r.cone) r.cone.visible=false;
     // everyone in the fight
-    const list=C.active?C.units:pod.units;
-    for(const u of list){ const f=u.fig; let walking=false;
+    // in a fight everyone; otherwise the camp, and any of the squad who fell (so they finish falling)
+    const list=C.active?C.units:[...pod.units,...C.units.filter(u=>u.team==='squad'&&!u.alive)];
+    for(const u of list){ const f=u.fig;
       if(u.route&&!u.paused){ const p=u.route[u.rk], dx=p.x-u.x, dz=p.z-u.z, d=Math.hypot(dx,dz), st=4*dt;
         if(d<=st){ u.x=p.x; u.z=p.z; u.cell=p.c; u.rk++; if(u.rk>=u.route.length){ u.route=null; const res=u.done; u.done=null; res&&res(); } else overwatchCheck(u); } else { u.x+=dx/d*st; u.z+=dz/d*st; u.face=Math.atan2(dx,dz); }
-        walking=true; if(!u.alive){ u.route=null; const res=u.done; u.done=null; res&&res(); } }
+        if(!u.alive){ u.route=null; const res=u.done; u.done=null; res&&res(); } }
       if(u.team==='squad'){ f.x=u.x; f.z=u.z; }
       let a=u.face-f.root.rotation.y; a=Math.atan2(Math.sin(a),Math.cos(a)); f.root.rotation.y+=a*Math.min(1,dt*9);
       const y=heightAt(u.x,u.z); f.y=f.y===undefined?y:f.y+(y-f.y)*Math.min(1,dt*12); f.root.position.set(u.x,f.y,u.z);
-      if(!u.alive){ f.root.rotation.x+=((-Math.PI/2+.08)-f.root.rotation.x)*Math.min(1,dt*5); f.root.position.y=f.y+.25; continue; }
-      const J=Object.assign({},C.active?FigureKit.POSES.ready:FigureKit.POSES.stand), ph=now/1000*9+u.x;
-      if(walking) Object.assign(J,{lgR:Math.sin(ph)*.5,lgL:-Math.sin(ph)*.5,knR:Math.max(0,-Math.sin(ph))*.9+.06,knL:Math.max(0,Math.sin(ph))*.9+.06,torsoX:.12,shRx:-.9,shLx:-.7,elR:-.5,elL:-1});
-      else if(u.aiming||u.ow) Object.assign(J,{shRx:-1.45,shRz:-.1,elR:-.12,shLx:-1.25,shLz:.4,elL:-.55,torsoY:.15,headX:0});
-      else if(u.hunker) Object.assign(J,{bodyY:-.38,lgR:-1.2,knR:1.7,lgL:-.5,knL:1.9,torsoX:.55,headX:.2});
-      if(u.flinch){ J.torsoX-=.4*u.flinch; u.flinch=Math.max(0,u.flinch-dt*3); } if(u.recoil){ J.shRx+=.25*u.recoil; u.recoil=Math.max(0,u.recoil-dt*5); }
-      const k=1-Math.exp(-dt*12); f.j=f.j||Object.assign({},J); for(const key2 in J) f.j[key2]+=(J[key2]-f.j[key2])*k; FigureKit.applyPose(f,f.j); }
+      // tactical moves are 4 m/s, shown as a run; wounds show in the gait and the idle as well as the ink
+      const act=!u.alive?'dead':u.hunker?'hunker':(u.aiming||u.ow)?'aim':C.active?'ready':'idle';
+      Motion.update(f,{act,mood:u.alive&&u.hp<=u.max/2?'wounded':'calm',ground:heightAt,compress:1.4},dt); }
     if(C.active&&C.camGoal){ target.x+=(C.camGoal.x-target.x)*Math.min(1,dt*2.5); target.z+=(C.camGoal.z-target.z)*Math.min(1,dt*2.5); target.y+=(heightAt(target.x,target.z)-target.y)*Math.min(1,dt*3); if(C.sel&&!C.busy&&C.turn==='squad') C.camGoal={x:C.sel.x,z:C.sel.z}; }
   };
   banner.addEventListener('click',e=>{ const b=e.target.closest('button[data-c]'); if(!b) return; if(b.dataset.c==='go') C.start('squad'); else { pod.declined=true; C.prompt=false; C.slow=1; banner.hidden=true; say('Holding back. Keep out of their sight lines.'); } });

@@ -397,7 +397,7 @@ const CB=(()=>{
   function moveUnit(u,cells){ return new Promise(res=>{ u.route=cells.map(c=>({x:cx(c),z:cz(c),c})); u.rk=1; u.done=res; }); }
   async function shoot(a,b,opt={}){ const o=odds(a,b,opt); a.face=Math.atan2(b.x-a.x,b.z-a.z); a.aiming=true; await wait(380);
     const hit=Math.random()*100<o.aim, crit=hit&&Math.random()*100<o.crit, dmg=hit?(3+Math.floor(Math.random()*3)+(crit?2:0)):0;
-    tracer(a,b,hit); b.flinch=hit?1:0; a.recoil=1;
+    tracer(a,b,hit); if(hit) Motion.kick(b.fig,'hit'); Motion.kick(a.fig,'recoil');
     pop(b.x,heightAt(b.x,b.z)+2.3,b.z,hit?(crit?`CRIT −${dmg}`:`−${dmg}`):'Miss',hit?(crit?'crit':''):'miss');
     if(hit){ b.hp-=dmg; if(b.hp<=0){ b.hp=0; b.alive=false; b.ow=false; } } b.unaware=false; ink(b);
     await wait(450); a.aiming=false; drawBar(); return hit; }
@@ -489,29 +489,26 @@ const CB=(()=>{
           banner.className='cb-banner ours'; banner.innerHTML='<b>Contact</b>Three raiders round a fire under the bridge. They haven\'t seen you.<br><button type="button" class="pri" data-c="go">Engage: first strike</button><button type="button" data-c="no">Hold back</button>'; banner.hidden=false; } } }
     else for(const r of pod.units) if(r.cone) r.cone.visible=false;
     // everyone in the fight
-    const list=C.active?C.units:pod.units;
-    for(const u of list){ const f=u.fig; let walking=false;
+    // in a fight everyone; otherwise the camp, and any of the squad who fell (so they finish falling)
+    const list=C.active?C.units:[...pod.units,...C.units.filter(u=>u.team==='squad'&&!u.alive)];
+    for(const u of list){ const f=u.fig;
       if(u.route&&!u.paused){ const p=u.route[u.rk], dx=p.x-u.x, dz=p.z-u.z, d=Math.hypot(dx,dz), st=4*dt;
         if(d<=st){ u.x=p.x; u.z=p.z; u.cell=p.c; u.rk++; if(u.rk>=u.route.length){ u.route=null; const res=u.done; u.done=null; res&&res(); } else overwatchCheck(u); } else { u.x+=dx/d*st; u.z+=dz/d*st; u.face=Math.atan2(dx,dz); }
-        walking=true; if(!u.alive){ u.route=null; const res=u.done; u.done=null; res&&res(); } }
+        if(!u.alive){ u.route=null; const res=u.done; u.done=null; res&&res(); } }
       if(u.team==='squad'){ f.x=u.x; f.z=u.z; }
       let a=u.face-f.root.rotation.y; a=Math.atan2(Math.sin(a),Math.cos(a)); f.root.rotation.y+=a*Math.min(1,dt*9);
       const y=heightAt(u.x,u.z); f.y=f.y===undefined?y:f.y+(y-f.y)*Math.min(1,dt*12); f.root.position.set(u.x,f.y,u.z);
-      if(!u.alive){ f.root.rotation.x+=((-Math.PI/2+.08)-f.root.rotation.x)*Math.min(1,dt*5); f.root.position.y=f.y+.25; continue; }
-      const J=Object.assign({},C.active?FigureKit.POSES.ready:FigureKit.POSES.stand), ph=now/1000*9+u.x;
-      if(walking) Object.assign(J,{lgR:Math.sin(ph)*.5,lgL:-Math.sin(ph)*.5,knR:Math.max(0,-Math.sin(ph))*.9+.06,knL:Math.max(0,Math.sin(ph))*.9+.06,torsoX:.12,shRx:-.9,shLx:-.7,elR:-.5,elL:-1});
-      else if(u.aiming||u.ow) Object.assign(J,{shRx:-1.45,shRz:-.1,elR:-.12,shLx:-1.25,shLz:.4,elL:-.55,torsoY:.15,headX:0});
-      else if(u.hunker) Object.assign(J,{bodyY:-.38,lgR:-1.2,knR:1.7,lgL:-.5,knL:1.9,torsoX:.55,headX:.2});
-      if(u.flinch){ J.torsoX-=.4*u.flinch; u.flinch=Math.max(0,u.flinch-dt*3); } if(u.recoil){ J.shRx+=.25*u.recoil; u.recoil=Math.max(0,u.recoil-dt*5); }
-      const k=1-Math.exp(-dt*12); f.j=f.j||Object.assign({},J); for(const key2 in J) f.j[key2]+=(J[key2]-f.j[key2])*k; FigureKit.applyPose(f,f.j); }
+      // tactical moves are 4 m/s, shown as a run; wounds show in the gait and the idle as well as the ink
+      const act=!u.alive?'dead':u.hunker?'hunker':(u.aiming||u.ow)?'aim':C.active?'ready':'idle';
+      Motion.update(f,{act,mood:u.alive&&u.hp<=u.max/2?'wounded':'calm',ground:heightAt,compress:1.4},dt); }
     if(C.active&&C.camGoal){ target.x+=(C.camGoal.x-target.x)*Math.min(1,dt*2.5); target.z+=(C.camGoal.z-target.z)*Math.min(1,dt*2.5); target.y+=(heightAt(target.x,target.z)-target.y)*Math.min(1,dt*3); if(C.sel&&!C.busy&&C.turn==='squad') C.camGoal={x:C.sel.x,z:C.sel.z}; }
   };
   banner.addEventListener('click',e=>{ const b=e.target.closest('button[data-c]'); if(!b) return; if(b.dataset.c==='go') C.start('squad'); else { pod.declined=true; C.prompt=false; C.slow=1; banner.hidden=true; say('Holding back. Keep out of their sight lines.'); } });
   C.los=los; C.sees=sees; return C; })();
 
 // ---------- frame loop ----------
-const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches, PACE=2.6;
-let last=performance.now(), phase=0, boost=1, panelT=0; const tmp=new THREE.Vector3();
+const PACE=2.6, GAIT=PACE/1.39;   // the squad moves faster than real walking pace (1.39 m/s); motion shows a walk played faster
+let last=performance.now(), boost=1, panelT=0; const tmp=new THREE.Vector3();
 const speedHere=(x,z,l)=>{ if(l) return 1; const c=cellOf(x,z); return c<0?.7:Math.max(.15,nodeSpeed(c)||.3); };
 function trailAt(back){ const T=squad.trail; let acc=Math.hypot(squad.x-T[T.length-1].x,squad.z-T[T.length-1].z); if(acc>=back) return null;
   for(let i=T.length-1;i>0;i--){ const a=T[i], b=T[i-1], l=Math.hypot(a.x-b.x,a.z-b.z); if(acc+l>=back){ const t=(back-acc)/(l||1); return {x:a.x+(b.x-a.x)*t,z:a.z+(b.z-a.z)*t,l:t<.5?a.l:b.l}; } acc+=l; } return T[0]; }
@@ -524,19 +521,16 @@ function loop(now){
   if(squad.path&&!CB.active&&!CB.prompt){ const wp=squad.path[squad.wp], dx=wp.x-squad.x, dz=wp.z-squad.z, d=Math.hypot(dx,dz), m=speedHere(squad.x,squad.z,squad.l), step=PACE*m*dt;
     if(wp.l&&!squad.l&&d<1.5) squad.l=1; if(!wp.l&&squad.l&&d<1.5) squad.l=0;
     if(d<=step){ squad.x=wp.x; squad.z=wp.z; squad.l=wp.l; if(++squad.wp>=squad.path.length) squad.path=null; } else { squad.x+=dx/d*step; squad.z+=dz/d*step; }
-    if(d>.01) squad.heading=Math.atan2(dx,dz); phase+=dt*7.5*Math.max(.55,m); moving=true;
+    if(d>.01) squad.heading=Math.atan2(dx,dz); moving=true;
     const T=squad.trail, lt=T[T.length-1]; if(Math.hypot(lt.x-squad.x,lt.z-squad.z)>.4){ T.push({x:squad.x,z:squad.z,l:squad.l}); if(T.length>300) T.shift(); } }
   // the window follows the squad, or the camera when no squad is here
   const q=figs.length&&follow?secAt(squad.x,squad.z):secAt(target.x,target.z); if(q&&(q[0]!==centre[0]||q[1]!==centre[1])) setCentre(...q);
-  if(!CB.active) figs.forEach((f,i)=>{ let walk=false;
-    if(i===0){ walk=moving; f.x=squad.x; f.z=squad.z; f.l=squad.l; if(moving){ let a=squad.heading-f.root.rotation.y; a=Math.atan2(Math.sin(a),Math.cos(a)); f.root.rotation.y+=a*Math.min(1,dt*10); } }
-    else { const tp=trailAt(i*1.9); if(tp){ const ddx=tp.x-f.x, ddz=tp.z-f.z, dd=Math.hypot(ddx,ddz); if(dd>.12){ walk=true; const sp=Math.min(dd,PACE*1.15*speedHere(f.x,f.z,f.l)*dt+Math.max(0,dd-1)*dt*2); f.x+=ddx/dd*sp; f.z+=ddz/dd*sp; let a=Math.atan2(ddx,ddz)-f.root.rotation.y; a=Math.atan2(Math.sin(a),Math.cos(a)); f.root.rotation.y+=a*Math.min(1,dt*8); } f.l=tp.l; } }
+  if(!CB.active) figs.forEach((f,i)=>{
+    if(i===0){ f.x=squad.x; f.z=squad.z; f.l=squad.l; if(moving){ let a=squad.heading-f.root.rotation.y; a=Math.atan2(Math.sin(a),Math.cos(a)); f.root.rotation.y+=a*Math.min(1,dt*10); } }
+    else { const tp=trailAt(i*1.9); if(tp){ const ddx=tp.x-f.x, ddz=tp.z-f.z, dd=Math.hypot(ddx,ddz); if(dd>.12){ const sp=Math.min(dd,PACE*1.15*speedHere(f.x,f.z,f.l)*dt+Math.max(0,dd-1)*dt*2); f.x+=ddx/dd*sp; f.z+=ddz/dd*sp; let a=Math.atan2(ddx,ddz)-f.root.rotation.y; a=Math.atan2(Math.sin(a),Math.cos(a)); f.root.rotation.y+=a*Math.min(1,dt*8); } f.l=tp.l; } }
     const swim=inWater(f.x,f.z,f.l), y=yOf(f.x,f.z,f.l); f.y=(f.y===undefined?y:f.y+(y-f.y)*Math.min(1,dt*(swim?4:14))); f.root.position.set(f.x,f.y,f.z);
-    const J=Object.assign({},FigureKit.POSES.stand), sn=Math.sin(phase+i*.7);
-    if(swim){ const t=now/1000*2.2+i; Object.assign(J,{torsoX:.35,headX:-.25,shRx:-1.4+Math.sin(t)*1.3,shLx:-1.4-Math.sin(t)*1.3,shRz:-.5,shLz:.5,elR:-.4,elL:-.4,lgR:Math.sin(t*2)*.35,lgL:-Math.sin(t*2)*.35,knR:.3,knL:.3}); }
-    else if(walk) Object.assign(J,{lgR:sn*.5,lgL:-sn*.5,knR:Math.max(0,-sn)*.9+.06,knL:Math.max(0,sn)*.9+.06,bodyY:-Math.abs(Math.cos(phase+i*.7))*.03,torsoX:.05,shRx:-sn*.35,shLx:sn*.35,elR:-.25,elL:-.25});
-    else if(!reduce){ const t=now/1000+i*3; J.torsoX+=Math.sin(t*1.2)*.01; J.headX+=Math.sin(t*.35)*.04; }
-    const k=1-Math.exp(-dt*10); for(const key2 in J) f.j[key2]+=(J[key2]-f.j[key2])*k; FigureKit.applyPose(f,f.j); });
+    // gait, idles and swimming come from the shared motion module; feet find the ground or the bridge deck they are on
+    Motion.update(f,{act:swim?'swim':'idle',ground:(x,z)=>yOf(x,z,f.l),compress:GAIT},dt); });
   CB.frame(dt,now);
   if(marker.visible){ const a=(now-markerT)/900; marker.material.opacity=Math.max(0,.8-a*.6); marker.scale.setScalar(1+a*.4); if(a>1.4) marker.visible=false; }
   // camera
