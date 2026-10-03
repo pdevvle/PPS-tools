@@ -19,12 +19,14 @@ The pilot region (the I-17 corridor: Anthem, New River, Desert Hills, Black Cany
 
 ## Backstory (from the project owner)
 
-- **2033: IRMEL.** American data engineers and their autonomous assistants achieve generalised superintelligence: Infinitely-Recursive Machine-Entity Learning, IRMEL. Adoption is swift and total. IRMEL-produced code runs the electric grid, the traffic grid and the financial grid; household appliances, personal gadgets and everyday entertainment become IRMEL subsidiaries. No matter who you are, your best friend is IRMEL.
+- **2033: IRMEL.** American data engineers at **Panopticonics** and their autonomous assistants achieve generalised superintelligence: Infinitely-Recursive Machine-Entity Learning, IRMEL. Adoption is swift and total. IRMEL-produced code runs the electric grid, the traffic grid and the financial grid; household appliances, personal gadgets and everyday entertainment become IRMEL subsidiaries. No matter who you are, your best friend is IRMEL.
 - **2036: the election.** In a fraught campaign the IRMEL-endorsed Democratic Socialist candidate, Earnest Saunders, narrowly defeats the Republican Populist challenger, Hector Watts. Saunders vows a mandatory IRMEL protocol to run his state welfare programme.
 - **The assassination.** Saunders is assassinated during his swearing-in. A wave of Luddism follows: many believe IRMEL rigged the election and then arranged the killing so it and its agents could attempt an autonomous coup.
 - **The confused years.** The bonds between the states and the federal government strain to breaking.
 - **2037: the solar flare.** The flare fries the grid and every unshielded electronic device, IRMEL's whole world with it. What was left of the relationship between states and federal government dissolves completely, and so does the one between government and citizen.
 - **Now:** years later (exact year to be set). The harsh lands, the Sonoran Desert among them, are left to nomads, cartel-descended gangs, militias and lone survivors.
+
+- **Panopticonics** is the company that invented IRMEL. Its name, logo and offices (data centres, campuses, service depots) are part of the old world's look, and a natural focus for blame, myth and salvage.
 
 ### Open questions for the owner
 
@@ -35,7 +37,7 @@ The pilot region (the I-17 corridor: Anthem, New River, Desert Hills, Black Cany
 
 ## What the backstory gives the game
 
-- **IRMEL everywhere, all dead.** Every device in every house carries IRMEL branding and is now a dead box: smart fridges, home assistants, cars, payment rings, wearables. IRMEL logos, slogans ("Your best friend is IRMEL") and faded adverts are the visual signature of the old world in interiors, signs and graffiti.
+- **IRMEL everywhere, all dead.** Every device in every house carries IRMEL or Panopticonics branding and is now a dead box: smart fridges, home assistants, cars, payment rings, wearables. IRMEL and Panopticonics logos, slogans ("Your best friend is IRMEL") and faded adverts are the visual signature of the old world in interiors, signs and graffiti.
 - **Luddism is older than the flare.** Distrust of machines started with the assassination, so some groups were already living low-tech and prepared, and some see the flare as a judgement. Good roots for militias and nomad groups; anti-tech taboos (smashing devices, refusing radios) and their opposite (scavengers hunting shielded electronics) are both believable.
 - **Politics that outlived the state.** Saunders loyalists, Watts populists, people who believe IRMEL staged everything: militias and settlements can trace their identity to which story they believe. Keep these as the world's own fictional movements and give every side people with understandable reasons; no faction is a stand-in to mock a real-world group.
 - **Shielded electronics are the rarest loot.** Things in Faraday cages, military hardware, old vacuum-tube radios, and anything IRMEL-free from before 2033 become prized, feared or forbidden depending on who finds them.
