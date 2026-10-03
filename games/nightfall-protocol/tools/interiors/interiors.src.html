@@ -1,0 +1,1647 @@
+<title>Nightfall Interiors</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: the cutaway stage with a control rail beside it (plan view in the rail), then a sheet of loot, the change record and the draft decisions. Dark frame so the stucco and tile carry the colour. */
+:root{
+  color-scheme:dark;
+  --bg:#1b1c1e; --panel:#232427; --raise:#2b2c30; --line:#38393d; --text:#e2e0dc; --muted:#98968f; --accent:#e0a526; --ink:#1d1814;
+  --full:#7a6a58; --half:#b9a483; --glass:#7fb7c9; --raider:#c4544a; --surv:#7f95c9;
+  --body:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+html,body{background:var(--bg)}
+body{color:var(--text);font:15px/1.5 var(--body);padding-inline:16px;margin:0}
+.wrap{max-width:1320px;margin:0 auto;padding-block:20px 40px;display:flex;flex-direction:column;gap:16px}
+header{display:flex;flex-direction:column;gap:4px}
+.eyebrow{font:12px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin:0}
+h1{font:600 clamp(24px,4.4vw,34px)/1.1 var(--body);margin:0;text-wrap:balance}
+h2{font:600 17px/1.2 var(--body);margin:0;text-wrap:balance}
+h3{font:500 12px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0}
+.lede{margin:0;max-width:78ch;color:var(--muted)}
+.studio{display:grid;grid-template-columns:minmax(0,1fr) 340px;border:1px solid var(--line);background:var(--panel)}
+.stage{position:relative;min-height:560px;background:#26272a;overflow:hidden;touch-action:none}
+.stage canvas{display:block;width:100%;height:100%;position:absolute;inset:0}
+.hud{position:absolute;left:12px;top:10px;right:12px;display:flex;justify-content:space-between;gap:8px;pointer-events:none;flex-wrap:wrap}
+.hud .tag{background:rgba(27,28,30,.82);border:1px solid var(--line);padding:4px 8px;font:12px/1.35 var(--mono);pointer-events:auto}
+.hud .tag b{color:var(--accent);font-weight:500}
+.rot{position:absolute;right:12px;bottom:12px;display:flex;gap:6px}
+.hint{position:absolute;left:12px;bottom:12px;font:11px var(--mono);color:var(--muted);background:rgba(27,28,30,.7);padding:3px 6px}
+.rail{border-left:1px solid var(--line);padding:14px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.field{display:flex;flex-direction:column;gap:5px}
+label,.lab{font:12px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+select,button{font:14px var(--body);color:var(--text);background:var(--raise);border:1px solid var(--line);padding:6px 9px;border-radius:2px}
+select{width:100%}
+button{cursor:pointer}
+button:hover{border-color:#5a5b60}
+button:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.chips{display:flex;gap:4px;flex-wrap:wrap}
+.chips button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+.seed{font:12px var(--mono);color:var(--text);background:var(--bg);border:1px solid var(--line);padding:5px 8px;word-break:break-all}
+.note{font-size:13px;color:var(--muted);margin:0}
+#plan{width:100%;aspect-ratio:1/1;max-width:100%;background:#202124;border:1px solid var(--line);display:block}
+.legend{display:flex;flex-wrap:wrap;gap:4px 10px;font:11px var(--mono);color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:10px;margin-right:4px;vertical-align:-1px;border:1px solid var(--ink)}
+.sheet{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:16px}
+.card{border:1px solid var(--line);background:var(--panel);padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.stat{background:var(--bg);border:1px solid var(--line);padding:6px 8px}
+.stat b{display:block;font:500 18px var(--mono);font-variant-numeric:tabular-nums;color:var(--text)}
+.stat span{font:11px var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.loot{display:flex;flex-direction:column;gap:2px;max-height:420px;overflow:auto}
+.loot .rm{font:11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-top:8px}
+.ct{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:5px 6px;border-top:1px solid var(--line);font-size:14px;cursor:pointer;background:none;border-left:0;border-right:0;border-bottom:0;text-align:left;width:100%;border-radius:0}
+.ct:hover{background:var(--raise)}
+.ct .what{color:var(--muted);font-size:13px}
+.ct .t{font:12px var(--mono);color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.ct.empty .name{text-decoration:line-through;color:var(--muted)}
+pre{margin:0;font:12px/1.45 var(--mono);background:var(--bg);border:1px solid var(--line);padding:8px 10px;overflow:auto;max-height:220px;color:var(--text)}
+.decisions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.decisions div{background:var(--bg);border:1px solid var(--line);padding:10px 12px;display:flex;flex-direction:column;gap:4px}
+.decisions p{margin:0;font-size:14px;color:var(--text)}
+.decisions .q{font:11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+.foot{font:12px var(--mono);color:var(--muted)}
+.foot a{color:var(--muted)}
+@media (max-width:980px){
+  .studio{grid-template-columns:minmax(0,1fr)}
+  .rail{border-left:0;border-top:1px solid var(--line)}
+  .stage{min-height:62vh}
+  .sheet{grid-template-columns:minmax(0,1fr)}
+  .decisions{grid-template-columns:minmax(0,1fr)}
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Nightfall Protocol · interiors draft</p>
+    <h1>Interiors from real footprints</h1>
+    <p class="lede">Buildings from the New River block and the Anthem town centre, planned by one generator from the OSM footprint, the nearest road and what the place was. In a strip mall, each tenant on the map gets its own unit. The seed is the building's identity, so the canonical layout never changes; reroll only to see what else the rules can make. Click doors to open them and containers to search them: each change goes into a small record over the generated layout.</p>
+  </header>
+
+  <div class="studio">
+    <div class="stage" id="stage">
+      <canvas id="view" aria-label="Cutaway view of the building interior"></canvas>
+      <div class="hud">
+        <div class="tag" id="hudName">—</div>
+        <div class="tag" id="hudHover">Hover a door or container</div>
+      </div>
+      <div class="hint">drag to orbit · right-drag or shift-drag to pan · wheel to zoom</div>
+      <div class="rot">
+        <button id="rotL" title="Rotate 90° left (Q)">⟲ Q</button>
+        <button id="rotR" title="Rotate 90° right (E)">E ⟳</button>
+      </div>
+    </div>
+    <aside class="rail">
+      <div class="field">
+        <label for="bSel">Building</label>
+        <select id="bSel"></select>
+        <p class="note" id="bNote"></p>
+      </div>
+      <div class="field">
+        <label for="tSel">Built as</label>
+        <select id="tSel"></select>
+      </div>
+      <div class="field">
+        <span class="lab">Seed</span>
+        <div class="seed" id="seedTxt">—</div>
+        <div class="row">
+          <button id="reroll">Reroll seed</button>
+          <button id="canon">Canonical</button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="hSel">History (from the strategy layer)</label>
+        <select id="hSel">
+          <option value="untouched">Untouched</option>
+          <option value="looted">Looted: glass broken, door kicked in</option>
+          <option value="holdout">Survivor holdout: barricaded</option>
+          <option value="den">Raider den</option>
+        </select>
+      </div>
+      <div class="field">
+        <span class="lab">View</span>
+        <div class="chips" id="modeChips">
+          <button data-mode="cutaway" aria-pressed="true">Cutaway</button>
+          <button data-mode="low">Low walls</button>
+          <button data-mode="shell">Shell + roof</button>
+        </div>
+        <div class="chips">
+          <button id="markBtn" aria-pressed="true">Loot markers</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="lab">Plan · 1 m interior grid, 2 m outside grid</span>
+        <canvas id="plan" width="620" height="620" aria-label="Floor plan"></canvas>
+        <div class="legend">
+          <span><i style="background:var(--full)"></i>full cover</span>
+          <span><i style="background:var(--half)"></i>half cover</span>
+          <span><i style="background:var(--glass)"></i>window</span>
+          <span><i style="background:var(--accent)"></i>outside door → 2 m cell</span>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <div class="sheet">
+    <section class="card">
+      <h2>Loot inside</h2>
+      <div class="stats">
+        <div class="stat"><b id="sUnits">0</b><span>site amount</span></div>
+        <div class="stat"><b id="sLeft">0</b><span>still inside</span></div>
+        <div class="stat"><b id="sCont">0</b><span>containers</span></div>
+        <div class="stat"><b id="sTime">0</b><span>search time</span></div>
+      </div>
+      <p class="note" id="lootNote"></p>
+      <div class="loot" id="lootList"></div>
+    </section>
+    <section class="card">
+      <h2>Plan</h2>
+      <div class="stats">
+        <div class="stat"><b id="sArea">0</b><span>m² floor</span></div>
+        <div class="stat"><b id="sRooms">0</b><span>rooms</span></div>
+        <div class="stat"><b id="sDoors">0</b><span>doors</span></div>
+        <div class="stat"><b id="sWin">0</b><span>windows</span></div>
+      </div>
+      <p class="note" id="planNote"></p>
+      <h3>Change record</h3>
+      <p class="note">Kept per building instead of the whole interior. Rerolling or changing the type clears it.</p>
+      <pre id="record">{}</pre>
+      <div class="row"><button id="resetRec">Clear changes</button></div>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>What this draft proposes</h2>
+    <div class="decisions">
+      <div><span class="q">1 · Floor plans</span><p>Square the footprint onto its main axis and rasterise it to 1 m cells. Then split it by binary partition along a room grammar per type: garage, public rooms, then a bedroom wing with a hall spine. Each room pulls toward the street, the drive or the yard. L-shapes work because the splits run over cells, not rectangles.</p></div>
+      <div><span class="q">2 · Openings</span><p>The front door goes in the hub room (living, dining or sales floor) on the run that faces the nearest road. The garage door faces the nearest drive. The back door faces away from the street. Windows depend on the room type: sill height, width, count, storefront glazing or bays. The generator returns them for the shell to cut.</p></div>
+      <div><span class="q">3 · Grid</span><p>A 1 m interior grid with walls on cell edges. Each outside door links its outside cell to one 2 m movement cell (the gold squares). Interior cells never touch the 2 m grid anywhere else.</p></div>
+      <div><span class="q">4 · Storeys</span><p>Not in this draft. Proposal: one plan per storey from the same mask, stairs as a 1 × 3 cell item placed first, and the roof as a separate layer that hides in cutaway.</p></div>
+      <div><span class="q">5 · Decay</span><p>Decay is a separate seed stream layered on the plan, so a change of history never moves a wall. The strategy layer chooses the history (looted, holdout, den), and the seed picks which windows and doors were hit.</p></div>
+      <div><span class="q">6 · Lifetime</span><p>Generation takes about 5 to 20 ms for a house (the time shows in the view), so build near the squad and drop it on leaving. Only the change record persists. It is keyed by the generator version, because item ids are stable only while the rules are.</p></div>
+    </div>
+  </section>
+
+  <p class="foot">Footprints, roads and yard walls © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>, ODbL. Props come from a procedural kit of ink-faceted boxes, standing in until the models kit lands. Even untouched places carry some disorder; looted places and dens carry much more.</p>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+'use strict';
+const SITES = /*SITES*/[];
+const GEN_VERSION = 'interiors-0.1';
+
+// ---------------------------------------------------------------- random
+function hash32(s){ let h=2166136261>>>0; for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619); } return h>>>0; }
+function rngOf(s){ let a=hash32(s); return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+const rint=(rng,a,b)=>a+Math.floor(rng()*(b-a+1));
+const pick=(rng,arr)=>arr[Math.floor(rng()*arr.length)];
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+
+// ---------------------------------------------------------------- grid helpers
+// Local frame: u along the footprint's main axis, v across it. DIRS index: 0 +u, 1 +v, 2 -u, 3 -v.
+const DIRS=[[1,0],[0,1],[-1,0],[0,-1]];
+function edgeKey(i,j,d){
+  if(d===0) return 'v'+(i+1)+','+j;
+  if(d===2) return 'v'+i+','+j;
+  if(d===1) return 'h'+i+','+(j+1);
+  return 'h'+i+','+j;
+}
+function pip(x,y,poly){ let c=false; for(let i=0,j=poly.length-1;i<poly.length;j=i++){ const [xi,yi]=poly[i],[xj,yj]=poly[j]; if(((yi>y)!==(yj>y))&&(x<(xj-xi)*(y-yi)/(yj-yi)+xi)) c=!c; } return c; }
+
+// ---------------------------------------------------------------- building types: the room grammar
+const TYPES={
+  house:      {label:'Ranch house', wallH:2.7, hub:'living', units:16, mix:{goods:1,food:1}, front:['living','dining','hall','kitchen','den'], back:['kitchen','laundry','dining','living','den','hall','garage']},
+  restaurant: {label:'Restaurant', wallH:3.4, hub:'rdining', units:34, mix:{food:4,water:1,goods:.5}, front:['rdining'], back:['rkitchen','storage','office']},
+  convenience:{label:'Corner store', wallH:3.6, hub:'sales', units:44, mix:{food:3,water:2,goods:2,medicine:.6,tools:.4}},
+  fuel:       {label:'Gas station store', wallH:3.6, hub:'sales', units:40, mix:{food:2,water:2,fuel:2,goods:1.5,tools:.6}},
+  pharmacy:   {label:'Pharmacy', wallH:3.6, hub:'sales', units:42, mix:{medicine:4,goods:2,food:.6,water:.5}},
+  fastfood:   {label:'Fast food', wallH:3.4, hub:'ffdining', units:26, mix:{food:4,water:2,goods:.5}, front:['ffdining'], back:['ffkitchen','office','walkin']},
+  cafe:       {label:'Coffee shop', wallH:3.2, hub:'cafe', units:16, mix:{food:3,water:2,goods:1}, front:['cafe'], back:['cafeback']},
+  bank:       {label:'Bank', wallH:3.4, hub:'lobby', units:14, mix:{goods:3,medicine:.3,gear:.3}, front:['lobby'], back:['breakroom','office','teller']},
+  office:     {label:'Offices', wallH:3.0, hub:'reception', units:18, mix:{goods:3,food:1,water:1,medicine:.4}, front:['reception'], back:['breakroom','server','openoffice','office']},
+  hardware:   {label:'Hardware store', wallH:4.4, hub:'sales', units:60, mix:{tools:5,fuel:1.5,goods:2,gear:1.5,water:.4}},
+  supermarket:{label:'Supermarket', wallH:5.2, hub:'sales', units:120, mix:{food:5,water:3,goods:2,medicine:1}},
+  carrepair:  {label:'Auto service', wallH:4.6, hub:'waiting', units:22, mix:{tools:3,fuel:3,goods:.5}, front:['waiting','bay'], back:['storage','office','bay']},
+  salon:      {label:'Hair salon', wallH:3.2, hub:'salon', units:10, mix:{goods:3,medicine:.5}, front:['salon'], back:['storage']},
+  clinic:     {label:'Clinic', wallH:3.0, hub:'waiting', units:20, mix:{medicine:5,goods:1}, front:['waiting'], back:['storage','office','exam']},
+  boutique:   {label:'Small shop', wallH:3.4, hub:'sales', units:14, mix:{goods:4,gear:1}},
+  canopy:     {label:'Fuel canopy', wallH:5.0, hub:'forecourt', units:4, mix:{fuel:3,goods:1}, front:[], back:[]},
+};
+for(const k in TYPES){ const T=TYPES[k]; T.front=T.front||['sales']; T.back=T.back||['stock','storage','dispensary','office']; }
+const ROOM={ // name, floor colour, min width (cells), pull toward front/drive
+  garage:{n:'Garage',floor:'#9a958c',minW:3,f:.5,d:1.4},
+  living:{n:'Living room',floor:'#b48e62',minW:4,f:.9},
+  kitchen:{n:'Kitchen',floor:'#c9bfae',minW:3,f:-.3},
+  dining:{n:'Dining',floor:'#b48e62',minW:3,f:.1},
+  laundry:{n:'Laundry',floor:'#c9bfae',minW:2,f:-.4},
+  den:{n:'Den',floor:'#a98a66',minW:3,f:.2},
+  hall:{n:'Hall',floor:'#b48e62',minW:1},
+  master:{n:'Main bedroom',floor:'#8f8577',minW:3},
+  bed:{n:'Bedroom',floor:'#8f8577',minW:3},
+  bath:{n:'Bathroom',floor:'#d8d4c9',minW:2},
+  mbath:{n:'Main bath',floor:'#d8d4c9',minW:2},
+  rdining:{n:'Dining room',floor:'#a4825c',minW:5,f:1.2},
+  rkitchen:{n:'Kitchen',floor:'#bdb7aa',minW:3,f:-1},
+  walkin:{n:'Walk-in cooler',floor:'#a9adb0',minW:2,f:-1},
+  restroom:{n:'Restroom',floor:'#d8d4c9',minW:2,f:.9},
+  office:{n:'Office',floor:'#9c917f',minW:2,f:-.4},
+  storage:{n:'Dry storage',floor:'#a39d92',minW:2,f:-1},
+  sales:{n:'Sales floor',floor:'#cbc4b4',minW:5,f:1.2},
+  stock:{n:'Stockroom',floor:'#a39d92',minW:2,f:-1},
+  dispensary:{n:'Pharmacy counter',floor:'#c9c6bb',minW:3,f:.8},
+  ffdining:{n:'Dining area',minW:4,f:1.2}, ffkitchen:{n:'Kitchen',minW:3,f:-1},
+  cafe:{n:'Café',minW:4,f:1.2}, cafeback:{n:'Back room',minW:2,f:-1},
+  lobby:{n:'Lobby',minW:4,f:1.2}, teller:{n:'Teller line',minW:2,f:.7}, vault:{n:'Vault',minW:2,f:-1},
+  reception:{n:'Reception',minW:3,f:1.2}, openoffice:{n:'Open office',minW:4,f:.3}, conference:{n:'Conference room',minW:3,f:.4},
+  breakroom:{n:'Break room',minW:3,f:-.5}, server:{n:'Server closet',minW:2,f:-1},
+  bay:{n:'Service bay',minW:4,f:1.2}, waiting:{n:'Waiting room',minW:3,f:1.2},
+  salon:{n:'Salon',minW:4,f:1.2}, exam:{n:'Exam room',minW:3,f:-.2}, forecourt:{n:'Forecourt',minW:3},
+};
+function R(kind,area,extra){ return Object.assign({kind,area,name:ROOM[kind].n},extra||{}); }
+
+function program(typeKey,A,rng){
+  if(typeKey==='house'){
+    let cars=A>=150?(rng()<.85?2:1):A>=110?1:0;
+    const gA=cars===2?36:cars===1?21:0, L=A-gA;
+    let beds=clamp(Math.round((L-55)/42)-(rng()<.3?1:0),2,4);
+    const baths=beds>=3?2:1;
+    const pub=[R('living',.22*L),R('kitchen',.12*L),R('dining',.08*L),R('laundry',6)];
+    if(L>230&&rng()<.6) pub.push(R('den',.06*L));
+    const priv=[R('master',.15*L)];
+    for(let b=1;b<beds;b++) priv.push(R('bed',.095*L,{name:'Bedroom '+(b+1)}));
+    priv.push(R('bath',Math.max(5,.035*L)));
+    if(baths>1) priv.push(R('mbath',Math.max(6,.045*L)));
+    const groups=[];
+    if(cars) groups.push({kind:'group',rooms:[R('garage',gA,{cars})],mode:'bsp'});
+    groups.push({kind:'group',rooms:pub,mode:'bsp'});
+    groups.push({kind:'group',rooms:priv,mode:'wing'});
+    return {groups,cars};
+  }
+  const front=[], back=[];
+  const W2=(f,rooms2,mode2)=>({kind:'group',rooms:rooms2,mode:mode2||'bsp'});
+  switch(typeKey){
+    case 'canopy': return {groups:[W2(0,[R('forecourt',A)])],cars:0};
+    case 'fastfood': front.push(R('ffdining',.55*A)); back.push(R('ffkitchen',.3*A),R('restroom',4)); if(A>140) back.push(R('restroom',4),R('office',5),R('walkin',Math.max(5,.03*A))); return {groups:[W2(0,front),W2(0,back)],cars:0};
+    case 'cafe': front.push(R('cafe',.72*A)); back.push(R('cafeback',.18*A),R('restroom',4)); return {groups:[W2(0,front),W2(0,back)],cars:0};
+    case 'bank': front.push(R('lobby',.36*A)); back.push(R('teller',.14*A),R('vault',Math.max(8,.06*A))); for(let k=0;k<(A>400?3:A>200?2:1);k++) back.push(R('office',.07*A,{name:'Office '+(k+1)})); back.push(R('breakroom',Math.max(8,.06*A)),R('restroom',5)); return {groups:[W2(0,front),W2(0,back)],cars:0};
+    case 'office': { front.push(R('reception',Math.max(10,.07*A)),R('conference',Math.max(14,.08*A))); const n=clamp(Math.round(A/350),2,6), priv=[];
+      for(let k=0;k<n;k++) priv.push(R('office',.045*A,{name:'Office '+(k+1)})); priv.push(R('breakroom',Math.max(10,.06*A)),R('restroom',5,{name:'Restroom (M)'}),R('restroom',5,{name:'Restroom (W)'}),R('server',5));
+      return {groups:[W2(0,front),W2(0,[R('openoffice',.42*A)]),W2(0,priv,'wing')],cars:0}; }
+    case 'hardware': front.push(R('sales',.8*A)); back.push(R('stock',.13*A),R('office',6),R('restroom',5)); return {groups:[W2(0,front),W2(0,back)],cars:0};
+    case 'supermarket': front.push(R('sales',.74*A)); back.push(R('stock',.12*A),R('walkin',.025*A,{name:'Cooler'}),R('walkin',.02*A,{name:'Freezer'}),R('storage',.03*A,{name:'Deli prep'}),R('office',Math.max(8,.01*A)),R('restroom',6,{name:'Restroom (M)'}),R('restroom',6,{name:'Restroom (W)'})); return {groups:[W2(0,front),W2(0,back)],cars:0};
+    case 'carrepair': { const n=clamp(Math.round(A*.62/55),1,4); for(let k=0;k<n;k++) front.push(R('bay',A*.62/n,{name:'Bay '+(k+1)})); front.push(R('waiting',.16*A)); back.push(R('office',Math.max(5,.07*A)),R('storage',.1*A,{name:'Parts'}),R('restroom',4)); return {groups:[W2(0,front),W2(0,back)],cars:0}; }
+    case 'salon': front.push(R('salon',.76*A)); back.push(R('storage',.12*A,{name:'Storage'}),R('restroom',4)); return {groups:[W2(0,front),W2(0,back)],cars:0};
+    case 'clinic': { front.push(R('waiting',.2*A)); const n=clamp(Math.round(A/45),2,6), ex=[]; for(let k=0;k<n;k++) ex.push(R('exam',.1*A,{name:'Exam '+(k+1)})); ex.push(R('storage',Math.max(5,.05*A),{name:'Sterilisation'}),R('office',6),R('restroom',4));
+      return {groups:[W2(0,front),W2(0,ex,'wing')],cars:0}; }
+    case 'boutique': front.push(R('sales',.76*A)); back.push(R('stock',.15*A),R('restroom',4)); return {groups:[W2(0,front),W2(0,back)],cars:0};
+  }
+  if(typeKey==='restaurant'){
+    front.push(R('rdining',.56*A));
+    back.push(R('restroom',5,{name:'Restroom (M)'}),R('restroom',5,{name:'Restroom (W)'}),R('rkitchen',.2*A),R('walkin',Math.max(6,.04*A)),R('office',Math.max(5,.025*A)),R('storage',Math.max(6,.05*A)));
+  } else if(typeKey==='pharmacy'){
+    front.push(R('sales',.58*A));
+    back.push(R('dispensary',.16*A),R('restroom',5),R('stock',.12*A),R('office',Math.max(5,.03*A)));
+  } else {
+    front.push(R('sales',.74*A));
+    back.push(R('restroom',5),R('stock',.14*A),R('office',Math.max(5,.025*A)));
+    if(A>260) back.push(R('walkin',Math.max(8,.04*A),{name:'Walk-in cooler'}));
+  }
+  return {groups:[{kind:'group',rooms:front,mode:'bsp'},{kind:'group',rooms:back,mode:'bsp'}],cars:0};
+}
+function typeOfWhat(w,s){
+  if(/fast_food|ice_cream/.test(w)) return 'fastfood';
+  if(/^cafe$|coffee/.test(w)) return 'cafe';
+  if(/restaurant|^bar$|pub/.test(w)) return 'restaurant';
+  if(/pharmacy|chemist/.test(w)) return 'pharmacy';
+  if(/^fuel$/.test(w)) return s&&s.type==='roof'?'canopy':'fuel';
+  if(/convenience/.test(w)) return 'convenience';
+  if(/supermarket/.test(w)) return 'supermarket';
+  if(/doityourself|hardware/.test(w)) return 'hardware';
+  if(/car_repair/.test(w)) return 'carrepair';
+  if(/hairdresser|beauty/.test(w)) return 'salon';
+  if(/dentist|veterinary|doctors|clinic/.test(w)) return 'clinic';
+  if(/bank/.test(w)) return 'bank';
+  if(/jewelry|dry_cleaning|post_office|swimming_pool|clothes|gift/.test(w)) return 'boutique';
+  return null;
+}
+function autoType(s){
+  const t=typeOfWhat(s.what||'',s); if(t) return t;
+  if(s.house) return 'house';
+  if(s.type==='commercial') return 'office';
+  if(s.name) return 'convenience';
+  if(s.type==='retail') return 'boutique';
+  return 'house';
+}
+function cuisineOf(name,what){
+  const n=(name||'').toLowerCase();
+  if(/thai|ramen|hotpot|kobe|sushi|wok|pho|china|chinese/.test(n)) return 'asian';
+  if(/mexican|filiberto|taco|cantina/.test(n)) return 'mexican';
+  if(/pizza|barro/.test(n)) return 'pizza';
+  if(/bar|grill|legends|pub|saloon|roadrunner/.test(n)) return 'bar';
+  if(/gyro|greek|kitchen/.test(n)) return 'diner';
+  return 'diner';
+}
+// Strip malls: every tenant point inside the footprint gets a unit. Cells go to the nearest tenant,
+// measured mostly along the frontage so the party walls run back from the street.
+function splitUnits(M,site,sense,over){
+  const {W,H,mask}=M, all=[]; for(let c=0;c<W*H;c++) if(mask[c]) all.push(c);
+  const ten=site.tenants||[];
+  if(over||ten.length<2){ const t=over||autoType(site), m=ten[0]||{}; const name=site.name||m.name||''; return [{typeKey:t,cells:all,what:site.what||m.what||'',name,loot:site.loot||m.loot,cuisine:cuisineOf(name,site.what)}]; }
+  const fu=Math.abs(sense.front[0])>Math.abs(sense.front[1]);
+  const pts=ten.map(t=>{ const [u,v]=M.toL(t.p[0],t.p[1]); return {t,i:u-M.u0,j:v-M.v0,wgt:/supermarket/.test(t.what)?2.8:/doityourself|bank/.test(t.what)?1.4:1}; });
+  const unitOf=new Int32Array(W*H).fill(-1);
+  for(const c of all){ const i=c%W+.5, j=((c/W)|0)+.5; let best=0,bd=1e9; pts.forEach((p,k)=>{ const da=fu?(j-p.j):(i-p.i), dc=fu?(i-p.i):(j-p.j); const d=Math.hypot(da,dc*.25)/p.wgt; if(d<bd){bd=d;best=k;} }); unitOf[c]=best; }
+  // each unit keeps its largest piece; small units and strays join a neighbour
+  for(let pass=0;pass<3;pass++) for(let k=0;k<pts.length;k++){
+    const mine=all.filter(c=>unitOf[c]===k); if(!mine.length) continue;
+    const set=new Set(mine), seen=new Set(); let bestP=[];
+    for(const c0 of mine){ if(seen.has(c0)) continue; const piece=[c0]; seen.add(c0); for(let q=0;q<piece.length;q++){ const c=piece[q]; for(const [di,dj] of DIRS){ const n=c+dj*W+di; if(set.has(n)&&!seen.has(n)){ seen.add(n); piece.push(n); } } } if(piece.length>bestP.length) bestP=piece; }
+    const keep=new Set(mine.length<12?[]:bestP);
+    for(let it=0;it<4;it++) for(const c of mine) if(!keep.has(c)&&unitOf[c]===k){ for(const [di,dj] of DIRS){ const n=c+dj*W+di; if(mask[n]&&unitOf[n]!==k&&unitOf[n]>=0){ unitOf[c]=unitOf[n]; break; } } }
+  }
+  return pts.map((p,k)=>({typeKey:typeOfWhat(p.t.what,site)||'boutique',cells:all.filter(c=>unitOf[c]===k),what:p.t.what,name:p.t.name,loot:p.t.loot,cuisine:cuisineOf(p.t.name,p.t.what)})).filter(u=>u.cells.length>0);
+}
+
+// ---------------------------------------------------------------- footprint → 1 m cell mask
+function prepFootprint(site){
+  const P=site.pts, [cx,cz]=site.centre;
+  let sx=0,sy=0;
+  for(let k=0;k<P.length;k++){ const a=P[k],b=P[(k+1)%P.length], dx=b[0]-a[0], dz=b[1]-a[1], L=Math.hypot(dx,dz), an=Math.atan2(dz,dx); sx+=L*Math.cos(4*an); sy+=L*Math.sin(4*an); }
+  const th=Math.atan2(sy,sx)/4, co=Math.cos(th), si=Math.sin(th);
+  const toL=(x,z)=>[(x-cx)*co+(z-cz)*si, -(x-cx)*si+(z-cz)*co];
+  const toW=(u,v)=>[cx+u*co-v*si, cz+u*si+v*co];
+  const poly=P.map(p=>toL(p[0],p[1]));
+  let mnU=1e9,mxU=-1e9,mnV=1e9,mxV=-1e9; for(const [u,v] of poly){ mnU=Math.min(mnU,u); mxU=Math.max(mxU,u); mnV=Math.min(mnV,v); mxV=Math.max(mxV,v); }
+  const Wi=Math.max(2,Math.round(mxU-mnU)), Hi=Math.max(2,Math.round(mxV-mnV));
+  const W=Wi+2, H=Hi+2, u0=mnU+(mxU-mnU-Wi)/2-1, v0=mnV+(mxV-mnV-Hi)/2-1;
+  let mask=new Uint8Array(W*H);
+  for(let j=1;j<H-1;j++) for(let i=1;i<W-1;i++) if(pip(u0+i+.5,v0+j+.5,poly)) mask[j*W+i]=1;
+  const at=(m,i,j)=>i>=0&&j>=0&&i<W&&j<H&&m[j*W+i]===1;
+  // Square it: drop spikes and 1 m strips, fill 1 m notches.
+  for(let pass=0;pass<4;pass++){
+    const m2=mask.slice();
+    for(let j=1;j<H-1;j++) for(let i=1;i<W-1;i++){
+      const L=at(mask,i-1,j),Rt=at(mask,i+1,j),U=at(mask,i,j-1),D=at(mask,i,j+1), n=L+Rt+U+D;
+      if(mask[j*W+i]){ if(n<=1||(!L&&!Rt)||(!U&&!D)) m2[j*W+i]=0; }
+      else if(n>=3) m2[j*W+i]=1;
+    }
+    mask=m2;
+  }
+  // Keep the largest connected piece.
+  const comp=new Int32Array(W*H).fill(-1); let best=-1,bestN=0,cid=0;
+  for(let c=0;c<W*H;c++) if(mask[c]&&comp[c]<0){ const st=[c]; comp[c]=cid; let n=0; while(st.length){ const q=st.pop(); n++; const i=q%W,j=(q/W)|0; for(const [di,dj] of DIRS){ const ni=i+di,nj=j+dj; if(at(mask,ni,nj)&&comp[nj*W+ni]<0){ comp[nj*W+ni]=cid; st.push(nj*W+ni); } } } if(n>bestN){bestN=n;best=cid;} cid++; }
+  for(let c=0;c<W*H;c++) if(mask[c]&&comp[c]!==best) mask[c]=0;
+  return {th,co,si,cx,cz,toL,toW,poly,W,H,u0,v0,mask};
+}
+
+// ---------------------------------------------------------------- roads → front and drive directions
+function streetSense(site,F){
+  let best=null,bestD=1e9,drive=null,driveD=1e9;
+  for(const r of site.roads){
+    if(!r.drive) continue;
+    for(let k=0;k<r.pts.length-1;k++){
+      const a=F.toL(...r.pts[k]), b=F.toL(...r.pts[k+1]);
+      const dx=b[0]-a[0],dz=b[1]-a[1],L=dx*dx+dz*dz||1, t=clamp((-a[0]*dx-a[1]*dz)/L,0,1);
+      const p=[a[0]+t*dx,a[1]+t*dz], d=Math.hypot(p[0],p[1]);
+      const score=d*(r.cls==='service'?1.25:1);
+      if(score<bestD){ bestD=score; best={p,d,name:r.name,cls:r.cls}; }
+      if(r.cls==='service'&&d<driveD){ driveD=d; drive={p,d}; }
+    }
+  }
+  const unit=p=>{ const l=Math.hypot(p[0],p[1])||1; return [p[0]/l,p[1]/l]; };
+  const front=best?unit(best.p):[0,1];
+  const dr=drive&&drive.d<45?unit(drive.p):front;
+  return {front,drive:dr,road:best};
+}
+
+// ---------------------------------------------------------------- planning: binary splits over cells
+function planRooms(M,prog,rng,sense,ctx){
+  const {W,H,mask}=M;
+  const roomOf=ctx.roomOf, rooms=ctx.rooms, startId=rooms.length, U=ctx.unit;
+  const pullOf=r=>{ const k=ROOM[r.kind]; const f=(k.f||0), d=(k.d||0); return [f*sense.front[0]+d*sense.drive[0], f*sense.front[1]+d*sense.drive[1]]; };
+  const weightOf=it=>it.kind==='group'?it.rooms.reduce((s,r)=>s+weightOf(r),0):it.w;
+  const minWOf=it=>it.kind==='group'?Math.max(1,...it.rooms.map(minWOf)):Math.min(4,ROOM[it.kind].minW);
+  const pullSum=it=>{ if(it.kind!=='group'){ const p=pullOf(it); return [p[0]*it.w,p[1]*it.w]; } let s=[0,0]; for(const r of it.rooms){ const p=pullSum(r); s[0]+=p[0]; s[1]+=p[1]; } return s; };
+  for(const g of prog.groups) for(const r of g.rooms) r.w=r.area*(0.88+rng()*0.24);
+  const deferred=[];
+
+  function connected(cells){
+    if(!cells.length) return false;
+    const set=new Set(cells), seen=new Set([cells[0]]), st=[cells[0]];
+    while(st.length){ const c=st.pop(), i=c%W, j=(c/W)|0; for(const [di,dj] of DIRS){ const n=(j+dj)*W+i+di; if(set.has(n)&&!seen.has(n)){ seen.add(n); st.push(n); } } }
+    return seen.size===cells.length;
+  }
+  function bbox(cells){ let a=1e9,b=-1e9,c=1e9,d=-1e9; for(const q of cells){ const i=q%W,j=(q/W)|0; if(i<a)a=i; if(i>b)b=i; if(j<c)c=j; if(j>d)d=j; } return {i0:a,i1:b,j0:c,j1:d,w:b-a+1,h:d-c+1}; }
+  function shapePen(items,cells){
+    if(!cells.length) return 99;
+    const bb=bbox(cells), sh=Math.min(bb.w,bb.h), lo=Math.max(bb.w,bb.h), fill=cells.length/(bb.w*bb.h);
+    let p=connected(cells)?0:30;
+    if(items.length===1&&items[0].kind!=='group'){
+      const mw=ROOM[items[0].kind].minW;
+      if(sh<mw) p+=(mw-sh)*3;
+      if(lo/sh>2.4) p+=(lo/sh-2.4)*1.5;
+      p+=(1-fill)*2.5;
+    } else {
+      let mw=1; for(const it of items) mw=Math.max(mw,minWOf(it));
+      if(sh<mw) p+=(mw-sh)*2;
+      p+=(1-fill)*.8;
+    }
+    return p;
+  }
+  function place(it,cells){
+    if(it.kind==='group'){
+      if(it.mode==='wing'){ deferred.push({group:it,cells}); return; }
+      if(it.rooms.length===1){ place(it.rooms[0],cells); return; }
+      split(it.rooms,cells); return;
+    }
+    const id=rooms.length; it.id=id; it.cells=cells; it.unit=U; rooms.push(it); for(const c of cells) roomOf[c]=id;
+  }
+  function split(items,cells){
+    if(items.length===1){ place(items[0],cells); return; }
+    const tot=items.reduce((s,it)=>s+weightOf(it),0), N=cells.length;
+    const bb=bbox(cells);
+    let best=null;
+    for(let k=1;k<items.length;k++){
+      const A=items.slice(0,k), B=items.slice(k), wa=A.reduce((s,it)=>s+weightOf(it),0)/tot;
+      const pa=A.reduce((s,it)=>{const p=pullSum(it);return [s[0]+p[0],s[1]+p[1]];},[0,0]);
+      const pb=B.reduce((s,it)=>{const p=pullSum(it);return [s[0]+p[0],s[1]+p[1]];},[0,0]);
+      for(let axis=0;axis<2;axis++){
+        const lo=axis?bb.j0:bb.i0, hi=axis?bb.j1:bb.i1;
+        const cnt=new Int32Array(hi-lo+2); for(const q of cells){ const x=axis?((q/W)|0):q%W; cnt[x-lo+1]++; }
+        for(let x=1;x<cnt.length;x++) cnt[x]+=cnt[x-1];
+        for(let s=lo+1;s<=hi;s++){
+          const fracLow=cnt[s-lo]/N;
+          for(let orient=0;orient<2;orient++){
+            const lowItems=orient?B:A, highItems=orient?A:B, target=orient?1-wa:wa;
+            const err=Math.abs(fracLow-target); if(err>.22) continue;
+            const pl=orient?pb:pa, ph=orient?pa:pb;
+            const pull=(-(axis?pl[1]:pl[0])+(axis?ph[1]:ph[0]))/tot;
+            let score=err*7-pull*.9+rng()*.3;
+            if(best&&score-1>best.score) continue;
+            const low=[],high=[]; for(const q of cells){ const x=axis?((q/W)|0):q%W; (x<s?low:high).push(q); }
+            score+=shapePen(lowItems,low)+shapePen(highItems,high);
+            if(!best||score<best.score) best={score,lowItems,highItems,low,high};
+          }
+        }
+      }
+    }
+    if(!best){ // nothing fits: give everything to the largest item
+      const big=items.reduce((a,b)=>weightOf(a)>=weightOf(b)?a:b); place(big,cells); return;
+    }
+    place(best.lowItems.length===1?best.lowItems[0]:{kind:'group',rooms:best.lowItems,mode:'bsp'},best.low);
+    place(best.highItems.length===1?best.highItems[0]:{kind:'group',rooms:best.highItems,mode:'bsp'},best.high);
+  }
+  // Flatten the mixed list so groups split as units first.
+  const all=ctx.cells;
+  const top=prog.groups.map(g=>g.rooms.length===1&&g.mode!=='wing'?g.rooms[0]:g);
+  if(top.length===1) place(top[0],all); else split(top,all);
+  for(const d of deferred) wing(d.group.rooms,d.cells);
+
+  // Bedroom wing: a 1 m hall spine from the public rooms, rooms on one or both sides, main suite across the end.
+  function wing(list,cells){
+    const set=new Set(cells), pub=new Set(['living','dining','kitchen','den','laundry','waiting','reception','openoffice','lobby','sales','rdining','ffdining','cafe','salon','conference']);
+    let s0=-1,sN=0;
+    for(let d=0;d<4;d++){ let n=0; for(const c of cells){ const i=c%W+DIRS[d][0], j=((c/W)|0)+DIRS[d][1]; const q=j*W+i; if(roomOf[q]>=0&&rooms[roomOf[q]].unit===U&&pub.has(rooms[roomOf[q]].kind)) n++; } if(n>sN){sN=n;s0=d;} }
+    if(s0<0){ split(list,cells); return; }
+    const din=(s0+2)%4, pd=DIRS[(s0+1)%4], dd=DIRS[din];
+    const T=c=>(c%W)*dd[0]+((c/W)|0)*dd[1], X=c=>(c%W)*pd[0]+((c/W)|0)*pd[1];
+    let t0=1e9,t1=-1e9,x0=1e9,x1=-1e9; for(const c of cells){ t0=Math.min(t0,T(c)); t1=Math.max(t1,T(c)); x0=Math.min(x0,X(c)); x1=Math.max(x1,X(c)); }
+    const D=t1-t0+1, cw=x1-x0+1;
+    if(cw<5||D<4||list.length<3){ split(list,cells); return; }
+    // x positions where the spine can start on the public side
+    const ok=new Set();
+    const byX={}; for(const c of cells){ const x=X(c); if(byX[x]===undefined||T(c)<T(byX[x])) byX[x]=c; }
+    for(const x in byX){ const c=byX[x], i=c%W+DIRS[s0][0], j=((c/W)|0)+DIRS[s0][1], q=j*W+i; if(roomOf[q]>=0&&pub.has(rooms[roomOf[q]].kind)) ok.add(+x); }
+    const master=list.find(r=>r.kind==='master'), mbath=list.find(r=>r.kind==='mbath');
+    const hasEnd=!!master&&D>=8;
+    const endA=hasEnd?master.w+(mbath?mbath.w:0):0;
+    const endDepth=hasEnd?clamp(Math.round(endA/cw),3,6):0;
+    const Ls=D-endDepth;
+    let xs, target;
+    if(cw>=8){ target=x0+Math.round((cw-1)/2)+rint(rng,-1,1); }
+    else target=rng()<.5?x0:x1;
+    const cand=[...ok].filter(x=>cw>=8?(x>=x0+3&&x<=x1-3):(x===x0||x===x1));
+    if(!cand.length){ split(list,cells); return; }
+    xs=cand.reduce((a,b)=>Math.abs(a-target)<=Math.abs(b-target)?a:b);
+    const hall=[], sideA=[], sideB=[], end=[];
+    const spineSet=new Set();
+    for(let t=t0;t<t0+Ls;t++){ const c=cells.find(q=>T(q)===t&&X(q)===xs); if(c===undefined) break; spineSet.add(c); }
+    for(const c of cells){
+      const t=T(c), x=X(c);
+      if(spineSet.has(c)) hall.push(c);
+      else if(t>=t0+Ls) end.push(c);
+      else if(x<xs) sideA.push(c); else sideB.push(c);
+    }
+    place(R('hall',hall.length),hall);
+    const rest=list.filter(r=>!(hasEnd&&(r===master||r===mbath)));
+    if(hasEnd){
+      if(mbath){
+        const mbW=clamp(Math.round(mbath.w/endDepth),2,3);
+        const lowSide=xs-x0>=mbW+1;
+        const mb=[],ms=[]; for(const c of end){ const x=X(c); ((lowSide?x<x0+mbW:x>x1-mbW)?mb:ms).push(c); }
+        place(master,ms); place(mbath,mb);
+      } else place(master,end);
+    }
+    // share the rest over the two sides, baths between bedrooms
+    const sides=[{cells:sideA,list:[],cap:sideA.length},{cells:sideB,list:[],cap:sideB.length}].filter(s=>s.cap>0);
+    const order=rest.slice().sort((a,b)=>b.w-a.w);
+    for(const r of order){ const s=sides.reduce((a,b)=>(a.cap>=b.cap?a:b)); s.list.push(r); s.cap-=r.w; }
+    for(const s of sides){
+      if(!s.list.length) continue;
+      const small=r=>/bath|restroom|server/.test(r.kind), beds=s.list.filter(r=>!small(r)), baths=s.list.filter(small);
+      const seq=[]; for(let k=0;k<beds.length;k++){ seq.push(beds[k]); if(k===0&&baths.length) seq.push(...baths.splice(0)); } seq.push(...baths);
+      const tw=seq.reduce((a,r)=>a+r.w,0);
+      let tStart=t0; const sT=s.cells.map(T); const tEnd=Math.max(...sT)+1; const span=tEnd-t0;
+      seq.forEach((r,k)=>{
+        const minD=/bath|restroom|server/.test(r.kind)?2:3;
+        let len=k===seq.length-1?tEnd-tStart:Math.max(minD,Math.round(span*r.w/tw));
+        const mine=s.cells.filter(c=>T(c)>=tStart&&T(c)<tStart+len);
+        tStart+=len;
+        if(mine.length) place(r,mine);
+      });
+    }
+  }
+
+  // orphans: unassigned mask cells join their most common neighbour room
+  for(let pass=0;pass<6;pass++){
+    let left=0;
+    for(const c of all) if(roomOf[c]<0){
+      const cnt={}; const i=c%W,j=(c/W)|0;
+      for(const [di,dj] of DIRS){ const q=(j+dj)*W+i+di; if(roomOf[q]>=0&&rooms[roomOf[q]].unit===U&&rooms[roomOf[q]].kind!=='hall') cnt[roomOf[q]]=(cnt[roomOf[q]]||0)+1; }
+      const k=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a])[0];
+      if(k!==undefined){ roomOf[c]=+k; rooms[+k].cells.push(c); } else left++;
+    }
+    if(!left) break;
+  }
+  // rooms split in two pieces keep the bigger piece
+  for(const r of rooms.slice(startId)){
+    const set=new Set(r.cells); const seen=new Set(); let bestP=[];
+    for(const c0 of r.cells){ if(seen.has(c0)) continue; const piece=[c0]; seen.add(c0); for(let k=0;k<piece.length;k++){ const c=piece[k],i=c%W,j=(c/W)|0; for(const [di,dj] of DIRS){ const q=(j+dj)*W+i+di; if(set.has(q)&&!seen.has(q)){ seen.add(q); piece.push(q); } } } if(piece.length>bestP.length) bestP=piece; }
+    if(bestP.length<r.cells.length){
+      const keep=new Set(bestP);
+      for(const c of r.cells) if(!keep.has(c)){ const i=c%W,j=(c/W)|0; for(const [di,dj] of DIRS){ const q=(j+dj)*W+i+di; if(roomOf[q]>=0&&roomOf[q]!==r.id&&rooms[roomOf[q]].unit===U){ roomOf[c]=roomOf[q]; rooms[roomOf[q]].cells.push(c); break; } } }
+      r.cells=bestP;
+    }
+  }
+  return {rooms,roomOf};
+}
+
+// ---------------------------------------------------------------- doors, openings, windows
+const LINK={
+  hall:['living','dining','kitchen','den','waiting','reception','openoffice','lobby'], master:['hall','living','dining'], bed:['hall','living','den'], bath:['hall','living','bed','master'], mbath:['master','hall'],
+  kitchen:['living','dining','hall'], dining:['living','kitchen'], laundry:['kitchen','garage','hall','living','dining'], den:['living','hall','dining'],
+  garage:['laundry','kitchen','hall','living','dining','den'],
+  restroom:['rdining','ffdining','cafe','lobby','waiting','salon','reception','hall','breakroom','openoffice','sales','office','rkitchen','bay'], rkitchen:['rdining'], walkin:['rkitchen','ffkitchen','stock','sales','storage'],
+  office:['rkitchen','ffkitchen','stock','dispensary','storage','teller','lobby','reception','hall','openoffice','waiting','salon','cafeback','bay','sales','rdining'],
+  storage:['rkitchen','ffkitchen','stock','salon','bay','waiting','hall','cafeback','rdining','sales'], stock:['sales','dispensary','storage'], dispensary:['sales'],
+  ffkitchen:['ffdining'], cafeback:['cafe'], teller:['lobby'], vault:['teller','office','hall'], breakroom:['hall','openoffice','reception','teller','lobby','office'],
+  conference:['reception','openoffice','hall'], openoffice:['reception','hall','conference'], server:['hall','openoffice','breakroom'],
+  exam:['hall','waiting'], bay:['waiting','bay','storage','office'], waiting:['bay'],
+};
+const COUNTER=new Set(['dispensary|sales','sales|dispensary','teller|lobby','lobby|teller']);
+const OPEN=new Set(['bay|bay','living|kitchen','kitchen|living','living|dining','dining|living','kitchen|dining','dining|kitchen','hall|living','living|hall','hall|dining','dining|hall']);
+const WIN={
+  living:{n:2,w:[2,3],sill:.6,head:2.2}, dining:{n:1,w:[2],sill:.8,head:2.2}, kitchen:{n:1,w:[1,2],sill:1.05,head:2.1},
+  bed:{n:2,w:[1,2],sill:.9,head:2.1}, master:{n:2,w:[2],sill:.9,head:2.1}, bath:{n:1,w:[1],sill:1.5,head:2.0}, mbath:{n:1,w:[1],sill:1.5,head:2.0},
+  laundry:{n:1,w:[1],sill:1.2,head:2.0}, den:{n:1,w:[2],sill:.9,head:2.1}, office:{n:1,w:[1],sill:1.2,head:2.1}, restroom:{n:1,w:[1],sill:1.8,head:2.2},
+  rdining:{bays:true,sill:.6,head:2.4}, sales:{storefront:true,sill:.35,head:2.6},
+  ffdining:{bays:true,sill:.5,head:2.6}, cafe:{storefront:true,sill:.4,head:2.6}, lobby:{storefront:true,sill:.4,head:2.7}, reception:{storefront:true,sill:.5,head:2.5},
+  waiting:{storefront:true,sill:.5,head:2.5}, salon:{storefront:true,sill:.35,head:2.6}, openoffice:{n:4,w:[2,3],sill:.8,head:2.4}, conference:{n:2,w:[2],sill:.8,head:2.4},
+  breakroom:{n:1,w:[1,2],sill:1.0,head:2.2}, exam:{n:1,w:[1],sill:1.2,head:2.1},
+};
+
+function openings(M,P,rng,sense,units){
+  const {W,H,mask}=M, {rooms,roomOf}=P;
+  const edges=new Map(); // key → {type, a,b rooms (b=-1 outside), dir (outward for exterior), i,j cell of a}
+  const ext=[];
+  for(let j=0;j<H;j++) for(let i=0;i<W;i++){
+    const c=j*W+i; if(!mask[c]) continue;
+    for(let d=0;d<4;d++){
+      const ni=i+DIRS[d][0], nj=j+DIRS[d][1], n=nj*W+ni;
+      if(!mask[n]){ const e={key:edgeKey(i,j,d),type:'wall',a:roomOf[c],b:-1,dir:d,i,j,ext:true}; edges.set(e.key,e); ext.push(e); }
+      else if((d===0||d===1)&&roomOf[n]!==roomOf[c]){ const e={key:edgeKey(i,j,d),type:'wall',a:roomOf[c],b:roomOf[n],dir:d,i,j,ext:false}; edges.set(e.key,e); }
+    }
+  }
+  const byId={}; for(const r of rooms) byId[r.id]=r;
+  // shared runs between two rooms
+  function runsBetween(a,b){
+    const es=[]; for(const e of edges.values()) if(!e.ext&&((e.a===a&&e.b===b)||(e.a===b&&e.b===a))) es.push(e);
+    return toRuns(es);
+  }
+  function toRuns(es){
+    const groups={};
+    for(const e of es){ const o=e.key[0], line=e.key.slice(1).split(',').map(Number); const along=o==='v'?line[1]:line[0], fixed=o==='v'?line[0]:line[1]; const g=o+fixed+'|'+(e.ext?e.dir:'');
+      (groups[g]=groups[g]||[]).push({e,along}); }
+    const runs=[];
+    for(const g in groups){ const arr=groups[g].sort((x,y)=>x.along-y.along); let cur=[arr[0]]; for(let k=1;k<arr.length;k++){ if(arr[k].along===cur[cur.length-1].along+1&&arr[k].e.a===cur[0].e.a) cur.push(arr[k]); else { runs.push(cur.map(x=>x.e)); cur=[arr[k]]; } } runs.push(cur.map(x=>x.e)); }
+    return runs;
+  }
+  const adj={}; for(const e of edges.values()) if(!e.ext){ (adj[e.a]=adj[e.a]||new Set()).add(e.b); (adj[e.b]=adj[e.b]||new Set()).add(e.a); }
+  const doors=[];
+  function makeDoor(e,kind,width){ e.type=kind; e.door={open:false,state:'closed',width}; doors.push(e); }
+  function link(a,b){
+    const ka=byId[a].kind, kb=byId[b].kind;
+    const runs=runsBetween(a,b).sort((x,y)=>y.length-x.length); if(!runs.length) return;
+    const run=runs[0];
+    if(OPEN.has(ka+'|'+kb)){
+      const trim=run.length>=4?1:0;
+      for(let k=trim;k<run.length-trim;k++){ run[k].type='open'; }
+      return;
+    }
+    if(COUNTER.has(ka+'|'+kb)){
+      const trim=run.length>=4?1:0; const gate=trim+Math.floor(rng()*(run.length-2*trim));
+      for(let k=trim;k<run.length-trim;k++) if(k!==gate) run[k].type='counter';
+      makeDoor(run[gate],'door',1); run[gate].door.open=true; return;
+    }
+    const k=run.length>=3?1+Math.floor(rng()*(run.length-2)):Math.floor(run.length/2);
+    makeDoor(run[k],'door',1);
+    run[k].door.open=!/bath|restroom|walkin|vault|server/.test(ka+kb)&&rng()<.75;
+  }
+  const extRuns=toRuns(ext);
+  const f=sense.front, dot=(d,v)=>DIRS[d][0]*v[0]+DIRS[d][1]*v[1];
+  const extDoors=[], fronts=[], backs=[], windows=[];
+  let hubAll=null;
+  function putExt(run,width,kind,role){
+    const n=run.length; if(n<width) return null;
+    const free=run.map(e=>e.type==='wall');
+    let bestK=-1,bestS=-1e9;
+    for(let k=(n>=width+2?1:0);k+width<=n-(n>=width+2?1:0);k++){
+      let okk=true; for(let q=0;q<width;q++) if(!free[k+q]) okk=false; if(!okk) continue;
+      const mid=k+width/2, s=-Math.abs(mid-n/2)*(role==='garage'||role==='front'?1:.2)+rng()*1.2; if(s>bestS){bestS=s;bestK=k;}
+    }
+    if(bestK<0) return null;
+    const es=run.slice(bestK,bestK+width);
+    for(const e of es){ e.type=kind; e.door={open:false,state:'closed',width,role,lead:es[0].key}; }
+    const d={edges:es,role,kind,room:run[0].a,dir:run[0].dir}; extDoors.push(d); doors.push(...es.slice(0,1)); return d;
+  }
+  const roomRuns=id=>extRuns.filter(r=>r[0].a===id);
+  function win(e,rule,extra){ e.type='window'; e.win=Object.assign({sill:rule.sill,head:rule.head,state:'intact'},extra||{}); windows.push(e); }
+  units.forEach((Un,uk)=>{
+    const typeKey=Un.typeKey, T=TYPES[typeKey], urooms=rooms.filter(r=>r.unit===uk); if(!urooms.length) return;
+    if(typeKey==='canopy'){ for(const e of ext) if(byId[e.a]&&byId[e.a].unit===uk) e.type='none'; return; }
+    const hub=urooms.find(r=>r.kind===T.hub)||urooms.reduce((a,b)=>a.cells.length>b.cells.length?a:b);
+    if(!hubAll) hubAll=hub;
+    const conn=new Set([hub.id]); const isolated=[];
+    const nb=id=>[...(adj[id]||[])].filter(n=>byId[n]&&byId[n].unit===uk);
+    while(conn.size<urooms.length){
+      let made=false;
+      for(let L=0;L<9&&!made;L++) for(const r of urooms){ if(conn.has(r.id)) continue; const pref=LINK[r.kind]||[]; for(const n of nb(r.id)){ if(conn.has(n)&&pref.indexOf(byId[n].kind)===L){ link(r.id,n); conn.add(r.id); made=true; break; } } if(made) break; }
+      if(!made) for(const r of urooms){ if(conn.has(r.id)) continue; const n=nb(r.id).find(x=>conn.has(x)); if(n!==undefined){ link(r.id,n); conn.add(r.id); made=true; break; } }
+      if(!made){ for(const r of urooms) if(!conn.has(r.id)){ isolated.push(r); conn.add(r.id); } }
+    }
+    const shop=typeKey!=='house';
+    let front=null;
+    for(const kind of T.front){
+      const cands=urooms.filter(r=>r.kind===kind).flatMap(r=>roomRuns(r.id)).filter(r=>dot(r[0].dir,f)>.45&&r.length>=(shop?4:3)).sort((a,b)=>(dot(b[0].dir,f)*3+b.length*.05)-(dot(a[0].dir,f)*3+a.length*.05));
+      for(const run of cands){ front=putExt(run,shop?2:1,'door','front'); if(front) break; }
+      if(front) break;
+    }
+    if(!front){ const all=urooms.flatMap(r=>roomRuns(r.id)).sort((a,b)=>dot(b[0].dir,f)-dot(a[0].dir,f)); for(const run of all){ front=putExt(run,1,'door','front'); if(front) break; } }
+    if(front){ front.unit=uk; fronts.push(front); }
+    // garage doors on the drive side; service bays open to the street
+    for(const gar of urooms.filter(r=>r.kind==='garage'||r.kind==='bay')){
+      const bay=gar.kind==='bay', dv=bay?f:sense.drive, cars=gar.cars||1;
+      const runs=roomRuns(gar.id).sort((a,b)=>dot(b[0].dir,dv)+b.length*.02-dot(a[0].dir,dv)-a.length*.02);
+      for(const run of runs){ const w=Math.min(bay?4:cars===2?5:3,run.length-1); if(w<2) continue; if(putExt(run,w,'gdoor','garage')) break; }
+    }
+    let back=null;
+    for(const kind of T.back){
+      const cands=urooms.filter(r=>r.kind===kind).flatMap(r=>roomRuns(r.id)).filter(r=>dot(r[0].dir,f)<-.4).sort((a,b)=>dot(a[0].dir,f)-dot(b[0].dir,f));
+      for(const run of cands){ back=putExt(run,1,'door','back'); if(back) break; }
+      if(back) break;
+    }
+    if(!back){ for(const kind of T.back){ const cands=urooms.filter(r=>r.kind===kind).flatMap(r=>roomRuns(r.id)).filter(r=>dot(r[0].dir,f)<.3); for(const run of cands){ back=putExt(run,1,'door','back'); if(back) break; } if(back) break; } }
+    if(back){ back.unit=uk; backs.push(back); }
+    for(const r of isolated) for(const run of roomRuns(r.id)){ if(putExt(run,1,'door','side')) break; }
+    // windows
+    const nearDoor=new Set();
+    for(const d of extDoors) for(const e of d.edges){ const o=e.key[0], [p,q]=e.key.slice(1).split(',').map(Number); for(const s2 of [-1,1]) nearDoor.add(o==='v'?o+p+','+(q+s2):o+(p+s2)+','+q); }
+    for(const r of urooms){
+      const rule=(typeKey!=='house'&&r.kind==='dining')?null:WIN[r.kind]; if(!rule) continue;
+      const runs=roomRuns(r.id).sort((a,b)=>dot(b[0].dir,f)+b.length*.03-dot(a[0].dir,f)-a.length*.03);
+      if(rule.storefront){
+        for(const run of runs){ if(dot(run[0].dir,f)<.45) continue; for(let k=1;k<run.length-1;k++){ const e=run[k]; if(e.type==='wall') win(e,rule,{store:true}); } }
+        continue;
+      }
+      if(rule.bays){
+        for(const run of runs){ if(dot(run[0].dir,f)<-.4) continue; for(let k=1;k+1<run.length-1;k+=3){ for(const e of [run[k],run[k+1]]) if(e.type==='wall'&&!nearDoor.has(e.key)) win(e,rule); } }
+        continue;
+      }
+      let placed=0;
+      for(const run of runs){
+        if(placed>=rule.n) break;
+        const n=run.length; if(n<3) continue;
+        const w=Math.min(pick(rng,rule.w),n-2);
+        const usable=k=>{ for(let q=0;q<w;q++){ const e=run[k+q]; if(!e||e.type!=='wall'||nearDoor.has(e.key)) return false; } return true; };
+        const ks=[]; for(let k=1;k+w<=n-1;k++) if(usable(k)) ks.push(k);
+        if(!ks.length) continue;
+        const k=ks.reduce((a,b)=>Math.abs(a+w/2-n/2)<=Math.abs(b+w/2-n/2)?a:b);
+        for(let q=0;q<w;q++) win(run[k+q],rule);
+        placed++;
+        if(n>=9&&placed<rule.n&&rule.n>1){ const k2=ks.find(x=>x>=k+w+2); if(k2!==undefined&&k2+w<=n-1){ for(let q=0;q<w;q++) win(run[k2+q],rule); placed++; } }
+      }
+    }
+  });
+  return {edges,doors,extDoors,windows,front:fronts[0]||null,back:backs[0]||null,fronts,backs,hub:hubAll};
+}
+
+// ---------------------------------------------------------------- furniture
+/*KIT*/
+const SLOTS={
+  media:{n:'TV stand',cap:1,t:10,cats:{goods:2,gear:.5}}, bookcase:{n:'Bookcase',cap:1,t:15,cats:{goods:1,medicine:.2}}, hutch:{n:'China cabinet',cap:1,t:15,cats:{goods:2}},
+  cabinet:{n:'Cabinets',cap:2,t:15,cats:{food:3,goods:1,tools:.3}}, sink:{n:'Under the sink',cap:1,t:10,cats:{goods:3,tools:.5}}, fridge:{n:'Fridge',cap:3,t:10,cats:{food:3,water:1.5}},
+  nightstand:{n:'Nightstand',cap:1,t:8,cats:{medicine:1,gear:1,goods:1}}, dresser:{n:'Dresser',cap:2,t:20,cats:{gear:2,goods:1}}, wardrobe:{n:'Closet',cap:3,t:30,cats:{gear:3,shelter:2}},
+  vanity:{n:'Medicine cabinet',cap:2,t:10,cats:{medicine:3,goods:1}}, lshelf:{n:'Laundry shelf',cap:2,t:15,cats:{goods:3,tools:1}},
+  workbench:{n:'Workbench',cap:3,t:30,cats:{tools:4,fuel:.5}}, gshelf:{n:'Garage shelves',cap:3,t:30,cats:{tools:2,fuel:2,gear:1,water:.5}}, car:{n:'Car',cap:2,t:60,cats:{gear:2,fuel:1,water:1}},
+  desk:{n:'Desk',cap:1,t:15,cats:{goods:2,gear:.5}}, filing:{n:'Filing cabinet',cap:1,t:20,cats:{goods:1}}, safe:{n:'Safe',cap:2,t:120,cats:{goods:3}},
+  prep:{n:'Prep table',cap:1,t:10,cats:{tools:1,food:1}}, reachin:{n:'Reach-in fridge',cap:3,t:10,cats:{food:3,water:2}},
+  rshelf:{n:'Shelving',cap:3,t:25,cats:null}, shelf:{n:'Aisle shelf',cap:2,t:20,cats:null}, wallshelf:{n:'Wall shelving',cap:3,t:25,cats:null},
+  cooler:{n:'Drinks cooler',cap:3,t:10,cats:{water:3,food:1}}, register:{n:'Register',cap:2,t:20,cats:{goods:3}},
+  warmer:{n:'Warming shelf',cap:1,t:5,cats:{food:2}}, dipcase:{n:'Dipping cabinet',cap:2,t:10,cats:{food:2}}, pastry:{n:'Pastry case',cap:2,t:10,cats:{food:3}},
+  atm:{n:'ATM',cap:2,t:90,cats:{goods:3}}, deposit:{n:'Safe deposit boxes',cap:4,t:180,cats:{goods:3,gear:1,medicine:.5}}, vending:{n:'Vending machine',cap:3,t:30,cats:{food:3,water:2}},
+  toolchest:{n:'Tool chest',cap:3,t:40,cats:{tools:5}}, drums:{n:'Drum',cap:2,t:20,cats:{fuel:4}}, station:{n:'Styling station',cap:1,t:10,cats:{goods:2,medicine:.4}},
+  showcase:{n:'Display case',cap:2,t:15,cats:{goods:4}}, garments:{n:'Garment rail',cap:3,t:30,cats:{gear:3,shelter:1}}, pobox:{n:'PO boxes',cap:2,t:60,cats:{goods:2,medicine:.3}},
+  paint:{n:'Paint counter',cap:2,t:20,cats:{tools:2,goods:1}}, produce:{n:'Produce stand',cap:3,t:15,cats:{food:3}}, bar:{n:'Bar',cap:3,t:20,cats:{water:1,food:1,goods:1}},
+  pump:{n:'Fuel pump',cap:2,t:120,cats:{fuel:3}}, checkout:{n:'Checkout',cap:2,t:15,cats:{goods:3,medicine:.5}}, crate:{n:'Crate',cap:3,t:20,cats:null},
+};
+const POOL={
+  food:['canned beans','canned chili','rice, 5 lb bag','flour tortillas (stale)','peanut butter','beef jerky','instant coffee','pasta','canned peaches','jar of salsa','oatmeal','canned tuna'],
+  water:['24-pack of bottled water','5 gal water jug','sports drinks','purification tablets','gallon of water'],
+  medicine:['ibuprofen','bandages','antiseptic wipes','amoxicillin','gauze rolls','allergy pills','first aid kit','sunscreen','electrolyte powder','insulin (warm)'],
+  tools:['claw hammer','screwdriver set','duct tape','pry bar','cordless drill, no charge','zip ties','paracord','bolt cutters','socket set'],
+  fuel:['propane canister','5 gal gas can','charcoal bag','lighter fluid','motor oil','camp stove fuel'],
+  gear:['backpack','flashlight','AA batteries','work boots','denim jacket','sleeping bag','hunting knife','binoculars','wide-brim hat'],
+  shelter:['tarp','wool blanket','pillows','camping tent','sheets'],
+  goods:['cigarettes','phone charger','paper towels','bar soap','bleach','toilet paper','cash (useless)','lottery tickets','lighters','trash bags'],
+};
+const POOL_EXTRA={
+  restaurant:{food:['cooking oil, 35 lb','flour sack','pinto beans, 25 lb','#10 can of tomatoes','frozen patties (spoiled)','hot sauce case']},
+  pharmacy:{medicine:['prescription bottles','antibiotics','insulin pens','blood pressure pills','saline','oral rehydration salts']},
+  fuel:{fuel:['motor oil, 6 quarts','windshield fluid','propane exchange tank']},
+};
+
+// Room recipes: [item, mode, count, options]
+const FURN={
+  living:[['sofa','wall',1,{avoidWin:1,clear:1}],['tvstand','wall',1],['armchair','wall',[1,2]],['coffee','free',1,{nearItem:'sofa'}],['bookcase','wall',[0,1]],['cactus','wall',[0,1],{corner:1}]],
+  kitchen:[['fridge','wall',1,{corner:1}],['stove','wall',1,{nearRun:1}],['sinkc','wall',1,{window:1,nearRun:1}],['dw','wall',1,{nearItem:'sinkc'}],['counter','run',[3,7]],['island','free',[0,1],{minCells:16,center:1}]],
+  dining:[['dtable','free',1,{center:1,ring:1}],['hutch','wall',[0,1]]],
+  master:[['bed2','wall',1,{avoidWin:1,clear:1,centerWall:1}],['nightstand','wall',2,{nearItem:'bed2'}],['dresser','wall',1],['wardrobe','wall',1]],
+  bed:[['bed1|bed2','wall',1,{avoidWin:1,clear:1}],['nightstand','wall',1,{nearItem:'bed'}],['dresser','wall',[0,1]],['wardrobe','wall',1]],
+  bath:[['tub|shower','wall',1,{minCells:6}],['toilet','wall',1],['vanity','wall',1]],
+  mbath:[['tub','wall',1],['toilet','wall',1],['vanity','wall',[1,2]]],
+  laundry:[['washer','wall',1],['dryer','wall',1,{nearItem:'washer'}],['lshelf','wall',1]],
+  den:[['desk','wall',1],['bookcase','wall',1],['armchair','wall',1],['filing','wall',[0,1]]],
+  garage:[['car','car',0],['workbench','wall',1],['gshelf','wall',[1,2]],['heater','wall',1,{corner:1}]],
+  rdining:[['pos','nearDoor',1,{clear:1}],['booth','wall',12,{window:1}],['cactus','wall',[2,4],{corner:1}],['table4','tables',0]],
+  rkitchen:[['range','wall',1,{per:60}],['grill','wall',1,{nearItem:'range'}],['charbroil','wall',1,{nearItem:'grill'}],['fryer','wall',[1,2],{nearItem:'grill'}],['dsink','wall',1,{per:80}],['reachin','wall',1,{per:40}],['rshelf','wall',1,{per:30}],['prep','free',1,{center:1,per:30,ring:1}]],
+  walkin:[['rshelf','wall',1,{per:5}]],
+  restroom:[['toilet','wall',[1,2]],['vanity','wall',1]],
+  office:[['desk','wall',1],['safe','wall',1],['filing','wall',[0,1]]],
+  storage:[['rshelf','wall',1,{per:6}],['crate','free',[0,2]]],
+  sales:[['checkout','nearDoor',1,{clear:1}],['cooler','wall',8,{farDoor:1}],['wallshelf','wall',6],['cactus','wall',[0,1],{corner:1}],['shelf','aisles',0]],
+  stock:[['rshelf','wall',1,{per:8}],['crate','free',[1,3]]],
+  dispensary:[['pcounter','counterEdge',0],['rshelf','wall',[2,4]],['desk','wall',1]],
+  hall:[],
+  ffdining:[['ffcounter','wall',1,{nearRoom:'ffkitchen'}],['soda','wall',1,{nearItem:'ffcounter'}],['trashbin','wall',[1,2]],['booth','wall',8,{window:1}],['cactus','wall',[0,1],{corner:1}],['table4','tables',0]],
+  ffkitchen:r=>r.what==='ice_cream'?[['dipcase','wall',[1,2],{nearRoom:'ffdining'}],['shake','wall',1],['reachin','wall',[1,2]],['rshelf','wall',1,{per:10}],['dsink','wall',1]]
+    :[['warmer','wall',1,{nearRoom:'ffdining'}],['fryer','wall',[2,3]],['grill','wall',1],['shake','wall',[0,1]],['reachin','wall',[1,2]],['rshelf','wall',1,{per:15}],['dsink','wall',1],['prep','free',1,{center:1,ring:1}]],
+  cafe:[['cafecounter','wall',1,{farDoor:1}],['pastry','wall',1,{nearItem:'cafecounter'}],['armchair','wall',[2,4]],['bookcase','wall',[0,1]],['cactus','wall',[1,2],{corner:1}],['table4','tables',0]],
+  cafeback:[['rshelf','wall',1,{per:6}],['reachin','wall',1],['dsink','wall',1]],
+  lobby:[['atm','wall',1,{nearDoor:1}],['chairs3','wall',[1,2]],['desk','wall',[1,2]],['cactus','wall',[1,2],{corner:1}],['checkstand','free',[1,2],{center:1,ring:1}]],
+  teller:[['tellerwin','counterEdge',0],['filing','wall',[1,2]],['desk','wall',[0,1]]],
+  vault:[['depositbox','wall',1,{per:2.5}],['safe','wall',[1,2]]],
+  reception:[['receptiondesk','nearDoor',1,{clear:1}],['chairs3','wall',[1,2]],['cactus','wall',[1,2],{corner:1}]],
+  openoffice:[['printer','wall',[1,2]],['filing','wall',[1,3]],['watercooler','wall',1],['cactus','wall',[1,2],{corner:1}],['cubicle','tables',0,{alt:'none'}]],
+  conference:[['conftable','free',1,{center:1}],['dresser','wall',[0,1]]],
+  breakroom:[['fridge','wall',1,{corner:1}],['sinkc','wall',1,{nearRun:1}],['counter','run',[2,3]],['vending','wall',[1,2]],['table4','tables',0]],
+  server:[['serverrack','wall',1,{per:2}]],
+  exam:r=>[[r.what==='dentist'?'dentchair':'examtable','free',1,{center:1}],['counter','run',[2,3]],['sinkc','wall',1,{nearRun:1}],['filing','wall',[0,1]]],
+  waiting:r=>r.unitType==='carrepair'?[['receptiondesk','nearDoor',1,{clear:1}],['chairs3','wall',[1,2]],['vending','wall',[0,1]],['watercooler','wall',[0,1]]]
+    :[['receptiondesk','nearDoor',1,{clear:1}],['chairs3','wall',[2,4]],['watercooler','wall',[0,1]],['cactus','wall',[1,2],{corner:1}]],
+  bay:[['liftcar','car',0],['toolchest','wall',[1,2]],['tires','wall',[1,2]],['drums','wall',[1,2]],['gshelf','wall',[0,1]]],
+  salon:[['station','wall',8,{avoidWin:1}],['washsink','wall',[1,3],{farDoor:1}],['receptiondesk','nearDoor',1,{clear:1}],['chairs3','wall',[0,1]],['wallshelf','wall',[0,1]]],
+  forecourt:[['pump','tables',0,{alt:'none',pitch:5}]],
+};
+// Recipes that depend on what the tenant was
+{
+  const salesBase=FURN.sales, rdBase=FURN.rdining, rkBase=FURN.rkitchen;
+  FURN.sales=r=>{
+    if(r.unitType==='hardware') return [['checkout','nearDoor',2,{clear:1}],['keycut','wall',1],['paintcounter','wall',1],['tallshelf','wall',1,{per:30}],['hshelf','aisles',0]];
+    if(r.unitType==='supermarket') return [['checkout','nearDoor',1,{clear:1,per:500}],['carts','nearDoor',[1,2]],['mcase','wall',1,{farDoor:1,per:110}],['produce','free',1,{per:700,ring:1,center:1}],['shelf','aisles',0]];
+    if(r.unitType==='boutique'){
+      if(r.what==='jewelry') return [['checkout','nearDoor',1,{clear:1}],['safe','wall',1],['showcase','tables',0,{alt:'none'}]];
+      if(r.what==='dry_cleaning') return [['checkout','nearDoor',1,{clear:1}],['garmentrack','aisles',0,{seg:6}]];
+      if(r.what==='post_office') return [['checkout','nearDoor',1,{clear:1}],['pobox','wall',[2,4]],['wallshelf','wall',[1,3]]];
+      return [['checkout','nearDoor',1,{clear:1}],['wallshelf','wall',6],['tallshelf','wall',[0,2]],['cactus','wall',[0,1],{corner:1}],['shelf','aisles',0]];
+    }
+    return salesBase;
+  };
+  FURN.rdining=r=>r.cuisine==='bar'?[['barcounter','wall',[1,2],{clear:1}]].concat(rdBase):rdBase;
+  FURN.rkitchen=r=>r.cuisine==='pizza'?[['pizzaoven','wall',[1,2]]].concat(rkBase):r.cuisine==='asian'?[['wok','wall',[1,2]]].concat(rkBase.slice(1)):rkBase;
+}
+
+function furnish(M,P,O,rng,typeKey,progCars){
+  const {W,H}=M, {rooms,roomOf}=P, {edges}=O;
+  const occ=new Int32Array(W*H).fill(-1), reserved=new Uint8Array(W*H), keep=new Uint8Array(W*H);
+  const items=[];
+  const cellOf=(i,j)=>j*W+i;
+  // edges by cell and side, so lookups skip building string keys
+  const EA=new Array(W*H*4);
+  for(const e of edges.values()){ EA[(e.j*W+e.i)*4+e.dir]=e; const ni=e.i+DIRS[e.dir][0], nj=e.j+DIRS[e.dir][1]; if(ni>=0&&nj>=0&&ni<W&&nj<H) EA[(nj*W+ni)*4+(e.dir+2)%4]=e; }
+  const edgeAt=(i,j,d)=>(i<0||j<0||i>=W||j>=H)?undefined:EA[(j*W+i)*4+d];
+  const passable=e=>e&&(e.type==='door'||e.type==='open'||e.type==='gdoor');
+  // door cells stay clear
+  const doorCells={};
+  for(const e of edges.values()){
+    if(!passable(e)) continue;
+    const a=cellOf(e.i,e.j); keep[a]=1; (doorCells[roomOf[a]]=doorCells[roomOf[a]]||[]).push(a);
+    if(!e.ext){ const n=cellOf(e.i+DIRS[e.dir][0],e.j+DIRS[e.dir][1]); keep[n]=1; (doorCells[roomOf[n]]=doorCells[roomOf[n]]||[]).push(n); }
+  }
+  function cellsFor(i,j,f,w,d){ const F=DIRS[f], T=DIRS[(f+1)%4]; const out=[]; for(let a=0;a<w;a++) for(let b=0;b<d;b++) out.push([i+a*T[0]+b*F[0], j+a*T[1]+b*F[1]]); return out; }
+  function reachOK(room){
+    if(room.cells.length>900) return true; // big halls: aisles and lattices leave the floor open
+    const rc=room.cells, set=new Set(rc), dc=doorCells[room.id]||[];
+    const start=dc.find(c=>occ[c]<0); if(start===undefined) return true;
+    const seen=new Set([start]), st=[start];
+    while(st.length){ const c=st.pop(), i=c%W,j=(c/W)|0; for(let d=0;d<4;d++){ const e=edgeAt(i,j,d); if(e&&!passable(e)) continue; const q=cellOf(i+DIRS[d][0],j+DIRS[d][1]); if(set.has(q)&&!seen.has(q)&&(occ[q]<0||items[occ[q]].spec.walk)){ seen.add(q); st.push(q); } } }
+    for(const c of dc) if(!seen.has(c)) return false;
+    for(const it of items){ if(it.room!==room.id||it.spec.walk) continue; let ok=false; for(const c of it.access) if(seen.has(c)) { ok=true; break; } if(!ok) return false; }
+    return true;
+  }
+  function tryPlace(room,key,cells,f,opts,score){
+    const spec=IT[key];
+    for(const [i,j] of cells){ const c=cellOf(i,j); if(i<0||j<0||i>=W||j>=H||roomOf[c]!==room.id||occ[c]>=0||keep[c]||reserved[c]) return null; }
+    // nothing may straddle an interior wall
+    const set=new Set(cells.map(([i,j])=>cellOf(i,j)));
+    for(const [i,j] of cells) for(let d=0;d<4;d++){ const q=cellOf(i+DIRS[d][0],j+DIRS[d][1]); if(set.has(q)&&edgeAt(i,j,d)) return null; }
+    const F=DIRS[f]; const access=[];
+    for(const [i,j] of cells){ const q=cellOf(i+F[0],j+F[1]); if(!set.has(q)&&roomOf[q]===room.id) access.push(q); }
+    if(!access.length&&!spec.walk){ for(const [i,j] of cells) for(const D of DIRS){ const q=cellOf(i+D[0],j+D[1]); if(!set.has(q)&&roomOf[q]===room.id) access.push(q); } }
+    const id=items.length;
+    const it={id,key,spec,room:room.id,cells:[...set],f,access,i:cells[0][0],j:cells[0][1],score};
+    items.push(it); for(const c of it.cells) occ[c]=id;
+    if(!reachOK(room)){ for(const c of it.cells) occ[c]=-1; items.pop(); return null; }
+    if(opts&&opts.clear){ for(const q of access) reserved[q]=1; }
+    if(opts&&opts.ring){ for(const c of it.cells){ const i=c%W,j=(c/W)|0; for(const D of [[1,0],[0,1],[-1,0],[0,-1],[1,1],[-1,1],[1,-1],[-1,-1]]){ const q=cellOf(i+D[0],j+D[1]); if(roomOf[q]===room.id&&occ[q]<0) reserved[q]=1; } } }
+    return it;
+  }
+  const dist=(c,q)=>Math.abs(c%W-q%W)+Math.abs(((c/W)|0)-((q/W)|0));
+  function wallCands(room,key,opts){
+    const spec=IT[key], out=[];
+    const tall=spec.h>1.0;
+    const dc=doorCells[room.id]||[];
+    const rc=centroid(room.cells);
+    if(!room.edgeCells) room.edgeCells=room.cells.filter(c=>{ const i=c%W,j=(c/W)|0; for(let d=0;d<4;d++) if(edgeAt(i,j,d)) return true; return false; });
+    for(const c of room.edgeCells){
+      const i=c%W,j=(c/W)|0;
+      for(let f=0;f<4;f++){
+        const back=(f+2)%4, T=DIRS[(f+1)%4];
+        if(!edgeAt(i,j,back)) continue;
+        const cells=cellsFor(i,j,f,spec.w,spec.d);
+        let ok=true, win=0, solid=true, nearR=0;
+        for(let a=0;a<spec.w;a++){ const ci=i+a*T[0], cj=j+a*T[1]; const e=edgeAt(ci,cj,back); if(!e||e.type==='door'||e.type==='gdoor'||e.type==='open'||e.type==='counter'||e.type==='none'){ ok=false; break; } if(opts.nearRoom){ const o2=e.a===room.id?e.b:e.a; if(o2>=0&&roomKind[o2]===opts.nearRoom) nearR++; } if(e.type==='window'){ win++; solid=false; if(tall||e.win.store) { ok=false; break; } } }
+        if(!ok) continue;
+        let s=rng()*1.2;
+        if(opts.avoidWin) s-=win*2;
+        if(opts.nearRoom) s+=nearR*3;
+        if(opts.nearDoor&&dc.length) s-=Math.min(...dc.map(q=>dist(c,q)))*.4;
+        if(opts.window) s+=win*2.5;
+        if(opts.corner){ const L=edgeAt(i,j,(f+3)%4), Rr=edgeAt(i+(spec.w-1)*T[0],j+(spec.w-1)*T[1],(f+1)%4); if((L&&L.type==='wall')||(Rr&&Rr.type==='wall')) s+=2; }
+        if(opts.farDoor&&dc.length) s+=Math.min(...dc.map(q=>dist(c,q)))*.25;
+        if(opts.centerWall) s-=Math.abs((i+T[0]*(spec.w-1)/2)-rc[0])*.3+Math.abs((j+T[1]*(spec.w-1)/2)-rc[1])*.3;
+        if(opts.nearItem){ const near=items.filter(x=>x.room===room.id&&x.key.startsWith(opts.nearItem)); if(near.length) s-=Math.min(...near.map(x=>Math.min(...x.cells.map(q=>dist(c,q)))))*.8; }
+        if(opts.nearRun){ for(const D of DIRS){ const q=cellOf(i+D[0],j+D[1]); if(occ[q]>=0&&items[occ[q]].room===room.id&&/counter|sinkc|stove|fridge/.test(items[occ[q]].key)) s+=2; } }
+        out.push({cells,f,s,wallBack:solid});
+      }
+    }
+    return out.sort((a,b)=>b.s-a.s);
+  }
+  function freeCands(room,key,opts){
+    const spec=IT[key], out=[], rc=centroid(room.cells), dc=doorCells[room.id]||[];
+    let pool=room.cells;
+    if(pool.length>900){ // very large rooms: look near the doors or sample
+      pool=opts.nearDoor&&dc.length?pool.filter(c=>Math.min(...dc.map(q=>dist(c,q)))<14):pool.filter(()=>rng()<900/room.cells.length); }
+    for(const c of pool){ const i=c%W,j=(c/W)|0; for(let f=0;f<4;f++){
+      const cells=cellsFor(i,j,f,spec.w,spec.d);
+      // free items keep off the walls
+      let wallTouch=0; for(const [a,b] of cells) for(let d=0;d<4;d++){ const e=edgeAt(a,b,d); if(e) wallTouch++; }
+      let s=rng()*1.0-wallTouch*(opts.ring?1.5:.6);
+      if(opts.center) s-=Math.hypot(i-rc[0],j-rc[1])*.4;
+      if(opts.nearDoor&&dc.length) s-=Math.min(...dc.map(q=>dist(c,q)))*.8;
+      if(opts.nearItem){ const near=items.filter(x=>x.room===room.id&&x.key===opts.nearItem); if(near.length) s-=Math.min(...near.map(x=>Math.min(...x.access.map(q=>dist(c,q)))))*1.5; }
+      out.push({cells,f,s});
+    } }
+    return out.sort((a,b)=>b.s-a.s);
+  }
+  function centroid(cells){ let a=0,b=0; for(const c of cells){ a+=c%W; b+=(c/W)|0; } return [a/cells.length,b/cells.length]; }
+  function placeFrom(room,key,cands,opts,max){ let n=0; for(const cd of cands){ if(n>=max) break; if(tryPlace(room,key,cd.cells,cd.f,opts,cd.s)) { n++; if(max>1) return n; } } return n; }
+
+  const roomKind={}; for(const r of rooms) roomKind[r.id]=r.kind;
+  for(const room of rooms){
+    let recipe=FURN[room.kind]||[]; if(typeof recipe==='function') recipe=recipe(room);
+    for(const [k0,mode,cnt0,opts0] of recipe){
+      const opts=opts0||{};
+      if(opts.minCells&&room.cells.length<opts.minCells){ if(!k0.includes('|')) continue; }
+      let key=k0.includes('|')?(room.cells.length<(opts.minCells||12)?k0.split('|')[1]:pick(rng,k0.split('|'))):k0;
+      if(room.kind==='bed'&&k0==='bed1|bed2') key=room.cells.length>=12&&rng()<.6?'bed2':'bed1';
+      let cnt=(Array.isArray(cnt0)?rint(rng,cnt0[0],cnt0[1]):cnt0)+(opts.per?Math.round(room.cells.length/opts.per):0);
+      if(mode==='wall'){ for(let n=0;n<cnt;n++){ const cands=wallCands(room,key,opts); let done=false; for(const cd of cands.slice(0,60)){ const it=tryPlace(room,key,cd.cells,cd.f,opts,cd.s); if(it){ it.wallBack=cd.wallBack; done=true; break; } } if(!done) break; } }
+      else if(mode==='run'){ for(let n=0;n<cnt;n++){ const cands=wallCands(room,key,{nearRun:1}); let done=false; for(const cd of cands.slice(0,40)){ const it=tryPlace(room,key,cd.cells,cd.f,opts,cd.s); if(it){ it.wallBack=cd.wallBack; done=true; break; } } if(!done) break; } }
+      else if(mode==='tables'){
+        // a staggered lattice; a noise field swaps in the smaller alternative
+        const pi=opts.pitch||(IT[key].w+1), pj=opts.pitch||(IT[key].d+1), alt=opts.alt===undefined?'table2':opts.alt;
+        const nzf=noise2('tables'+rng()), ox=rint(rng,0,pi-1), oy=rint(rng,0,pj-1), o={ring:1};
+        const md=(x,m)=>((x%m)+m)%m;
+        for(const c of room.cells){ const i=c%W, j=(c/W)|0; if(md(j-oy,pj)!==0) continue; const sh=Math.floor(nzf(Math.floor((j-oy)/pj)*.9,1.3)*pi); if(md(i-ox-sh,pi)!==0) continue;
+          const key2=alt!=='none'&&nzf(i*.22,j*.22)>.6?alt:key;
+          if(!tryPlace(room,key2,cellsFor(i,j,0,IT[key2].w,IT[key2].d),0,o,0)&&key2===key&&alt!=='none') tryPlace(room,alt,cellsFor(i,j,0,IT[alt].w,IT[alt].d),0,o,0); }
+      }
+      else if(mode==='free'||mode==='nearDoor'){
+        const o=Object.assign({},opts); if(mode==='nearDoor') o.nearDoor=1;
+        for(let n=0;n<cnt;n++){ const cands=freeCands(room,key,o); let done=false; for(const cd of cands.slice(0,80)){ if(tryPlace(room,key,cd.cells,cd.f,o,cd.s)){ done=true; break; } } if(!done) break; }
+      }
+      else if(mode==='car'){
+        const cars=room.cars||progCars||1;
+        const gd=[...edges.values()].find(e=>e.type==='gdoor'&&e.a===room.id);
+        const f=gd?gd.dir:0, F=DIRS[f];
+        // cars nose toward the garage door, tail against the back wall
+        const back=(f+2)%4; let placed=0;
+        const cands=[];
+        for(const c of room.cells){ const i=c%W,j=(c/W)|0;
+          for(const len of [5,4]){
+            const cells=cellsFor(i,j,f,2,len);
+            const e=edgeAt(i,j,back); const s=(e?2:0)+rng()*.5-(gd?Math.abs((i*Math.abs(F[1])+j*Math.abs(F[0]))-(gd.i*Math.abs(F[1])+gd.j*Math.abs(F[0])))*.3:0)+(len===5?.5:0);
+            cands.push({cells,f,s,len});
+          } }
+        cands.sort((a,b)=>b.s-a.s);
+        for(const cd of cands){ if(placed>=cars) break; const it=tryPlace(room,key,cd.cells,cd.f,{},cd.s); if(it){ it.len=cd.len; placed++; } }
+      }
+      else if(mode==='aisles'){
+        const bb=room.cells.reduce((b,c)=>{const i=c%W,j=(c/W)|0; return [Math.min(b[0],i),Math.max(b[1],i),Math.min(b[2],j),Math.max(b[3],j)];},[1e9,-1e9,1e9,-1e9]);
+        const alongU=(bb[1]-bb[0])>=(bb[3]-bb[2]);
+        const c0=alongU?bb[2]:bb[0], c1=alongU?bb[3]:bb[1], a0=alongU?bb[0]:bb[2], a1=alongU?bb[1]:bb[3];
+        // a frame of 2 m clear inside the perimeter fittings, then shelf rows 1 m wide with 2 m aisles
+        for(let cr=c0+3;cr<=c1-3;cr+=3){
+          let seg=[];
+          const flush=()=>{ if(seg.length>=2){ const it=tryPlace(room,key,seg,alongU?3:0,{},0); if(it) it.wl=seg.length; } seg=[]; };
+          for(let a=a0+3;a<=a1-3;a++){
+            const i=alongU?a:cr, j=alongU?cr:a, c=cellOf(i,j);
+            if(roomOf[c]===room.id&&occ[c]<0&&!keep[c]&&!reserved[c]&&seg.length<(opts.seg||4)) seg.push([i,j]);
+            else { flush(); }
+          }
+          flush();
+        }
+      }
+      else if(mode==='counterEdge'){
+        for(const e of edges.values()){
+          if(e.type!=='counter') continue;
+          const ca=cellOf(e.i,e.j), cb=cellOf(e.i+DIRS[e.dir][0],e.j+DIRS[e.dir][1]);
+          if(roomOf[ca]!==room.id&&roomOf[cb]!==room.id) continue;
+          const mine=roomOf[ca]===room.id?ca:cb; const dirToSales=mine===ca?e.dir:(e.dir+2)%4;
+          // the counter's front faces the public side; its back is to the room
+          tryPlace(room,key,[[mine%W,(mine/W)|0]],dirToSales,{},0);
+        }
+      }
+    }
+  }
+  return {items,occ,reserved,keep,doorCells};
+}
+
+// ---------------------------------------------------------------- history and decay (own seed stream, never moves a wall)
+function decay(M,P,O,Fn,rng,history){
+  const {W}=M, {rooms,roomOf}=P, {items,occ,keep}=Fn;
+  const people=[], extra=[];
+  const ext=O.extDoors;
+  for(const d of ext){ for(const e of d.edges){ e.door.state='closed'; e.door.open=false; } }
+  for(const w of O.windows) w.win.state='intact';
+  const containers=items.filter(it=>it.spec.slot);
+  for(const it of containers) it.searched=false;
+  const freeCells=(room)=>room.cells.filter(c=>occ[c]<0&&!keep[c]);
+  function addItem(room,key,c,f){
+    const spec=IT[key]; const i=c%W,j=(c/W)|0;
+    if(occ[c]>=0) return null;
+    const id=items.length; const it={id,key,spec,room:room.id,cells:[c],f:f||0,access:[c],i,j,added:true};
+    items.push(it); occ[c]=id; return it;
+  }
+  const biggest=(kinds)=>rooms.filter(r=>kinds.includes(r.kind)).sort((a,b)=>b.cells.length-a.cells.length)[0]||rooms.slice().sort((a,b)=>b.cells.length-a.cells.length)[0];
+  if(history==='looted'||history==='den'){
+    const kicked=O.front||O.back; if(kicked){ for(const e of kicked.edges){ e.door.state=e.type==='gdoor'?'open':'broken'; e.door.open=true; } }
+    for(const d of ext) if(d!==kicked&&rng()<.5) for(const e of d.edges){ e.door.open=true; e.door.state='open'; }
+    for(const w of O.windows) if(rng()<(history==='den'?.5:.3)) w.win.state='broken'; else if(history==='den'&&rng()<.3) w.win.state='boarded';
+    for(const it of containers) if(rng()<(history==='den'?.55:.8)) it.searched=true;
+    for(const e of O.doors) if(!e.ext&&e.door){ if(rng()<.7) e.door.open=true; if(rng()<.12) e.door.state='broken'; }
+    for(const r of rooms){ const fc=freeCells(r); const n=Math.round(fc.length*(history==='den'?.08:.06)); for(let k=0;k<n&&fc.length;k++){ const c=fc.splice(Math.floor(rng()*fc.length),1)[0]; addItem(r,'debris',c); } }
+  }
+  if(history==='holdout'){
+    for(const w of O.windows) w.win.state='boarded';
+    if(O.front){ for(const e of O.front.edges){ e.door.state='barricaded'; }
+      // move furniture against the front door from inside
+      const e=O.front.edges[0]; const c=e.i+e.j*W; const r=rooms.find(x=>x.id===roomOf[c]);
+      for(const fe of O.front.edges){ const fc=fe.i+fe.j*W; const ff=(fe.dir+2)%4; keep[fc]=0; addItem(r,'barricade',fc,ff); }
+    }
+    for(const d of ext) if(d.role==='garage') for(const e of d.edges) e.door.state='barricaded';
+  }
+  if(history==='holdout'||history==='den'){
+    const camp=biggest(history==='den'?['living','rdining','sales','ffdining','cafe','lobby','openoffice','waiting','salon','bay']:['living','den','master','sales','rdining','ffdining','cafe','openoffice','lobby','waiting','salon']);
+    const fc=freeCells(camp).filter(c=>!Fn.reserved[c]);
+    const nBed=history==='den'?rint(rng,3,5):rint(rng,2,4);
+    for(let k=0;k<nBed&&fc.length;k++){ const c=fc.splice(Math.floor(rng()*fc.length),1)[0]; addItem(camp,'bedroll',c,rint(rng,0,3)); }
+    if(history==='den'&&fc.length){ const c=fc.splice(Math.floor(fc.length/2),1)[0]; addItem(camp,'barrel',c); }
+    const store=biggest(history==='den'?['garage','bay','stock','storage','rkitchen','ffkitchen','kitchen']:['kitchen','stock','storage','rkitchen','ffkitchen','cafeback','breakroom','den']);
+    const sc=freeCells(store).filter(c=>!Fn.reserved[c]);
+    for(let k=0;k<rint(rng,2,4)&&sc.length;k++){ const c=sc.splice(Math.floor(rng()*sc.length),1)[0]; const it=addItem(store,'crate',c); if(it){ it.stash=true; it.searched=false; } }
+    const n=history==='den'?rint(rng,3,5):rint(rng,2,4);
+    const all=rooms.flatMap(r=>freeCells(r).filter(c=>!Fn.reserved[c]).map(c=>[r,c]));
+    for(let k=0;k<n&&all.length;k++){ const [r,c]=all.splice(Math.floor(rng()*all.length),1)[0]; people.push({c,side:history==='den'?'raider':'survivor',boss:history==='den'&&k===0}); }
+  }
+  return {people};
+}
+
+// ---------------------------------------------------------------- loot: the site's amount, shared over its containers
+function stockLoot(site,unitsAll,P,Fn,rng,history){
+  const factor={untouched:1,looted:.25,holdout:1.4,den:.6}[history];
+  const rmap={}; for(const r of P.rooms) rmap[r.id]=r;
+  let unitsSum=0, baseSum=0;
+  for(const it of Fn.items) if(it.spec.slot) it.contents=[];
+  unitsAll.forEach((Un,uk)=>{
+  const typeKey=Un.typeKey, T=TYPES[typeKey], A=Un.cells.length;
+  const base=Math.round(T.units*Math.pow(A/200,.6));
+  const units=Math.max(1,Math.round(base*factor)); unitsSum+=units; baseSum+=base;
+  const rk=id=>rmap[id].kind;
+  const conts=Fn.items.filter(it=>it.spec.slot&&rmap[it.room]&&rmap[it.room].unit===uk);
+  const open=conts.filter(it=>!it.searched);
+  const mixFor=it=>{
+    const sl=SLOTS[it.spec.slot]; let cats=sl.cats;
+    if(!cats){
+      const k=rk(it.room);
+      if(k==='walkin') cats={food:4,water:2};
+      else if(k==='dispensary') cats={medicine:6,goods:.5};
+      else if(k==='garage'||k==='bay') cats={tools:2,fuel:2};
+      else cats=Object.assign({},T.mix);
+      if(it.stash) cats=history==='den'?{gear:2,food:2,fuel:1,medicine:1}:{food:3,water:3,medicine:1};
+    }
+    cats=Object.assign({},cats);
+    if(typeKey==='clinic'&&/cabinet|sink|vanity|desk/.test(it.spec.slot)) cats={medicine:5,goods:1};
+    if(Un.loot&&cats[Un.loot]!==undefined&&!sl.cats) cats[Un.loot]+=1;
+    return cats;
+  };
+  const caps=open.map(it=>SLOTS[it.spec.slot].cap*(.5+rng()));
+  const load=open.map(()=>0);
+  for(let u=0;u<units&&open.length;u++){
+    let tot=0; for(let k=0;k<open.length;k++) if(load[k]<SLOTS[open[k].spec.slot].cap*2) tot+=caps[k];
+    if(tot<=0) break;
+    let x=rng()*tot, k=0; for(;k<open.length;k++){ if(load[k]>=SLOTS[open[k].spec.slot].cap*2) continue; x-=caps[k]; if(x<=0) break; }
+    k=Math.min(k,open.length-1); load[k]++;
+    const cats=mixFor(open[k]); let ct=0; for(const c in cats) ct+=cats[c]; let y=rng()*ct, cat='goods'; for(const c in cats){ y-=cats[c]; if(y<=0){cat=c;break;} }
+    const extra=(POOL_EXTRA[typeKey]||{})[cat]||[]; const pool=POOL[cat].concat(extra,extra);
+    const name=pick(rng,pool);
+    const have=open[k].contents.find(x=>x.name===name); if(have) have.qty++; else open[k].contents.push({name,cat,qty:1});
+  }
+  });
+  return {units:unitsSum,base:baseSum};
+}
+
+// ---------------------------------------------------------------- looks: palettes per room, floors, mess (visual only)
+const FLOORS={wood:['#a87b50','#8a6440','#b98d5f','#7a5a3c','#9c7448'],tile:[['#d8d4c9','#a8a296'],['#e8e4da','#2b2c2e'],['#c9bfae','#b5653f'],['#dcd6c8','#8fa3a0'],['#e8dcc0','#c9953f']],
+  carpet:['#8f8577','#7a8a8c','#a08a76','#6f7a62','#b0a48c','#8a6f6a'],concrete:['#9a958c','#8f8a82','#a39d92'],saltillo:['#b5653f','#c4744a','#a85a38'],vinyl:[['#cbc4b4','#d9d2c3'],['#e8e4da','#b8bcbf']],quarry:[['#8f3f2c','#7a3424']]};
+const FLOOR_OF={living:['wood','carpet'],dining:['wood','tile'],kitchen:['tile'],bath:['tile'],mbath:['tile'],restroom:['tile'],laundry:['tile'],bed:['carpet','wood'],master:['carpet','wood'],den:['carpet'],hall:['wood'],
+  garage:['concrete'],rdining:['saltillo','wood'],rkitchen:['quarry'],walkin:['concrete'],office:['carpet'],storage:['concrete'],sales:['vinyl'],stock:['concrete'],dispensary:['vinyl'],
+  ffdining:['tile','vinyl'],ffkitchen:['quarry'],cafe:['wood','tile'],cafeback:['tile'],lobby:['tile','carpet'],teller:['carpet'],vault:['concrete'],reception:['carpet','wood'],openoffice:['carpet'],
+  conference:['carpet'],breakroom:['tile','vinyl'],server:['vinyl'],bay:['concrete'],waiting:['tile','vinyl'],salon:['wood','tile'],exam:['vinyl'],forecourt:['concrete']};
+function styleFor(seedStr,units,rooms){
+  const blds=units.map((Un,k)=>{ const br=rngOf(seedStr+'|style'+(k?'|'+k:'')), chair=/restaurant|fastfood/.test(Un.typeKey)?pick(br,Un.typeKey==='fastfood'?['diner','diner','wood']:['wood','diner','wood']):'wood';
+    return {vinyl:pick(br,PAL.vinyl),chair,chairCol:chair==='diner'?CHROME:pick(br,PAL.wood),what:Un.what||'',cuisine:Un.cuisine,unitType:Un.typeKey}; });
+  const out={};
+  for(const r of rooms){ const q=rngOf(seedStr+'|style|'+r.id), bld=blds[r.unit]||blds[0]; const pat=pick(q,FLOOR_OF[r.kind]||['wood']); const fl=pick(q,FLOORS[pat]);
+    out[r.id]=Object.assign({wood:pick(q,PAL.wood),fab:pick(q,PAL.fab),fab2:pick(q,PAL.fab),cab:pick(q,PAL.cab),top:pick(q,PAL.top),splash:pick(q,['#d8cdb6','#b8d4cf','#e8e4da','#c98b62','#2f8f8a']),
+      appl:pick(q,PAL.appl),paint:/rdining|sales|ffdining|cafe|lobby|salon|waiting|reception/.test(r.kind)?pick(q,PAL.adobe):/bath|restroom|kitchen|walkin|stock|storage|garage/.test(r.kind)?pick(q,['#e9e1d0','#f0e7d4','#d4e4e2','#e3dccd']):pick(q,PAL.paint),car:pick(q,PAL.car),
+      pat,fixture:pick(q,['#e8e4da','#c9d2d6','#d9c49a','#b8c4b0','#e3cfc2']),floor:Array.isArray(fl)?fl[0]:fl,floor2:Array.isArray(fl)?fl[1]:fl},bld); }
+  return out;
+}
+
+// ---------------------------------------------------------------- whole generation
+function generate(site,typeKey,seedStr,history){
+  const t0=performance.now();
+  const M=prepFootprint(site);
+  const sense=streetSense(site,M);
+  const A=M.mask.reduce((s,x)=>s+x,0);
+  const units=splitUnits(M,site,sense,typeKey==='auto'?null:typeKey);
+  const roomOf=new Int32Array(M.W*M.H).fill(-1), rooms=[]; let cars=0;
+  units.forEach((Un,k)=>{
+    const sfx=k?'|'+k:'';
+    const prog=program(Un.typeKey,Un.cells.length,rngOf(seedStr+'|program'+sfx));
+    if(k===0) cars=prog.cars;
+    const n0=rooms.length;
+    planRooms(M,prog,rngOf(seedStr+'|plan'+sfx),sense,{cells:Un.cells,roomOf,rooms,unit:k});
+    for(const r of rooms.slice(n0)){ r.unitType=Un.typeKey; r.what=Un.what||''; r.cuisine=Un.cuisine; }
+  });
+  const P={rooms:rooms.filter(r=>r.cells.length>0),roomOf};
+  const tm={plan:performance.now()-t0};
+  const O=openings(M,P,rngOf(seedStr+'|openings'),sense,units);
+  tm.open=performance.now()-t0;
+  const Fn=furnish(M,P,O,rngOf(seedStr+'|furniture'),null,cars);
+  tm.furn=performance.now()-t0;
+  const D=decay(M,P,O,Fn,rngOf(seedStr+'|decay|'+history),history);
+  const L=stockLoot(site,units,P,Fn,rngOf(seedStr+'|loot|'+history),history);
+  const style=styleFor(seedStr,units,P.rooms);
+  typeKey=units.length>1?'strip':units[0].typeKey;
+  const wallH=Math.max(...units.map(u=>TYPES[u.typeKey].wallH));
+  const label=units.length>1?'Strip of '+units.length+' tenants':TYPES[units[0].typeKey].label;
+  const mess={untouched:.35,looted:.75,holdout:.3,den:.9}[history], gone={untouched:.3,looted:.7,holdout:.5,den:.6}[history];
+  const ms=performance.now()-t0;
+  return {tm,site,typeKey,seedStr,history,M,sense,A,units,P,O,Fn,D,L,ms,style,mess,gone,wallH,label,noise:noise2(seedStr+'|noise')};
+}
+
+// ================================================================= rendering
+const stage=document.getElementById('stage'), canvas=document.getElementById('view');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
+const scene=new THREE.Scene(); scene.background=new THREE.Color('#26272a');
+const camera=new THREE.PerspectiveCamera(34,1,.5,900);
+scene.add(new THREE.HemisphereLight(0xfff2dc,0x5c4c3a,.6));
+const sun=new THREE.DirectionalLight(0xffffff,.5); sun.position.set(30,60,18); scene.add(sun);
+const inkMat=new THREE.LineBasicMaterial({color:0x1d1814});
+const solidMat=new THREE.MeshLambertMaterial({vertexColors:true});
+const glassMat=new THREE.MeshLambertMaterial({color:0x9cc8d6,transparent:true,opacity:.35,depthWrite:false});
+const pickMat=new THREE.MeshBasicMaterial({visible:false});
+let world=null; // current group
+const view={az:0,el:.95,dist:40,target:new THREE.Vector3(),mode:'cutaway',marks:true};
+
+const UNIT=[[-.5,-.5,-.5],[.5,-.5,-.5],[.5,.5,-.5],[-.5,.5,-.5],[-.5,-.5,.5],[.5,-.5,.5],[.5,.5,.5],[-.5,.5,.5]];
+const _cv=new THREE.Vector3(), _c=new THREE.Matrix4(), _g=new THREE.Matrix4(), _t=new THREE.Matrix4(), _e=new THREE.Euler(), _q=new THREE.Quaternion(), _v=new THREE.Vector3(), _s=new THREE.Vector3(), _pm=new THREE.Matrix4();
+// One kit box → a matrix in the building frame: own turn about its centre, then the group turn about its pivot, then the item frame L.
+function partMatrix(p,L,out){
+  const [x0,y0,z0,sx,sy,sz,,o]=p;
+  _e.set(o&&o.rx||0,o&&o.ry||0,o&&o.rz||0); _q.setFromEuler(_e);
+  _c.compose(_v.set(x0+sx/2,y0+sy/2,z0+sz/2),_q,_s.set(Math.max(sx,.002),Math.max(sy,.002),Math.max(sz,.002)));
+  if(o&&(o.yaw||o.tilt||o.roll||o.lift)){
+    const pv=o.pv||[0,0], py=pv[2]||0;
+    _g.makeTranslation(pv[0],py+(o.lift||0),pv[1]);
+    _t.makeRotationY(-(o.yaw||0)); _g.multiply(_t);
+    _t.makeRotationX(o.tilt||0); _g.multiply(_t);
+    _t.makeRotationZ(o.roll||0); _g.multiply(_t);
+    _t.makeTranslation(-pv[0],-py,-pv[1]); _g.multiply(_t);
+    _c.premultiply(_g);
+  }
+  return out.multiplyMatrices(L,_c);
+}
+function lookOf(G,it,opened){
+  const r=rngOf(G.seedStr+'|look|'+it.id), st=G.style[it.room]||G.style[Object.keys(G.style)[0]];
+  const mess=clamp(G.mess+(G.noise(it.i*.3,it.j*.3)-.5)*.4,0,1);
+  const K={w:it.wl||it.spec.w,d:it.spec.d,r,st,it,ci:it.i,cj:it.j,nz:G.noise,mess,gone:G.gone,open:opened,wallBack:!!it.wallBack,j:(c,a)=>jit(c,r,a==null?.06:a)};
+  K.down=k=>r()<mess*.32*(k||1);
+  K.doorState=()=>{ const x=r(); if(x<mess*.12) return 3; if(x<mess*.3) return 2; if(opened||x<mess*.6) return 1; return 0; };
+  K.drawerState=()=>{ const x=r(); if(x<mess*.15+(opened?.2:0)) return 2; if(opened||x<mess*.45) return 1; return 0; };
+  return K;
+}
+// Outside the back door of a house: a patio, a gas grill and lawn chairs
+function patio(K){
+  const P=[B(-2.2,0,0,4.6,.08,3.2,'#b8b0a2')];
+  const G=[], gx=1.1, gz=1.5;
+  G.push(B(gx,.0,gz,.06,.75,.06,BLACK),B(gx+.94,0,gz,.06,.75,.06,BLACK),B(gx,0,gz+.5,.06,.75,.06,BLACK),B(gx+.94,0,gz+.5,.06,.75,.06,BLACK));
+  G.push(B(gx,.3,gz,1,.04,.56,'#3a3a3a'),B(gx+.05,.42,gz+.08,.3,.36,.3,'#e8e4da'),B(gx+.05,.42,gz+.08,.3,.36,.3,'#e8e4da',{ry:Math.PI/4}));
+  G.push(B(gx,.75,gz,1,.28,.56,'#2b2c2e'),B(gx-.35,.9,gz+.05,.35,.03,.45,STEELD),B(gx+1,.9,gz+.05,.35,.03,.45,STEELD));
+  for(let k=0;k<3;k++) G.push(B(gx+.2+k*.25,.85,gz+.56,.06,.06,.03,CHROME));
+  const lidOpen=K.r()<.5; G.push(B(gx,1.03,gz,1,.22,.56,K.j('#2b2c2e',.05),lidOpen?{tilt:-1.3,pv:[gx+.5,gz,1.03]}:undefined));
+  G.push(B(gx+.05,1.03,gz+.05,.9,.02,.46,'#1a1a1a'));
+  P.push(...(K.down(1.2)?withO(G,{roll:Math.PI/2,pv:[gx+.5,gz+.28],lift:.28}):withO(G,{yaw:(K.r()-.5)*.3,pv:[gx+.5,gz+.28]})));
+  const plastic=pick(K.r,['#efe9dc','#5f7d3f','#2f6fa0']);
+  for(let k=0;k<2;k++) chair(P,K,-1.3+k*.85+(K.r()-.5)*.3,1.4+K.r()*.7,[K.r()-.5,-1],{style:'office',col:plastic,seat:plastic,yawJ:(K.r()-.5)*1.4,down:K.down(1.5)?(K.r()<.5?1:2):0});
+  P.push(B(-1.15,0,2.2,.6,.45,.6,plastic,K.down()?{roll:Math.PI/2,pv:[-.85,2.5],lift:.3}:undefined));
+  return P;
+}
+// Outside the front door of a shop: pots of cactus, a bench or an ice chest
+function storefront(K,typeKey){
+  const P=[]; const shift=(parts,dx,dz)=>parts.map(p=>{ const q=p.slice(); q[0]+=dx; q[2]+=dz; if(q[7]&&q[7].pv){ q[7]=Object.assign({},q[7],{pv:[q[7].pv[0]+dx,q[7].pv[1]+dz,q[7].pv[2]]}); } return q; });
+  const K2=Object.assign({},K,{w:1,d:1});
+  P.push(...shift(IT.cactus.build(K2),-2.4,.2),...shift(IT.cactus.build(K2),1.4,.2));
+  if(typeKey==='restaurant'){ const w='#8a6a4a'; P.push(B(2.6,.42,.3,1.6,.05,.4,w),B(2.6,.47,.25,1.6,.4,.05,w),B(2.65,0,.35,.06,.42,.3,BLACK),B(4.1,0,.35,.06,.42,.3,BLACK)); }
+  else { P.push(B(2.6,0,.15,1.3,1.0,.75,'#e8e4da'),B(2.6,.62,.89,1.3,.18,.02,'#2f6fa0'),B(2.6,1.0,.15,1.3,.04,.75,'#d8d2c4')); if(typeKey==='fuel'||typeKey==='convenience'){ P.push(B(-4.6,0,.15,1.5,1.4,.7,'#4a5a60')); for(let k=0;k<4;k++) P.push(B(-4.45+k*.35,.05,.3,.28,.55,.28,K.r()<K.gone?'#4a5a60':'#e8e4da')); } }
+  if(K.mess>.4) litter(P,K,-3,0,6,2.5,Math.round(K.mess*8));
+  return P;
+}
+class Batch{
+  constructor(){ this.p=[]; this.c=[]; }
+  box(x0,y0,z0,x1,y1,z1,col){
+    const cc=new THREE.Color(col), r=cc.r,g=cc.g,b=cc.b;
+    const v=[[x0,y0,z0],[x1,y0,z0],[x1,y1,z0],[x0,y1,z0],[x0,y0,z1],[x1,y0,z1],[x1,y1,z1],[x0,y1,z1]];
+    const F=[[0,3,2,1],[4,5,6,7],[0,1,5,4],[2,3,7,6],[1,2,6,5],[0,4,7,3]];
+    for(const f of F){ for(const k of [0,1,2,0,2,3]){ const p=v[f[k]]; this.p.push(p[0],p[1],p[2]); this.c.push(r,g,b); } }
+  }
+  cube(M,col){
+    const cc=new THREE.Color(col), r=cc.r,g=cc.g,b=cc.b, flip=M.determinant()<0;
+    const v=UNIT.map(p=>_cv.set(p[0],p[1],p[2]).applyMatrix4(M).toArray());
+    const F=[[0,3,2,1],[4,5,6,7],[0,1,5,4],[2,3,7,6],[1,2,6,5],[0,4,7,3]], ord=flip?[0,2,1,0,3,2]:[0,1,2,0,2,3];
+    for(const f of F) for(const k of ord){ const p=v[f[k]]; this.p.push(p[0],p[1],p[2]); this.c.push(r,g,b); }
+  }
+  quad(a,b,c,d,col){ const cc=new THREE.Color(col); for(const p of [a,b,c,a,c,d]){ this.p.push(p[0],p[1],p[2]); this.c.push(cc.r,cc.g,cc.b); } }
+  mesh(mat,ink){
+    const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(this.p,3)); g.setAttribute('color',new THREE.Float32BufferAttribute(this.c,3)); g.computeVertexNormals();
+    const grp=new THREE.Group(); grp.add(new THREE.Mesh(g,mat||solidMat));
+    if(ink&&this.p.length) grp.add(new THREE.LineSegments(new THREE.EdgesGeometry(g,28),inkMat));
+    return grp;
+  }
+}
+
+function disposeTree(o){ o.traverse(x=>{ if(x.geometry) x.geometry.dispose(); }); }
+
+const FY=.15; // floor top above the pad
+const PEOPLE={raider:'#6e1a10',survivor:'#5b6fa8'};
+let picks=[], buckets={}, leaves=[];
+
+function build(G,rec){
+  if(world){ scene.remove(world); disposeTree(world); }
+  world=new THREE.Group(); scene.add(world);
+  picks=[]; leaves=[]; buckets={};
+  const {M,P,O,Fn,D}=G, {W,H,u0,v0,mask}=M, WH=G.wallH;
+  const cx=i=>u0+i, cz=j=>v0+j; // cell corner in local metres
+  // ground, roads and yard walls
+  const gb=new Batch();
+  gb.box(-120,-.05,-120,120,0,120,'#b39b74');
+  for(const r of G.site.roads){
+    const pts=r.pts.map(p=>M.toL(p[0],p[1])); const hw=r.w/2, col=r.cls==='service'?'#8d8274':'#56524d';
+    for(let k=0;k<pts.length-1;k++){ const [a,b]=[pts[k],pts[k+1]]; const dx=b[0]-a[0],dz=b[1]-a[1],L=Math.hypot(dx,dz)||1, nx=-dz/L*hw, nz=dx/L*hw; const y=.02+(r.cls==='service'?0:.005);
+      gb.quad([a[0]+nx,y,a[1]+nz],[b[0]+nx,y,b[1]+nz],[b[0]-nx,y,b[1]-nz],[a[0]-nx,y,a[1]-nz],col); gb.quad([a[0]-nx,y,a[1]-nz],[b[0]-nx,y,b[1]-nz],[b[0]+nx,y,b[1]+nz],[a[0]+nx,y,a[1]+nz],col); }
+  }
+  world.add(gb.mesh(solidMat,false));
+  const yb=new Batch();
+  for(const w of G.site.walls){ const a=M.toL(w[0],w[1]), b=M.toL(w[2],w[3]); const dx=b[0]-a[0],dz=b[1]-a[1],L=Math.hypot(dx,dz); if(L<.1) continue; const t=w[5]/2, nx=-dz/L*t, nz=dx/L*t, h=w[4], col=w[6]?'#8a7a62':'#bfae93';
+    const P4=[[a[0]+nx,a[1]+nz],[b[0]+nx,b[1]+nz],[b[0]-nx,b[1]-nz],[a[0]-nx,a[1]-nz]];
+    yb.quad([P4[0][0],h,P4[0][1]],[P4[1][0],h,P4[1][1]],[P4[2][0],h,P4[2][1]],[P4[3][0],h,P4[3][1]],col);
+    for(let k=0;k<4;k++){ const p=P4[k],q=P4[(k+1)%4]; yb.quad([p[0],0,p[1]],[q[0],0,q[1]],[q[0],h,q[1]],[p[0],h,p[1]],col); yb.quad([p[0],h,p[1]],[q[0],h,q[1]],[q[0],0,q[1]],[p[0],0,p[1]],col); }
+  }
+  world.add(yb.mesh(solidMat,true));
+  // floors: one box per row run of a room
+  const fb=new Batch();
+  for(const r of P.rooms){ const st=G.style[r.id], q=rngOf(G.seedStr+'|floor|'+r.id);
+    for(const c of r.cells){ const i=c%W, j=(c/W)|0, x0=cx(i), z0=cz(j), n=G.noise(i*.45,j*.45);
+      if(st.pat==='tile'||st.pat==='vinyl'||st.pat==='quarry'){
+        fb.box(x0,0,z0,x0+1,FY-.008,z0+1,'#8a857c');
+        for(let a=0;a<2;a++) for(let b=0;b<2;b++){ const col=jit((i*2+a+j*2+b)%2?st.floor2:st.floor,q,.03+n*.03); fb.box(x0+a*.5+.012,FY-.01,z0+b*.5+.012,x0+a*.5+.488,FY,z0+b*.5+.488,col); }
+      } else if(st.pat==='saltillo'){
+        fb.box(x0,0,z0,x0+1,FY-.008,z0+1,'#8f7f6a'); fb.box(x0+.02,FY-.01,z0+.02,x0+.98,FY,z0+.98,jit(st.floor,q,.08));
+      } else if(st.pat==='wood'){
+        for(let k=0;k<4;k++) fb.box(x0,0,z0+k*.25,x0+1,FY,z0+(k+1)*.25-.006,jit(st.floor,q,.05+n*.04));
+        fb.box(x0,0,z0,x0+1,FY-.004,z0+1,'#4a3a2a');
+      } else if(st.pat==='carpet'){
+        fb.box(x0,0,z0,x0+1,FY,z0+1,jit(new THREE.Color(st.floor).multiplyScalar(.9+n*.2).getStyle(),q,.02));
+      } else {
+        fb.box(x0,0,z0,x0+1,FY,z0+1,jit(new THREE.Color(st.floor).multiplyScalar(.88+n*.24).getStyle(),q,.02));
+        if(q()<.04) fb.box(x0+.2,FY,z0+.2,x0+.2+q()*.6,FY+.003,z0+.2+q()*.6,'#4a4640');
+      }
+    } }
+  // sand blown in through broken windows and open doors
+  for(const e of O.edges.values()){
+    const open=(e.type==='window'&&e.win.state==='broken')||(e.ext&&e.door&&(e.door.state==='broken'||e.door.open));
+    if(!e.ext||!open) continue;
+    const q=rngOf(G.seedStr+'|sand|'+e.key), x0=cx(e.i), z0=cz(e.j);
+    for(let k=0;k<3;k++){ const a=q()*.7, b=q()*.7; fb.box(x0+a,FY,z0+b,x0+a+.3+q()*.4,FY+.012+q()*.02,z0+b+.3+q()*.4,'#cdb48c'); }
+  }
+  world.add(fb.mesh(solidMat,false));
+  // walls by bucket: four outside faces and the inside walls, full and low
+  const LOW=.7;
+  const groups={};
+  function seg(bk,o,fixed,along,y0,y1,a0,a1,ext,col){ const k=bk+'|'+o+'|'+fixed+'|'+y0+'|'+y1+'|'+a0+'|'+col; (groups[k]=groups[k]||{bk,o,fixed,y0,y1,a0,a1,ext,col,al:[]}).al.push(along); }
+  const glassBy={}, boardBy={};
+  const stucco=G.typeKey==='house'?'#d9c7a6':'#cfc3ae', inner='#e6dccb';
+  for(const e of O.edges.values()){
+    const o=e.key[0], [p,q]=e.key.slice(1).split(',').map(Number);
+    const fixed=o==='v'?p:q, along=o==='v'?q:p;
+    const bk=e.ext?'e'+e.dir:'int', paintA=(G.style[e.a]||{}).paint||inner, paintB=e.b>=0?((G.style[e.b]||{}).paint||inner):stucco;
+    let parts=[[0,WH]];
+    if(e.type==='window') parts=[[0,e.win.sill],[e.win.head,WH]];
+    else if(e.type==='door') parts=[[2.1,WH]];
+    else if(e.type==='gdoor') parts=[[2.3,WH]];
+    else if(e.type==='open') parts=[[2.35,WH]];
+    else if(e.type==='counter') parts=[[2.35,WH]];
+    else if(e.type==='none') parts=[];
+    for(const [y0,y1] of parts){
+      if(e.ext){ const sg=(e.dir===0||e.dir===1)?1:-1; seg(bk,o,fixed,along,y0,y1,Math.min(0,-.12*sg),Math.max(0,-.12*sg),.12,paintA); seg(bk,o,fixed,along,y0,y1,Math.min(0,.12*sg),Math.max(0,.12*sg),.12,stucco); }
+      else { seg(bk,o,fixed,along,y0,y1,-.06,0,.06,paintA); seg(bk,o,fixed,along,y0,y1,0,.06,.06,paintB); }
+    }
+    if(e.type==='window'&&e.win.state!=='broken'){
+      const L=o==='v'?[cx(fixed),cz(along)]:[cx(along),cz(fixed)];
+      (glassBy[bk]=glassBy[bk]||[]).push([o,L,e.win.sill,e.win.head,e.win.state]);
+    }
+    if(e.type==='window'&&e.win.state==='boarded'){ const L=o==='v'?[cx(fixed),cz(along)]:[cx(along),cz(fixed)]; (boardBy[bk]=boardBy[bk]||[]).push([o,L,e.win.sill,e.win.head,e.dir]); }
+  }
+  const wallB={};
+  for(const k in groups){
+    const g=groups[k]; g.al.sort((a,b)=>a-b);
+    let s=g.al[0], prev=s;
+    const emit=(a,b)=>{ for(const low of [0,1]){ const y1=low?Math.min(g.y1,LOW):g.y1; if(low&&g.y0>=LOW) continue; const id=g.bk+(low?'L':'F'); const Bt=wallB[id]=wallB[id]||new Batch(), t=g.ext;
+        if(g.o==='v') Bt.box(cx(g.fixed)+g.a0,FY+g.y0,cz(a)-t,cx(g.fixed)+g.a1,FY+y1,cz(b+1)+t,g.col); else Bt.box(cx(a)-t,FY+g.y0,cz(g.fixed)+g.a0,cx(b+1)+t,FY+y1,cz(g.fixed)+g.a1,g.col); } };
+    for(let n=1;n<g.al.length;n++){ if(g.al[n]!==prev+1){ emit(s,prev); s=g.al[n]; } prev=g.al[n]; }
+    emit(s,prev);
+  }
+  for(const bk of ['e0','e1','e2','e3','int']){
+    const full=new THREE.Group(), low=new THREE.Group();
+    if(wallB[bk+'F']) full.add(wallB[bk+'F'].mesh(solidMat,true));
+    if(wallB[bk+'L']) low.add(wallB[bk+'L'].mesh(solidMat,true));
+    const gl=new Batch();
+    for(const [o,L,s0,h0,st] of (glassBy[bk]||[])){ if(o==='v') gl.box(L[0]-.02,FY+s0,L[1],L[0]+.02,FY+h0,L[1]+1,'#9cc8d6'); else gl.box(L[0],FY+s0,L[1]-.02,L[0]+1,FY+h0,L[1]+.02,'#9cc8d6'); }
+    if(gl.p.length) full.add(gl.mesh(glassMat,false));
+    const bd=new Batch();
+    for(const [o,L,s0,h0,dir] of (boardBy[bk]||[])){ const off=bk==='int'?0:(DIRS[dir][0]+DIRS[dir][1])*.15; for(let k=0;k<3;k++){ const y=FY+s0+.12+(h0-s0-.3)*k/2; if(o==='v') bd.box(L[0]+off-.03,y,L[1]-.1,L[0]+off+.03,y+.18,L[1]+1.1,'#8a6a4a'); else bd.box(L[0]-.1,y,L[1]+off-.03,L[0]+1.1,y+.18,L[1]+off+.03,'#8a6a4a'); } }
+    if(bd.p.length){ const m=bd.mesh(solidMat,true); full.add(m); }
+    world.add(full); world.add(low);
+    buckets[bk]={full,low};
+  }
+  // door leaves
+  const leafMat=new THREE.MeshLambertMaterial({color:0x8a6a4a}), gMat=new THREE.MeshLambertMaterial({color:0xd8d2c4});
+  for(const e of O.doors){
+    const d=e.door; if(!d) continue;
+    const o=e.key[0], [p,q]=e.key.slice(1).split(',').map(Number);
+    const fixed=o==='v'?p:q, along=o==='v'?q:p;
+    const st=rec.doors[e.key]!==undefined?rec.doors[e.key]:(d.state==='broken'?'broken':d.open?'open':'closed');
+    const width=d.width||1, isG=e.type==='gdoor';
+    const len=width-(isG?.1:.12);
+    let geo, mesh;
+    const inward=e.ext?(e.dir+2)%4:e.dir; // swing into the room on the a side for outside doors
+    const n=DIRS[inward];
+    if(isG){
+      geo=new THREE.BoxGeometry(o==='v'?.08:len,st==='closed'||st==='barricaded'?2.25:.08,o==='v'?len:.08);
+      mesh=new THREE.Mesh(geo,gMat);
+      const mid=along+width/2;
+      if(st==='closed'||st==='barricaded'){ if(o==='v') mesh.position.set(cx(fixed),FY+1.13,cz(mid)); else mesh.position.set(cx(mid),FY+1.13,cz(fixed)); }
+      else { mesh.scale.set(1,1,1); geo.dispose(); mesh.geometry=new THREE.BoxGeometry(o==='v'?2.2:len,.06,o==='v'?len:2.2); if(o==='v') mesh.position.set(cx(fixed)+n[0]*1.2,FY+2.3,cz(mid)); else mesh.position.set(cx(mid),FY+2.3,cz(fixed)+n[1]*1.2); }
+    } else {
+      const lw=width>1?len/2:len;
+      geo=new THREE.BoxGeometry(lw,2.04,.05); geo.translate(lw/2,1.02,0);
+      const mk=(hingeAlong,sgn)=>{
+        const m=new THREE.Mesh(geo,leafMat);
+        const hx=o==='v'?cx(fixed):cx(hingeAlong), hz=o==='v'?cz(hingeAlong):cz(fixed);
+        m.position.set(hx,FY,hz);
+        let ang=o==='v'?-Math.PI/2*sgn:(sgn>0?0:Math.PI);
+        if(st==='open'){ ang+=(sgn>0?1:-1)*(o==='v'?(n[0]>0?-1:1):(n[1]>0?-1:1))*Math.PI/2*.92; }
+        m.rotation.y=ang;
+        if(st==='broken'){ m.rotation.set(-Math.PI/2,0,0); m.position.set(hx+(o==='v'?n[0]*.1:(sgn>0?0:-lw)),FY+.03,hz+(o==='v'?(sgn>0?0:-lw):n[1]*.1)); if(o==='v'){ m.rotation.set(-Math.PI/2,0,-Math.PI/2*sgn); } }
+        return m;
+      };
+      const ms=[];
+      if(width>1){ ms.push(mk(along+.06,1)); ms.push(mk(along+width-.06,-1)); } else ms.push(mk(along+.06,1));
+      mesh=new THREE.Group(); for(const m of ms){ mesh.add(m); const eg=new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry),inkMat); eg.position.copy(m.position); eg.rotation.copy(m.rotation); mesh.add(eg); }
+    }
+    mesh.userData={door:e.key,bucket:e.ext?'e'+e.dir:'int',label:(e.ext?(d.role==='front'?'Front door':d.role==='back'?'Back door':d.role==='garage'?'Garage door':'Side door'):'Door')+' · '+st};
+    world.add(mesh); leaves.push(mesh);
+    // pick target
+    const pg=new THREE.BoxGeometry(o==='v'?.6:width,2.1,o==='v'?width:.6); const pm=new THREE.Mesh(pg,pickMat);
+    if(o==='v') pm.position.set(cx(fixed),FY+1.05,cz(along+width/2)); else pm.position.set(cx(along+width/2),FY+1.05,cz(fixed));
+    pm.userData={door:e.key,label:mesh.userData.label}; world.add(pm); picks.push(pm);
+  }
+  // furniture: the kit builds each item's boxes in its own frame; L maps that frame into the building
+  const fur=new Batch(), furG=new Batch(), occAt=Fn.occ;
+  const itemL=(i,j,f,y)=>{ const F=DIRS[f], Tt=DIRS[(f+1)%4]; const bx=cx(i)+.5-.5*F[0]-.5*Tt[0], bz=cz(j)+.5-.5*F[1]-.5*Tt[1]; return new THREE.Matrix4().set(Tt[0],0,F[0],bx, 0,1,0,y, Tt[1],0,F[1],bz, 0,0,0,1); };
+  const emit=(parts,L,into)=>{ for(const pt of parts){ partMatrix(pt,L,_pm); if(pt[6]==='glass') furG.cube(_pm,'#9cc8d6'); else (into||fur).cube(_pm,pt[6]); } };
+  const decorB={};
+  for(const it of Fn.items){
+    const opened=it.searched||rec.taken.includes(it.id);
+    emit(it.spec.build(lookOf(G,it,opened)),itemL(it.i,it.j,it.f,FY));
+    if(it.spec.slot){
+      let mi=1e9,ma=-1e9,ni=1e9,na=-1e9; const hy=Math.min(it.spec.h,2.1); for(const c of it.cells){ const i=c%W,j=(c/W)|0; mi=Math.min(mi,cx(i)); ma=Math.max(ma,cx(i+1)); ni=Math.min(ni,cz(j)); na=Math.max(na,cz(j+1)); }
+      const pm=new THREE.Mesh(new THREE.BoxGeometry(ma-mi,hy+.2,na-ni),pickMat); pm.position.set((mi+ma)/2,FY+(hy+.2)/2,(ni+na)/2);
+      pm.userData={item:it.id}; world.add(pm); picks.push(pm);
+      it.top=[(mi+ma)/2,FY+hy,(ni+na)/2];
+    }
+  }
+  // wall decor and floor clutter
+  for(const r of P.rooms){
+    const q=rngOf(G.seedStr+'|decor|'+r.id), st=G.style[r.id]; let list=DECOR_BY[r.kind]; if(typeof list==='function') list=list(st);
+    const dens=r.kind==='rdining'?.38:r.kind==='sales'?.1:.13;
+    const K={r:q,st,mess:G.mess,gone:G.gone,j:(c,a)=>jit(c,q,a==null?.06:a)};
+    if(list) for(const c of r.cells){ const i=c%W,j=(c/W)|0;
+      for(let d=0;d<4;d++){ const e=O.edges.get(edgeKey(i,j,d)); if(!e||e.type!=='wall') continue; if(occAt[c]>=0&&Fn.items[occAt[c]].spec.h>1.25) continue; if(q()>dens) continue;
+        const bk=e.ext?'e'+e.dir:'int'; emit(DECOR[pick(q,list)](K),itemL(i,j,(d+2)%4,FY),decorB[bk]=decorB[bk]||new Batch()); } }
+    const n=Math.round(r.cells.length*G.mess*.1);
+    for(let k=0;k<n;k++){ const c=r.cells[Math.floor(q()*r.cells.length)]; if(occAt[c]>=0) continue; const L2=[]; litter(L2,K,.05,.05,.9,.9,1+Math.floor(q()*3)); emit(L2,itemL(c%W,(c/W)|0,0,FY)); }
+  }
+  // outside: a patio behind a house, pots and benches in front of a shop
+  const xr=rngOf(G.seedStr+'|outside');
+  const XK={r:xr,st:G.style[P.rooms[0].id],mess:G.mess,gone:G.gone,nz:G.noise,ci:0,cj:0,w:1,d:1,j:(c,a)=>jit(c,xr,a==null?.06:a),down:k=>xr()<G.mess*.32*(k||1),doorState:()=>0,drawerState:()=>0};
+  const outL=d=>{ const e=d.edges[0], mid=edgeMid(M,e,d.edges.length), F=DIRS[e.dir], Tt=DIRS[(e.dir+1)%4]; return new THREE.Matrix4().set(Tt[0],0,F[0],mid[0], 0,1,0,0, Tt[1],0,F[1],mid[1], 0,0,0,1); };
+  for(const d of O.backs) if(G.units[d.unit].typeKey==='house') emit(patio(XK),outL(d));
+  for(const d of O.fronts){ const t=G.units[d.unit].typeKey; if(t!=='house') emit(storefront(XK,t),outL(d)); }
+  // decor hangs on its wall, so it hides when the cutaway lowers that wall
+  for(const bk in decorB) buckets[bk].full.add(decorB[bk].mesh(solidMat,true));
+  world.add(fur.mesh(solidMat,true));
+  if(furG.p.length) world.add(furG.mesh(glassMat,false));
+  // loot markers
+  const mk=new THREE.Group(); mk.name='marks';
+  const gem=new THREE.OctahedronGeometry(.16,0), mFull=new THREE.MeshBasicMaterial({color:0xe0a526}), mEmpty=new THREE.MeshBasicMaterial({color:0x6c6a66});
+  for(const it of Fn.items) if(it.spec.slot&&it.top){ const empty=it.searched||rec.taken.includes(it.id)||!it.contents.length; const m=new THREE.Mesh(gem,empty?mEmpty:mFull); m.position.set(it.top[0],it.top[1]+.35,it.top[2]); mk.add(m); }
+  mk.visible=view.marks; world.add(mk);
+  // people
+  for(const p of D.people){ const i=p.c%W,j=(p.c/W)|0; const g=new THREE.Group(); const col=PEOPLE[p.side];
+    const body=new THREE.Mesh(new THREE.CylinderGeometry(.22,.26,1.25,8),new THREE.MeshLambertMaterial({color:p.side==='raider'?0x8a5a48:0x8f97a8})); body.position.y=.63;
+    const head=new THREE.Mesh(new THREE.SphereGeometry(.17,10,8),new THREE.MeshLambertMaterial({color:0xc9a07c})); head.position.y=1.42;
+    const ring=new THREE.Mesh(new THREE.RingGeometry(.34,.44,20),new THREE.MeshBasicMaterial({color:col,side:THREE.DoubleSide})); ring.rotation.x=-Math.PI/2; ring.position.y=.03;
+    g.add(body,head,ring); if(p.boss) g.scale.setScalar(1.12); g.position.set(cx(i)+.5,FY,cz(j)+.5); world.add(g); }
+  // outside door → 2 m movement cell
+  const lk=new Batch();
+  for(const d of O.extDoors){ for(const e of d.edges.slice(0,1)){ const mid=edgeMid(M,e,d.edges.length); const ox=mid[0]+DIRS[e.dir][0]*.6, oz=mid[1]+DIRS[e.dir][1]*.6;
+      const [wx,wz]=M.toW(ox,oz); const gx=Math.floor(wx/2)*2, gz=Math.floor(wz/2)*2;
+      const corners=[[gx,gz],[gx+2,gz],[gx+2,gz+2],[gx,gz+2]].map(p=>M.toL(p[0],p[1]));
+      lk.quad([corners[0][0],.05,corners[0][1]],[corners[3][0],.05,corners[3][1]],[corners[2][0],.05,corners[2][1]],[corners[1][0],.05,corners[1][1]],'#e0a526'); } }
+  if(lk.p.length){ const m=lk.mesh(new THREE.MeshBasicMaterial({vertexColors:true,transparent:true,opacity:.55}),false); world.add(m); }
+  // roof (shell view)
+  const rb=new Batch();
+  for(let j=0;j<H;j++){ let i=0; while(i<W){ if(mask[j*W+i]){ let k=i; while(k<W&&mask[j*W+k]) k++; rb.box(cx(i)-.3,FY+WH,cz(j)-(mask[(j-1)*W+i]?0:.3),cx(k)+.3,FY+WH+(G.typeKey==='canopy'?.7:.25),cz(j+1)+(mask[(j+1)*W+i]?0:.3),G.typeKey==='house'?'#a8553d':G.typeKey==='canopy'?'#e8e4da':'#b8b0a2'); i=k; } else i++; } }
+  const roof=rb.mesh(solidMat,false); roof.name='roof'; world.add(roof);
+  applyView();
+}
+function edgeMid(M,e,width){
+  const o=e.key[0], [p,q]=e.key.slice(1).split(',').map(Number);
+  return o==='v'?[M.u0+p,M.v0+q+width/2]:[M.u0+p+width/2,M.v0+q];
+}
+
+function applyView(){
+  if(!world) return;
+  const cd=[Math.sin(view.az),Math.cos(view.az)];
+  for(const bk in buckets){
+    let low=false;
+    if(view.mode==='low') low=true;
+    else if(view.mode==='cutaway'&&bk!=='int'){ const d=DIRS[+bk[1]]; low=d[0]*cd[0]+d[1]*cd[1]>.3; }
+    buckets[bk].full.visible=!low; buckets[bk].low.visible=low;
+    buckets[bk].lowered=low;
+  }
+  for(const l of leaves){ const b=buckets[l.userData.bucket]; l.visible=!(b&&b.lowered&&l.userData.bucket!=='int'); if(view.mode==='low'&&l.userData.bucket==='int') l.visible=false; }
+  const roof=world.getObjectByName('roof'); if(roof) roof.visible=view.mode==='shell';
+  const mk=world.getObjectByName('marks'); if(mk) mk.visible=view.marks;
+}
+function placeCamera(){
+  const t=view.target, r=view.dist;
+  camera.position.set(t.x+r*Math.cos(view.el)*Math.sin(view.az), t.y+r*Math.sin(view.el), t.z+r*Math.cos(view.el)*Math.cos(view.az));
+  camera.lookAt(t);
+}
+function resize(){ const w=stage.clientWidth,h=stage.clientHeight; renderer.setSize(w,h,false); camera.aspect=w/Math.max(1,h); camera.updateProjectionMatrix(); }
+let dirty=true; function frame(){ requestAnimationFrame(frame); if(!dirty) return; dirty=false; placeCamera(); applyView(); renderer.render(scene,camera); }
+new ResizeObserver(()=>{ resize(); dirty=true; }).observe(stage);
+
+// orbit controls
+let drag=null;
+canvas.addEventListener('pointerdown',e=>{ drag={x:e.clientX,y:e.clientY,pan:e.button===2||e.shiftKey,moved:0}; canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener('pointermove',e=>{
+  if(!drag){ hover(e); return; }
+  const dx=e.clientX-drag.x, dy=e.clientY-drag.y; drag.x=e.clientX; drag.y=e.clientY; drag.moved+=Math.abs(dx)+Math.abs(dy);
+  if(drag.pan){ const s=view.dist*.0016; const ca=Math.cos(view.az), sa=Math.sin(view.az); view.target.x-=(dx*ca - dy*sa)*s; view.target.z-=(-dx*sa - dy*ca)*s; }
+  else { view.az-=dx*.008; view.el=clamp(view.el+dy*.006,.25,1.45); }
+  dirty=true;
+});
+canvas.addEventListener('pointerup',e=>{ if(drag&&drag.moved<5) click(e); drag=null; });
+canvas.addEventListener('contextmenu',e=>e.preventDefault());
+canvas.addEventListener('wheel',e=>{ e.preventDefault(); view.dist=clamp(view.dist*Math.exp(e.deltaY*.0012),6,240); dirty=true; },{passive:false});
+function rot(k){ view.az+=k*Math.PI/2; view.az=Math.round(view.az/(Math.PI/2))*(Math.PI/2)+(view.azOff||0); dirty=true; }
+document.getElementById('rotL').onclick=()=>rot(-1); document.getElementById('rotR').onclick=()=>rot(1);
+addEventListener('keydown',e=>{ if(e.target.tagName==='SELECT') return; if(e.key==='q'||e.key==='Q') rot(-1); if(e.key==='e'||e.key==='E') rot(1); });
+const ray=new THREE.Raycaster(), ndc=new THREE.Vector2();
+function hit(e){ const r=canvas.getBoundingClientRect(); ndc.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1); ray.setFromCamera(ndc,camera); const hs=ray.intersectObjects(picks,false); return hs[0]&&hs[0].object.userData; }
+const hudHover=document.getElementById('hudHover');
+function describe(u){
+  if(!u) return 'Hover a door or container';
+  if(u.door){ const e=G.O.edges.get(u.door); const st=REC.doors[u.door]||(e.door.state==='broken'?'broken':e.door.open?'open':'closed'); return (u.label.split(' · ')[0])+' · '+st+(e.door.state==='barricaded'?' (barricaded)':'')+' · click to '+(st==='open'?'close':'open'); }
+  const it=G.Fn.items[u.item]; const empty=it.searched||REC.taken.includes(it.id); const sl=SLOTS[it.spec.slot];
+  return sl.n+' · '+(empty?'searched':it.contents.length?it.contents.map(c=>c.name+(c.qty>1?' ×'+c.qty:'')).join(', '):'empty')+' · '+sl.t+' s';
+}
+function hover(e){ const u=hit(e); hudHover.innerHTML=''; hudHover.textContent=describe(u); canvas.style.cursor=u?'pointer':'grab'; }
+function click(e){
+  const u=hit(e); if(!u) return;
+  if(u.door){ const ed=G.O.edges.get(u.door); if(ed.door.state==='barricaded') { hudHover.textContent='Barricaded from inside'; return; } const cur=REC.doors[u.door]||(ed.door.state==='broken'?'broken':ed.door.open?'open':'closed'); if(cur==='broken') return; REC.doors[u.door]=cur==='open'?'closed':'open'; }
+  else if(u.item!==undefined){ const it=G.Fn.items[u.item]; if(!it.searched&&!REC.taken.includes(it.id)) REC.taken.push(it.id); }
+  refresh(false);
+}
+
+// ================================================================= plan canvas
+const plan=document.getElementById('plan'), px=plan.getContext('2d');
+function drawPlan(G){
+  const {M,P,O,Fn,D}=G, {W,H,u0,v0}=M;
+  const S=plan.width, pad=4;
+  const span=Math.max(W,H)+pad*2, k=S/span;
+  const ox=(S-W*k)/2, oy=(S-H*k)/2;
+  const X=u=>ox+(u-u0)*k, Y=v=>oy+(v-v0)*k;
+  px.fillStyle='#202124'; px.fillRect(0,0,S,S);
+  // 2 m outside grid in world axes
+  px.save(); px.strokeStyle='rgba(205,180,140,.13)'; px.lineWidth=1;
+  const corners=[[u0-pad,v0-pad],[u0+W+pad,v0-pad],[u0+W+pad,v0+H+pad],[u0-pad,v0+H+pad]].map(p=>M.toW(p[0],p[1]));
+  const xs=corners.map(p=>p[0]), zs=corners.map(p=>p[1]);
+  for(let x=Math.floor(Math.min(...xs)/2)*2;x<=Math.max(...xs);x+=2){ const a=M.toL(x,Math.min(...zs)), b=M.toL(x,Math.max(...zs)); px.beginPath(); px.moveTo(X(a[0]),Y(a[1])); px.lineTo(X(b[0]),Y(b[1])); px.stroke(); }
+  for(let z=Math.floor(Math.min(...zs)/2)*2;z<=Math.max(...zs);z+=2){ const a=M.toL(Math.min(...xs),z), b=M.toL(Math.max(...xs),z); px.beginPath(); px.moveTo(X(a[0]),Y(a[1])); px.lineTo(X(b[0]),Y(b[1])); px.stroke(); }
+  px.restore();
+  // roads
+  for(const r of G.site.roads){ px.strokeStyle=r.cls==='service'?'#5c574f':'#4a4744'; px.lineWidth=r.w*k; px.lineCap='round'; px.beginPath(); r.pts.forEach((p,n)=>{ const l=M.toL(p[0],p[1]); n?px.lineTo(X(l[0]),Y(l[1])):px.moveTo(X(l[0]),Y(l[1])); }); px.stroke(); }
+  px.strokeStyle='#8a7a62'; px.lineWidth=1.5; for(const w of G.site.walls){ const a=M.toL(w[0],w[1]), b=M.toL(w[2],w[3]); px.beginPath(); px.moveTo(X(a[0]),Y(a[1])); px.lineTo(X(b[0]),Y(b[1])); px.stroke(); }
+  // original footprint
+  px.strokeStyle='rgba(224,165,38,.5)'; px.setLineDash([4,3]); px.lineWidth=1; px.beginPath(); M.poly.forEach((p,n)=>n?px.lineTo(X(p[0]),Y(p[1])):px.moveTo(X(p[0]),Y(p[1]))); px.closePath(); px.stroke(); px.setLineDash([]);
+  // rooms
+  for(const r of P.rooms){ px.fillStyle=ROOM[r.kind].floor; for(const c of r.cells){ const i=c%W,j=(c/W)|0; px.fillRect(X(u0+i),Y(v0+j),k+.5,k+.5); } }
+  // 1 m grid
+  px.strokeStyle='rgba(29,24,20,.16)'; px.lineWidth=1;
+  for(let j=0;j<H;j++) for(let i=0;i<W;i++) if(M.mask[j*W+i]) px.strokeRect(X(u0+i)+.5,Y(v0+j)+.5,k,k);
+  // furniture
+  for(const it of Fn.items){ const cov=it.spec.cover; px.fillStyle=cov==='full'?'#7a6a58':cov==='half'?'#b9a483':'rgba(120,110,95,.35)'; if(it.key==='debris') px.fillStyle='rgba(90,80,70,.5)'; if(it.key==='bedroll') px.fillStyle='#5d6b4e';
+    for(const c of it.cells){ const i=c%W,j=(c/W)|0; px.fillRect(X(u0+i)+1,Y(v0+j)+1,k-2,k-2); }
+    if(it.spec.slot){ const c=it.cells[0]; let a=0,b=0; for(const q of it.cells){ a+=q%W; b+=(q/W)|0; } a/=it.cells.length; b/=it.cells.length; const empty=it.searched||REC.taken.includes(it.id)||!it.contents.length; px.fillStyle=empty?'#55534f':'#e0a526'; px.beginPath(); px.arc(X(u0+a+.5),Y(v0+b+.5),Math.max(2.5,k*.16),0,7); px.fill(); } }
+  // walls, windows, doors
+  for(const e of O.edges.values()){
+    const o=e.key[0], [p,q]=e.key.slice(1).split(',').map(Number);
+    const a=o==='v'?[u0+p,v0+q]:[u0+p,v0+q], b=o==='v'?[u0+p,v0+q+1]:[u0+p+1,v0+q];
+    if(e.type==='open') continue;
+    if(e.type==='window'){ px.strokeStyle=e.win.state==='boarded'?'#8a6a4a':e.win.state==='broken'?'#c23b2e':'#7fb7c9'; px.lineWidth=Math.max(2,k*.18); }
+    else if(e.type==='door'||e.type==='gdoor'){ px.strokeStyle=e.ext?'#e0a526':'#f0e6d0'; px.lineWidth=e.ext?Math.max(2,k*.16):1.2; px.setLineDash([2,2]); }
+    else if(e.type==='counter'){ px.strokeStyle='#e1dccf'; px.lineWidth=Math.max(2,k*.18); }
+    else { px.strokeStyle='#1d1814'; px.lineWidth=e.ext?Math.max(2.5,k*.24):Math.max(1.5,k*.12); }
+    px.beginPath(); px.moveTo(X(a[0]),Y(a[1])); px.lineTo(X(b[0]),Y(b[1])); px.stroke(); px.setLineDash([]);
+  }
+  // outside doors → 2 m cells
+  for(const d of O.extDoors){ const e=d.edges[0]; const mid=edgeMid(M,e,d.edges.length); const ox2=mid[0]+DIRS[e.dir][0]*.6, oz2=mid[1]+DIRS[e.dir][1]*.6; const [wx,wz]=M.toW(ox2,oz2); const gx=Math.floor(wx/2)*2, gz=Math.floor(wz/2)*2;
+    const cs=[[gx,gz],[gx+2,gz],[gx+2,gz+2],[gx,gz+2]].map(p=>M.toL(p[0],p[1]));
+    px.fillStyle='rgba(224,165,38,.35)'; px.strokeStyle='#e0a526'; px.lineWidth=1.5; px.beginPath(); cs.forEach((p,n)=>n?px.lineTo(X(p[0]),Y(p[1])):px.moveTo(X(p[0]),Y(p[1]))); px.closePath(); px.fill(); px.stroke(); }
+  // people
+  for(const p of D.people){ const i=p.c%W,j=(p.c/W)|0; px.fillStyle=PEOPLE[p.side]; px.strokeStyle='#e2e0dc'; px.lineWidth=1.5; px.beginPath(); px.arc(X(u0+i+.5),Y(v0+j+.5),k*.32,0,7); px.fill(); px.stroke(); }
+  // labels
+  px.textAlign='center'; px.textBaseline='middle';
+  for(const r of P.rooms){ if(r.kind==='hall') continue; let a=0,b=0; for(const c of r.cells){ a+=c%W; b+=(c/W)|0; } a=a/r.cells.length+.5; b=b/r.cells.length+.5;
+    const fs=Math.max(10,Math.min(15,k*.55)); px.font='500 '+fs+'px "IBM Plex Sans Condensed", sans-serif';
+    const tx=X(u0+a), ty=Y(v0+b);
+    px.fillStyle='rgba(27,28,30,.72)'; const t1=r.name, t2=r.cells.length+' m²'; const w=Math.max(px.measureText(t1).width,px.measureText(t2).width)+8; px.fillRect(tx-w/2,ty-fs-1,w,fs*2+3);
+    px.fillStyle='#f1ede4'; px.fillText(t1,tx,ty-fs/2+1); px.fillStyle='#c9c4b8'; px.font=(fs-2)+'px "IBM Plex Mono", monospace'; px.fillText(t2,tx,ty+fs/2+1); }
+  // street arrow and north
+  const f=G.sense.front; const cxp=S/2, cyp=S/2; const ar=(dx,dy,len,col,txt)=>{ const ex=cxp+dx*len, ey=cyp+dy*len; px.strokeStyle=col; px.fillStyle=col; px.lineWidth=2; px.beginPath(); px.moveTo(ex-dx*22,ey-dy*22); px.lineTo(ex,ey); px.stroke(); px.beginPath(); px.arc(ex,ey,3,0,7); px.fill(); px.font='12px "IBM Plex Mono", monospace'; px.fillText(txt,ex+dx*16,ey+dy*16); };
+  ar(f[0],f[1],S*.44,'#e0a526','street');
+  const nl=[-M.si,-M.co]; px.save(); px.translate(28,28); px.strokeStyle='#e2e0dc'; px.fillStyle='#e2e0dc'; px.lineWidth=1.5; px.beginPath(); px.moveTo(-nl[0]*12,-nl[1]*12); px.lineTo(nl[0]*12,nl[1]*12); px.stroke(); px.font='11px "IBM Plex Mono", monospace'; px.fillText('N',nl[0]*20,nl[1]*20); px.restore();
+  px.fillStyle='#98968f'; px.font='11px "IBM Plex Mono", monospace'; px.textAlign='left'; px.fillText('dashed: OSM footprint · grid: 1 m inside, 2 m outside',8,S-10);
+}
+
+// ================================================================= panel and state
+const bSel=document.getElementById('bSel'), tSel=document.getElementById('tSel'), hSel=document.getElementById('hSel');
+const groupsSel={}; SITES.forEach((s,n)=>{ const g=groupsSel[s.area]=groupsSel[s.area]||bSel.appendChild(Object.assign(document.createElement('optgroup'),{label:s.area})); const o=document.createElement('option'); o.value=n;
+  o.textContent=(s.name||(s.tenants&&s.tenants.length>1?s.tenants.map(t=>t.name.split(/[ -]/)[0]).slice(0,3).join(', ')+(s.tenants.length>3?' …':''):(s.house?'House ':'Building ')+s.index))+' · '+s.id; g.appendChild(o); });
+tSel.innerHTML='<option value="auto">From the map data (tenants split)</option>'+Object.entries(TYPES).map(([k,t])=>'<option value="'+k+'">'+t.label+'</option>').join('');
+let G=null, REC=null, reroll=0;
+function typeNow(){ return tSel.value; }
+function seedNow(){ const s=SITES[+bSel.value]; return s.id+(reroll?'#'+reroll:''); }
+function freshRecord(){ return {generator:GEN_VERSION,building:SITES[+bSel.value].id,type:typeNow(),seed:seedNow(),doors:{},taken:[]}; }
+function regen(keepCam){
+  const s=SITES[+bSel.value];
+  G=generate(s,typeNow(),seedNow(),hSel.value);
+  if(!REC||REC.building!==s.id||REC.seed!==seedNow()||REC.type!==typeNow()) REC=freshRecord();
+  if(!keepCam){
+    const f=G.sense.front; view.azOff=0; view.az=Math.atan2(f[0],f[1])+.45; view.el=.92;
+    view.dist=clamp(Math.max(G.M.W,G.M.H)*1.6,22,190);
+    const cU=G.M.u0+G.M.W/2, cV=G.M.v0+G.M.H/2; view.target.set(cU,0,cV);
+  }
+  refresh(true);
+}
+function refresh(rebuild){
+  // the record's taken containers are emptied before drawing
+  build(G,REC); drawPlan(G); panel(); dirty=true;
+}
+function panel(){
+  const s=SITES[+bSel.value];
+  document.getElementById('bNote').textContent=s.note+'. OSM type "'+s.type+'"'+(s.what?', '+s.what:'')+(s.loot?', loot '+s.loot:'')+(s.house?', house flag':'')+'.';
+  document.getElementById('seedTxt').textContent=G.seedStr+' · '+GEN_VERSION;
+  document.getElementById('hudName').innerHTML='<b>'+bSel.options[bSel.selectedIndex].textContent.split(' · ')[0]+'</b> · '+G.label+' · '+G.A+' m² · built in '+G.ms.toFixed(1)+' ms';
+  const conts=G.Fn.items.filter(it=>it.spec.slot);
+  let left=0,time=0; for(const it of conts){ const empty=it.searched||REC.taken.includes(it.id); if(!empty){ left+=it.contents.reduce((a,c)=>a+c.qty,0); time+=SLOTS[it.spec.slot].t; } }
+  document.getElementById('sUnits').textContent=G.L.units;
+  document.getElementById('sLeft').textContent=left;
+  document.getElementById('sCont').textContent=conts.length;
+  document.getElementById('sTime').textContent=Math.round(time/60)+' min';
+  const hist={untouched:'untouched',looted:'already looted (a quarter left)',holdout:'held by survivors (stockpiled)',den:'a raider den'}[G.history];
+  document.getElementById('lootNote').textContent='The strategy map says this site holds '+G.L.units+' units ('+G.L.base+' when untouched, now '+hist+'). Those units are dealt across the unsearched containers, so the map and the interior always agree. Click a container here or in the view to search it.';
+  const list=document.getElementById('lootList'); list.innerHTML='';
+  const byRoom={}; for(const it of conts) (byRoom[it.room]=byRoom[it.room]||[]).push(it);
+  for(const r of G.P.rooms){ const its=byRoom[r.id]; if(!its) continue;
+    const h=document.createElement('div'); h.className='rm'; h.textContent=r.name; list.appendChild(h);
+    for(const it of its){ const empty=it.searched||REC.taken.includes(it.id); const b=document.createElement('button'); b.className='ct'+(empty?' empty':'');
+      const sl=SLOTS[it.spec.slot];
+      const what=empty?(REC.taken.includes(it.id)?'taken by the squad':'searched before you came'):it.contents.length?it.contents.map(c=>c.name+(c.qty>1?' ×'+c.qty:'')).join(', '):'nothing';
+      b.innerHTML='<span><span class="name">'+sl.n+(it.stash?' (stash)':'')+'</span><br><span class="what"></span></span><span class="t">'+sl.t+' s</span>';
+      b.querySelector('.what').textContent=what;
+      b.onclick=()=>{ if(!empty){ REC.taken.push(it.id); refresh(false); } };
+      list.appendChild(b); } }
+  const nDoors=G.O.doors.length, nWin=new Set(G.O.windows.map(w=>w.key)).size;
+  document.getElementById('sArea').textContent=G.A;
+  document.getElementById('sRooms').textContent=G.P.rooms.length;
+  document.getElementById('sDoors').textContent=nDoors;
+  document.getElementById('sWin').textContent=nWin;
+  const road=G.sense.road;
+  document.getElementById('planNote').textContent='Main axis turned '+(G.M.th*180/Math.PI).toFixed(1)+'° from east. The footprint squares to '+(G.M.W-2)+' × '+(G.M.H-2)+' m of 1 m cells. The front faces '+(road?(road.name||('the '+road.cls+' road'))+', '+road.d.toFixed(0)+' m away':'the default side')+'. '+G.O.extDoors.length+' outside doors are linked to the 2 m movement grid.'+(G.units.length>1?' Tenants, street order not kept: '+G.units.map(u=>u.name+' ('+TYPES[u.typeKey].label.toLowerCase()+', '+u.cells.length+' m²)').join('; ')+'.':'');
+  document.getElementById('record').textContent=JSON.stringify(REC,null,1);
+}
+bSel.onchange=()=>{ reroll=0; REC=null; regen(false); };
+tSel.onchange=()=>{ REC=null; regen(true); };
+hSel.onchange=()=>{ regen(true); };
+document.getElementById('reroll').onclick=()=>{ reroll++; REC=null; regen(true); };
+document.getElementById('canon').onclick=()=>{ reroll=0; REC=null; regen(true); };
+document.getElementById('resetRec').onclick=()=>{ REC=freshRecord(); refresh(false); };
+document.querySelectorAll('#modeChips button').forEach(b=>b.onclick=()=>{ view.mode=b.dataset.mode; document.querySelectorAll('#modeChips button').forEach(x=>x.setAttribute('aria-pressed',x===b?'true':'false')); dirty=true; });
+const markBtn=document.getElementById('markBtn'); markBtn.onclick=()=>{ view.marks=!view.marks; markBtn.setAttribute('aria-pressed',view.marks?'true':'false'); dirty=true; };
+
+resize(); regen(false); frame();
+window.__interiors={generate,SITES,view,get G(){return G;},redraw(){dirty=true;}};
+</script>
