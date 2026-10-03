@@ -1,0 +1,351 @@
+<title>Nightfall Interior Combat</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{color-scheme:dark;--frame:#1b1c1e;--panel:rgba(24,24,26,.9);--line:#38393d;--text:#e2e0dc;--muted:#98968f;--gold:#e0a526;--red:#c23b2e;--blue:#2f9fc4;--body:'IBM Plex Sans Condensed',system-ui,sans-serif;--mono:'IBM Plex Mono',ui-monospace,monospace}
+*{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden;background:var(--frame);color:var(--text);font:14px var(--body)}
+.app{display:flex;flex-direction:column;height:100%}
+header{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;padding:7px 12px;border-bottom:1px solid var(--line)}
+header h1{font:600 16px var(--body);margin:0 8px 0 0;letter-spacing:.02em}header h1 span{color:var(--gold)}
+header label{color:var(--muted);font-size:12px;display:flex;gap:5px;align-items:center}
+select,button{background:#2d2f33;border:1px solid var(--line);color:var(--text);font:600 13px var(--body);padding:5px 9px;border-radius:3px;cursor:pointer}
+button[aria-pressed="true"]{border-color:var(--gold);color:#f3d38a}button:disabled{opacity:.45;cursor:default}
+button.pri{background:var(--gold);color:#211b10;border-color:var(--gold)}
+#stage{position:relative;flex:1;min-height:0;overflow:hidden}#view{display:block;width:100%;height:100%;touch-action:none}
+.hud{position:absolute;left:10px;top:10px;background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:6px 9px;font:12px var(--mono);max-width:min(330px,60%);z-index:2}
+.hud b{font:600 14px var(--body);display:block}.hud .sub{color:var(--muted)}
+.hover{position:absolute;right:10px;top:10px;background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:6px 9px;font:12px var(--mono);max-width:min(300px,45%);z-index:2}
+.hover:empty{display:none}
+.log{position:absolute;left:10px;bottom:10px;width:min(300px,40%);max-height:30%;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:4px 8px;font:11px/1.45 var(--mono);color:#c9c6bf;z-index:2}
+.log p{margin:0}.log p:first-child{color:var(--text)}
+.banner{position:absolute;left:50%;top:12px;transform:translateX(-50%);background:var(--panel);border:1px solid var(--red);padding:8px 14px;border-radius:5px;text-align:center;max-width:min(520px,80%);z-index:3}
+.banner b{display:block;font:600 16px var(--body);margin-bottom:2px}.banner.ours{border-color:var(--gold)}
+.bar{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:4px;max-width:min(760px,calc(100% - 330px));z-index:3}
+.units,.acts{display:flex;gap:5px;flex-wrap:wrap;justify-content:center}.acts{background:var(--panel);border-radius:5px;padding:5px}
+.unit{background:var(--panel);border:1px solid var(--line);color:var(--text);font:12px var(--mono);padding:4px 7px;border-radius:4px;min-width:88px;text-align:left}
+.unit[aria-pressed="true"]{border-color:var(--gold)}.unit.dead{opacity:.4}.unit.foe{border-color:#6e1a10}
+.unit i{display:block;height:4px;background:#3a3b3f;margin-top:3px}.unit i s{display:block;height:100%}
+.pop{position:absolute;left:0;top:0;font:700 15px var(--mono);color:#fff;text-shadow:0 1px 3px #000;pointer-events:none;transform:translate(-50%,-100%);z-index:2}
+.pop.miss{color:#d9d4c8}.pop.crit{color:#ffcf5a}.pop.info{color:#9fd3e6;font-size:13px}
+.hint{color:var(--muted);font:12px var(--mono);padding:5px}
+@media (max-width:760px){ .bar{left:8px;right:8px;transform:none;max-width:none;bottom:6px} .unit{min-width:0;padding:3px 6px;font-size:11px} .banner{top:auto;bottom:150px;max-width:calc(100% - 16px)} .hud{max-width:55%} .log{display:none} .hover{top:auto;bottom:120px;right:8px;max-width:60%} }
+</style>
+<div class="app">
+<header>
+  <h1>Nightfall <span>interior combat</span></h1>
+  <label>Building <select id="bSel"></select></label>
+  <label>Inside <select id="hSel"><option value="den">Raider den</option><option value="holdout">Holdout (hostile)</option></select></label>
+  <button type="button" id="rerollBtn" title="Same building, another procedural layout">Reroll layout</button>
+  <button type="button" id="restartBtn">Restart</button>
+  <button type="button" id="sightBtn" aria-pressed="true" title="Show what is seen: the raiders' eyes while you are concealed, your selected soldier's sight in a fight">Sight</button>
+  <button type="button" id="wallsBtn" title="Cutaway: walls facing the camera drop to knee height">Walls: cutaway</button>
+</header>
+<div id="stage">
+  <canvas id="view"></canvas>
+  <div class="hud" id="hud"></div>
+  <div class="hover" id="hover"></div>
+  <div class="log" id="log" aria-live="polite"></div>
+  <div class="banner" id="banner" hidden></div>
+  <div class="bar" id="bar"><div class="units" id="units"></div><div class="acts" id="acts"></div></div>
+</div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>/*FIGUREKIT*/</script>
+<script>
+/*INTERIORS_GEN*/
+/*INTERIORS_RENDER*/
+</script>
+<script>/*RULES*/</script>
+<script>/*WORLD*/</script>
+<script>
+// ---------- interior combat demonstration ----------
+// The building is generated by the interiors generator (tools/interiors, its own topic) and drawn by its renderer;
+// this page adds the fight: a squad outside, the generator's raiders inside, concealment, stacking at doors and
+// windows, a breach, and XCOM turns on the 1 m interior grid. Rules: tools/combat/rules.js. World: interior-world.js.
+(()=>{
+const CR=CombatRules, $=id=>document.getElementById(id);
+const hudEl=$('hud'), hoverEl=$('hover'), logEl=$('log'), bannerEl=$('banner'), unitsEl=$('units'), actsEl=$('acts');
+const INKS={selected:0xe0a526,calm:0x1d1814,overwatch:0x2f9fc4,concealed:0x5b6fa8,wounded:0xc23b2e,raider:0x6e1a10,dead:0x77726a};
+const NAMES=['Rosa','Dev','Malik','June'];
+const TAU=Math.PI*2;
+view.marks=false; view.mode='cutaway'; view.el=.95; view.dist=22;
+renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
+// a softer key light so figures read against the floors
+scene.add(new THREE.AmbientLight(0xffffff,.18));
+
+// ---------- state ----------
+const S={timeScale:1,w:null,G:null,rec:null,units:[],sel:null,phase:'explore',turn:'squad',mode:'move',busy:false,round:1,minutes:14*60,seed:0,reach:null,camGoal:null,sight:true,free:false};
+let dirtyBuild=false;
+// the building list: every test site, Roadrunner first
+const order=SITES.map((s,i)=>i).sort((a,b)=>(SITES[b].id==='newriver/2_2/0')-(SITES[a].id==='newriver/2_2/0'));
+for(const i of order){ const s=SITES[i]; const o=document.createElement('option'); o.value=i; o.textContent=(s.name||(s.house?'House':'Building'))+' · '+s.id; $('bSel').appendChild(o); }
+
+// ---------- overlays ----------
+const tileG=new THREE.PlaneGeometry(.9,.9); tileG.rotateX(-Math.PI/2);
+// r128 sizes the colour buffer from the count at the first setColorAt, so give it the full size before hiding them all
+const mkTiles=(op)=>{ const m=new THREE.InstancedMesh(tileG,new THREE.MeshBasicMaterial({transparent:true,opacity:op,depthWrite:false}),4096); m.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(4096*3),3); m.count=0; m.frustumCulled=false; m.renderOrder=5; scene.add(m); return m; };
+const reachT=mkTiles(.42), sightT=mkTiles(.22), hoverT=mkTiles(.6);
+const tmpM=new THREE.Matrix4(), col=new THREE.Color();
+function paint(mesh,cells,colorOf){ mesh.count=0; for(const c of cells){ if(mesh.count>=4096) break; tmpM.makeTranslation(S.w.cx(c),S.w.floorY(c)+.035,S.w.cz(c)); mesh.setMatrixAt(mesh.count,tmpM); mesh.setColorAt(mesh.count,col.setHex(colorOf(c))); mesh.count++; } mesh.instanceMatrix.needsUpdate=true; if(mesh.instanceColor) mesh.instanceColor.needsUpdate=true; }
+// cover shields on the hovered cell: a slab on each side that gives cover, full height or half
+const shieldG=new THREE.BoxGeometry(1,1,1), shieldFull=new THREE.MeshBasicMaterial({color:0xe0a526,transparent:true,opacity:.75}), shieldHalf=new THREE.MeshBasicMaterial({color:0xe0a526,transparent:true,opacity:.45});
+const shields=new THREE.Group(); scene.add(shields);
+function drawShields(c){ while(shields.children.length) shields.remove(shields.children[0]); if(c<0||!S.w.passable(c)) return;
+  for(let d=0;d<4;d++){ const v=S.w.coverDir(c,d); if(!v) continue; const D=InteriorWorld.DIRS[d], h=v===2?1.1:.55; const m=new THREE.Mesh(shieldG,v===2?shieldFull:shieldHalf);
+    m.scale.set(D[0]?.06:.8,h,D[1]?.06:.8); m.position.set(S.w.cx(c)+D[0]*.42,S.w.floorY(c)+h/2,S.w.cz(c)+D[1]*.42); m.renderOrder=6; shields.add(m); } }
+const aimLine=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(),new THREE.Vector3()]),new THREE.LineDashedMaterial({color:0xe0a526,dashSize:.3,gapSize:.2})); aimLine.visible=false; scene.add(aimLine);
+function showAim(a,b){ if(!a||!b){ aimLine.visible=false; return; } const p=aimLine.geometry.attributes.position; p.setXYZ(0,a.x,S.w.floorY(a.c)+1.35,a.z); p.setXYZ(1,b.x,S.w.floorY(b.c)+1.25,b.z); p.needsUpdate=true; aimLine.computeLineDistances(); aimLine.visible=true; }
+
+// ---------- figures ----------
+const gunG=new THREE.BoxGeometry(.055,.62,.08); gunG.translate(0,-.3,.02); const gunM=new THREE.MeshLambertMaterial({color:0x2b2a28});
+function makeFig(seed,fem,ink){ const f=FigureKit.figure(fem,FigureKit.genFace(seed,fem)); f.ink=FigureKit.inkUp(f.root,{persp:true,width:.0016,color:ink}); const g=new THREE.Mesh(gunG,gunM); g.position.set(0,-.24,0); f.el[0].add(g); scene.add(f.root); return f; }
+function ink(u){ if(!u.fig) return; const k=!u.alive?'dead':u.team==='raider'?'raider':S.phase==='explore'?(S.sel===u?'selected':'concealed'):u.ow?'overwatch':u.hp<=u.max/2?'wounded':S.sel===u?'selected':'calm'; u.fig.ink.color.setHex(INKS[k]); }
+const inkAll=()=>S.units.forEach(ink);
+
+// ---------- popups, tracers, log ----------
+const pops=[], tracers=[], waits=[];
+const wait=ms=>new Promise(r=>waits.push({t:ms,r}));
+function pop(u,text,cls){ const el=document.createElement('div'); el.className='pop '+(cls||''); el.textContent=text; $('stage').appendChild(el); pops.push({el,x:u.x,y:S.w.floorY(u.c)+2.2,z:u.z,t:0}); }
+function tracer(a,b,hit,r){ const off=hit?0:(r()-.5)*1.6; const g=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(a.x,S.w.floorY(a.c)+1.35,a.z),new THREE.Vector3(b.x+off,S.w.floorY(b.c)+(hit?1.2:1.7),b.z-off)]);
+  const l=new THREE.Line(g,new THREE.LineBasicMaterial({color:0xffe3a0,transparent:true})); scene.add(l); tracers.push({l,t:0}); }
+function log(t){ const p=document.createElement('p'); p.textContent=t; logEl.prepend(p); while(logEl.children.length>40) logEl.lastChild.remove(); }
+function flash(title,text,ours,keep){ bannerEl.className='banner'+(ours?' ours':''); bannerEl.innerHTML=`<b>${title}</b>${text}`; bannerEl.hidden=false; clearTimeout(flash.t); if(!keep) flash.t=setTimeout(()=>bannerEl.hidden=true,3800); }
+const clock=()=>{ const m=S.minutes%(24*60); return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); };
+
+// ---------- setting up a fight ----------
+function setup(){
+  const site=SITES[+$('bSel').value], hist=$('hSel').value, seedStr=site.id+(S.seed?'#'+S.seed:'');
+  for(const u of S.units) if(u.fig){ scene.remove(u.fig.root); }
+  const G=generate(site,'auto',seedStr,hist); const w=InteriorWorld.fromGenerated(G);
+  S.G=G; S.w=w; S.rec={doors:w.doorSt,taken:[]}; S.units=[]; S.phase='explore'; S.turn='squad'; S.round=1; S.minutes=14*60; S.busy=false; S.free=false; S.mode='move'; S.rng=CR.rng(seedStr+'|fight');
+  logEl.innerHTML=''; bannerEl.hidden=true;
+  rebuild();
+  // the generator's people, with roles: a sentry looks out of a street-side window
+  const ppl=w.posted(seedStr);
+  ppl.forEach((p,i)=>{ const boss=p.boss, side=p.side; const u={id:'r'+i,team:'raider',name:boss?(side==='raider'?'Raider boss':'Holdout leader'):p.role==='sentry'?'Sentry':(side==='raider'?'Raider':'Holdout'),c:p.c,hp:boss?6:4,max:boss?6:4,ap:0,alive:true,unaware:true,face:p.face,role:p.role,look:p.face,lookT:0};
+    u.fig=makeFig(4000+i*13+S.seed*7,i%2===1,INKS.raider); place(u); S.units.push(u); });
+  // the squad gathers a few metres out from the front door
+  // the squad gathers outside the front door, as close as it can without standing in anyone's sight
+  const fa=w.frontApproach(), occ=new Set(S.units.map(u=>u.c)), start=fa?fa.outCell:0;
+  const unseen=c=>CR.dist(w,c,start)>=6&&!S.units.some(r=>CR.sees(w,r,c));
+  let spots=nearestFree(start,occ,4,unseen); if(spots.length<4) spots=nearestFree(start,occ,4,c=>CR.dist(w,c,start)>=6);
+  spots.forEach((c,i)=>{ const u={id:'s'+i,team:'squad',name:NAMES[i],c,hp:6,max:6,ap:2,alive:true,face:fa?Math.atan2(-InteriorWorld.DIRS[fa.dir][0],-InteriorWorld.DIRS[fa.dir][1]):0};
+    u.fig=makeFig(900+i*31+S.seed*3,i%2===0,INKS.concealed); place(u); S.units.push(u); });
+  S.sel=S.units.find(u=>u.team==='squad'); view.target.set(S.sel.x,0,S.sel.z); view.az=fa?Math.atan2(InteriorWorld.DIRS[fa.dir][0],InteriorWorld.DIRS[fa.dir][1]):0;
+  inkAll(); select(S.sel); drawHud();
+  log(`${G.label}, ${hist==='den'?'raider den':'holdout'}: ${ppl.length} inside. Generated in ${G.ms|0} ms.`);
+  flash('Concealed','Nobody inside has seen you. Red floor is what their eyes cover. Stack at a door or window and breach, or open fire when you have a line.',true);
+}
+function nearestFree(c0,occ,n,ok){ const out=[], seen=new Set([c0]), q=[c0];
+  while(q.length&&out.length<n){ const c=q.shift(); if(S.w.passable(c)&&!occ.has(c)&&!S.w.isInside(c)&&(!ok||ok(c))) out.push(c); for(let d=0;d<4;d++){ const m=S.w.step(c,d); if(m>=0&&!seen.has(m)&&S.w.passable(m)&&!S.w.edge(c,d)){ seen.add(m); q.push(m); } } }
+  return out; }
+function place(u){ u.x=S.w.cx(u.c); u.z=S.w.cz(u.c); }
+// the interiors renderer draws the building; its people are ours to draw, so hand it an empty list
+function rebuild(){ build(Object.assign({},S.G,{D:{people:[]}}),S.rec); dirtyBuild=false;
+  // hide the renderer's gold door-to-2 m-grid markers: a debug aid for the interiors page, noise in a fight
+  for(const o of world.children) if(o.isMesh&&o.material&&o.material.isMeshBasicMaterial&&o.material.vertexColors&&o.material.transparent&&o.material.opacity===.55) o.visible=false; }
+
+// ---------- what is seen ----------
+function drawSight(){ sightT.count=0; if(!S.sight){ sightT.count=0; return; } const w=S.w, cells=new Set();
+  if(S.phase==='explore'){ for(const r of S.units) if(r.team==='raider'&&r.alive&&r.unaware) for(let c=0;c<w.N;c++) if(w.passable(c)&&CR.sees(w,r,c)) cells.add(c);
+    paint(sightT,cells,()=>0xc23b2e); }
+  else if(S.sel&&S.sel.alive&&S.sel.team==='squad'){ const ps=CR.peeks(w,S.sel.c);
+    for(let c=0;c<w.N;c++){ if(!w.passable(c)||CR.dist(w,S.sel.c,c)>CR.V.spot) continue; for(const p of ps) if(w.sight(p,c)){ cells.add(c); break; } }
+    paint(sightT,cells,()=>0x3fae7f); } }
+
+// ---------- selection, reach, the action bar ----------
+const occupied=except=>new Set(S.units.filter(u=>u.alive&&u!==except).map(u=>u.c));
+function select(u){ if(!u) return; S.sel=u; S.mode='move'; inkAll(); S.camGoal={x:u.x,z:u.z}; drawReach(); drawSight(); drawBar(); }
+function budget(u){ return S.phase==='explore'?2*CR.V.move:(u.ap>=2?2*CR.V.move:u.ap===1?CR.V.move:0); }
+function drawReach(){ const u=S.sel; reachT.count=0; S.reach=null; if(!u||!u.alive||u.team!=='squad'||S.busy||S.turn!=='squad'||S.phase==='over') return; const b=budget(u); if(!b) return;
+  S.reach=CR.reach(S.w,u,occupied(u),b); const cells=[...S.reach.cost.keys()].filter(c=>c!==u.c);
+  paint(reachT,cells,c=>S.reach.cost.get(c)<=CR.V.move?0x3f8fd1:0xe0a526); }
+const foes=u=>S.units.filter(t=>t.alive&&t.team!==u.team);
+const squad=()=>S.units.filter(u=>u.team==='squad');
+// the entry this unit stands at: an outside cell right against a door or window it could go through
+function entryAt(u){ return S.w.entries().find(e=>e.outCell===u.c&&S.w.props(e.edge).move!==false&&!(e.kind==='garage'&&S.w.doorState(e.edge)!=='open')); }
+function openDoorBeside(u){ for(let d=0;d<4;d++){ const e=S.w.edge(u.c,d); if(e&&e.type==='door'&&S.w.doorState(e)==='open') return e; } return null; }
+function drawBar(){ const u=S.sel;
+  unitsEl.innerHTML=S.units.map((v,i)=>v.team==='squad'?`<button type="button" class="unit${v.alive?'':' dead'}" data-i="${i}" aria-pressed="${S.sel===v}">${v.name} · ${!v.alive?'down':S.phase==='explore'?(v.stack?'stacked':'ready'):'●'.repeat(v.ap)+'○'.repeat(2-v.ap)}${v.ow?' · OW':''}${v.hunker?' · HNK':''}${v.free?' · free shot':''}<i><s style="width:${v.hp/v.max*100}%;background:${v.hp<=v.max/2?'#c23b2e':'#3fae7f'}"></s></i></button>`
+    :`<span class="unit foe${v.alive?'':' dead'}">${v.name}${!v.alive?' · down':v.unaware?' · unaware':''}<i><s style="width:${v.hp/v.max*100}%;background:#c23b2e"></s></i></span>`).join('');
+  if(S.phase==='over'){ actsEl.innerHTML='<button type="button" class="pri" data-a="restart">Again</button><button type="button" data-a="reroll">Another layout</button>'; return; }
+  if(S.turn!=='squad'){ actsEl.innerHTML='<span class="hint" style="color:#e2b0a8">Raiders\' turn…</span>'; return; }
+  const mine=!S.busy&&u&&u.alive&&u.team==='squad';
+  if(S.mode==='shoot'&&mine){ const ts=foes(u).map(t=>({t,lf:CR.lineOfFire(S.w,u.c,t.c)})).filter(x=>x.lf&&CR.dist(S.w,u.c,x.t.c)<40);
+    actsEl.innerHTML=(ts.length?ts.map(({t})=>{ const o=CR.odds(S.w,u,t,{free:u.free,mod:u.entryMod||0}); return `<button type="button" class="pri" data-t="${S.units.indexOf(t)}">${t.name}: ${o.aim}%${o.flanked?' · flanked':o.cover===2?' · full cover':' · half cover'}</button>`; }).join(''):'<span class="hint">No line of fire from here</span>')+'<button type="button" data-a="back">Back</button>'; return; }
+  if(S.phase==='explore'){ const e=mine&&entryAt(u), stacked=squad().filter(v=>v.alive&&v.stack), anyLine=mine&&squad().some(v=>v.alive&&S.units.some(t=>t.team==='raider'&&t.alive&&CR.lineOfFire(S.w,v.c,t.c)));
+    actsEl.innerHTML=(e?`<button type="button" data-a="stack" aria-pressed="${!!u.stack}">${u.stack?'Unstack':'Stack at '+(e.kind==='window'?'window':e.role==='front'?'front door':e.role==='back'?'back door':'side door')}</button>`:'')+
+      `<button type="button" class="pri" data-a="breach" ${stacked.length&&!S.busy?'':'disabled'}>Breach${stacked.length?' ('+stacked.length+')':''} [B]</button><button type="button" data-a="fire" ${anyLine?'':'disabled'}>Open fire</button><button type="button" data-a="wait" ${S.busy?'disabled':''}>Wait [⌫]</button>`; return; }
+  const od=mine&&u.ap>0&&openDoorBeside(u);
+  actsEl.innerHTML=`<button type="button" data-a="shoot" class="pri" ${mine&&(u.ap>0||u.free)?'':'disabled'}>${u&&u.free?'Free shot':'Shoot'} [1]</button><button type="button" data-a="ow" ${mine&&u.ap>0?'':'disabled'}>Overwatch [2]</button><button type="button" data-a="hunker" ${mine&&u.ap>0?'':'disabled'}>Hunker [3]</button>${od?'<button type="button" data-a="close">Close door</button>':''}<button type="button" data-a="end" ${S.busy?'disabled':''}>${S.free?'Skip free shots':'End turn'} [⌫]</button>`; }
+function drawHud(){ const alive=S.units.filter(u=>u.team==='raider'&&u.alive).length;
+  hudEl.innerHTML=`<b>${S.phase==='explore'?'Concealed':S.phase==='over'?'Over':S.turn==='squad'?'Your turn':'Raiders'}</b>${clock()} · ${S.phase==='explore'?'exploring':'round '+S.round} · ${alive} inside left<div class="sub">${S.G.label} · ${S.w.G.site.id}</div>`; }
+
+// ---------- doing things ----------
+// walk a path cell by cell; doors open as you reach them, glass breaks as you climb through; overwatch can interrupt
+function walk(u,cells){ return new Promise(res=>{ u.route=cells.slice(1); u.done=res; }); }
+async function stepEvents(u,from,to){ const e=S.w.edgeBetween(from,to); if(!e) return;
+  if(/door/.test(e.type)&&S.w.doorState(e)==='closed'){ S.w.setDoor(e.key,'open'); dirtyBuild=true; noise(u,4,'door'); }
+  if(e.type==='window'&&e.win.state==='intact'){ S.w.setWindow(e.key,'broken'); dirtyBuild=true; noise(u,14,'glass'); pop(u,'glass','info'); } }
+// noise: unaware raiders within earshot turn to face it (walls halve the range)
+function noise(u,radius,what){ if(S.phase!=='explore') return; for(const r of S.units) if(r.team==='raider'&&r.alive&&r.unaware){ const d=CR.dist(S.w,r.c,u.c), heard=S.w.sight(r.c,u.c)?radius:radius/2; if(d<=heard){ r.look=Math.atan2(u.x-r.x,u.z-r.z); r.lookT=6; r.heard=true; log(`${r.name} heard the ${what}.`); } } }
+async function moveTo(u,c){ const r=S.reach, g=r&&r.cost.get(c); if(g===undefined||c===u.c) return false;
+  S.busy=true; reachT.count=0; drawBar(); const ph=S.phase;
+  if(S.phase==='combat'){ u.ap-=g<=CR.V.move?1:2; u.ow=false; u.hunker=false; }
+  u.stack=null; await walk(u,CR.pathTo(r,c));
+  if(S.phase!==ph) return true;   // spotted on the way: the fight has already started
+  S.busy=false;
+  if(dirtyBuild) rebuild();
+  if(S.phase==='explore'&&!spottedCheck()) { raidersLook(1.2); drawSight(); }
+  if(S.phase==='combat'&&!checkEnd()) afterAction(u); else if(S.phase==='explore'){ drawReach(); drawBar(); }
+  return true; }
+async function shoot(a,b,opt={}){ const o=CR.odds(S.w,a,b,opt); a.face=Math.atan2(b.x-a.x,b.z-a.z); a.aiming=true; S.camGoal={x:(a.x+b.x)/2,z:(a.z+b.z)/2}; await wait(380);
+  const res=CR.roll(o,S.rng); tracer(a,b,res.hit,S.rng); a.recoil=1; b.flinch=res.hit?1:0;
+  // a shot through glass breaks it
+  const crossed=[]; S.w.sight(a.c,b.c,{shot:true,collect:crossed}); for(const e of crossed) if(e.type==='window'&&e.win.state==='intact'){ S.w.setWindow(e.key,'broken'); dirtyBuild=true; }
+  pop(b,res.hit?(res.crit?`CRIT −${res.dmg}`:`−${res.dmg}`):'Miss',res.hit?(res.crit?'crit':''):'miss');
+  log(`${a.name} → ${b.name}: ${o.aim}%${opt.reaction?' (overwatch)':''}${opt.free?' (free)':''} · ${res.hit?(res.crit?'crit ':'hit ')+res.dmg:'miss'}`);
+  if(res.hit){ b.hp-=res.dmg; if(b.hp<=0){ b.hp=0; b.alive=false; b.ow=false; log(`${b.name} is down.`); } }
+  if(!opt.free) b.unaware=false; ink(b); if(dirtyBuild) rebuild(); await wait(420); a.aiming=false; drawBar(); drawHud(); return res.hit; }
+async function overwatchCheck(m){ for(const w of S.units){ if(!w.alive||!w.ow||w.team===m.team||!m.alive) continue; if(CR.dist(S.w,w.c,m.c)>28||!CR.lineOfFire(S.w,w.c,m.c)) continue;
+    w.ow=false; ink(w); log(`${w.name} takes an overwatch shot.`); m.paused=true; await shoot(w,m,{reaction:true}); m.paused=false; } }
+
+// ---------- concealment ----------
+function spottedCheck(){ for(const r of S.units) if(r.team==='raider'&&r.alive&&r.unaware) for(const u of squad()) if(u.alive&&CR.sees(S.w,r,u.c)){ startFight('raider',`${r.name} saw ${u.name}.`); return true; } return false; }
+// between moves the raiders who aren't on watch glance around; the sentry keeps looking out of the window
+function raidersLook(k){ for(const r of S.units) if(r.team==='raider'&&r.alive&&r.unaware&&r.role!=='sentry'){ if(r.lookT>0){ r.lookT-=k; continue; } r.look=r.face+(S.rng()-.5)*Math.PI*1.4*k; } }
+
+// ---------- breaching ----------
+async function breach(){ const st=squad().filter(u=>u.alive&&u.stack); if(!st.length) return; S.busy=true; S.phase='breach'; reachT.count=0; sightT.count=0; drawBar();
+  flash('Breach',st.map(u=>`${u.name}: ${u.stack.kind==='window'?'through the window':'kicks the '+(u.stack.role||'side')+' door'}`).join(' · '),true);
+  const occ=occupied(null);
+  for(const u of st){ const e=u.stack.edge;
+    if(/door/.test(e.type)){ if(S.w.doorState(e)!=='broken') S.w.setDoor(e.key,'broken'); } else if(e.type==='window'&&e.win.state==='intact') S.w.setWindow(e.key,'broken');
+    u.entryMod=e.type==='window'?-10:0; }
+  rebuild(); await wait(250);
+  // in through the gap if nobody stands there; otherwise fire from the threshold
+  await Promise.all(st.map(u=>{ const t=u.stack.inCell; if(occ.has(t)||!S.w.passable(t)) return Promise.resolve(); occ.add(t); return walk(u,[u.c,t]); }));
+  st.forEach(u=>u.stack=null);
+  S.busy=false; startFight('squad','Breach!',st); }
+
+// ---------- the fight ----------
+function startFight(first,why,breachers){ S.phase='combat'; S.round=1; bannerEl.hidden=true; drawSight();
+  for(const u of S.units) if(u.team==='squad'){ u.ap=2; u.free=false; u.stack=null; }
+  log(why);
+  if(first==='squad'){ const who=breachers||squad().filter(u=>u.alive); for(const u of who) if(u.alive) u.free=true; S.free=true; S.turn='squad';
+    flash(breachers?'Breach':'First strike',`${breachers?'Breachers':'Every soldier'} get one free shot (+10 aim${breachers&&breachers.some(u=>u.entryMod)?', −10 through a window':''}; anyone unaware has no cover) before they react.`,true);
+    inkAll(); select(squad().find(u=>u.alive&&u.free)||squad().find(u=>u.alive)); drawHud(); }
+  else { flash('Spotted','They saw you first and scramble for cover.',false); for(const r of S.units) if(r.team==='raider') r.unaware=false; inkAll(); raiderPhase(true); } }
+function endFree(){ S.free=false; for(const u of S.units){ u.free=false; u.entryMod=0; if(u.team==='raider') u.unaware=false; } inkAll(); flash(`Round ${S.round}`,'Your squad',true); }
+function afterAction(u){ if(S.free&&!S.units.some(v=>v.free&&v.alive)) endFree();
+  if((u.ap>0||u.free)&&u.alive){ select(u); return; } const next=squad().find(v=>v.alive&&(v.ap>0||v.free)); if(next) select(next); else raiderPhase(false); }
+async function raiderPhase(scramble){ if(!scramble) S.minutes+=CR.V.minutesPerTurn*squad().filter(u=>u.alive).length;   // every squad member's turn just ended
+  S.turn='raider'; S.busy=true; reachT.count=0; drawBar(); drawHud(); if(!scramble) flash(`Round ${S.round}`,'Raiders',false); await wait(600);
+  for(const r of S.units.filter(u=>u.team==='raider'&&u.alive)){ r.ap=scramble?1:2; r.hunker=false; r.ow=false; S.camGoal={x:r.x,z:r.z};
+    while(r.ap>0&&r.alive&&squad().some(u=>u.alive)){ const a=CR.decide(S.w,r,S.units,S.rng,{scramble});
+      if(a.type==='shoot'){ await shoot(r,a.target); r.ap=0; }
+      else if(a.type==='move'){ r.ap--; await walk(r,a.path); if(dirtyBuild) rebuild(); if(scramble) break; }
+      else { r.ow=true; r.ap=0; ink(r); log(`${r.name} watches the doorways.`); } }
+    if(scramble&&r.alive&&r.ap>0){ r.ow=true; r.ap=0; ink(r); }
+    S.minutes+=CR.V.minutesPerTurn; drawHud(); if(checkEnd()) { S.busy=false; return; } }
+  if(!scramble) S.round++; S.busy=false; S.turn='squad';
+  for(const u of squad()) if(u.alive){ u.ap=2; u.hunker=false; }
+  flash(`Round ${S.round}`,'Your squad',true); select(squad().find(u=>u.alive)); drawHud(); }
+function endSquadTurn(){ if(S.free){ endFree(); select(squad().find(u=>u.alive&&u.ap>0)); return; } for(const u of squad()){ u.ap=0; u.free=false; } raiderPhase(false); }
+function checkEnd(){ const s=squad().some(u=>u.alive), r=S.units.some(u=>u.team==='raider'&&u.alive); if(r&&s) return false;
+  S.phase='over'; S.busy=false; reachT.count=0; sightT.count=0; S.mode='move';
+  const mins=S.minutes-14*60; if(!r) flash('Building clear',`${squad().filter(u=>u.alive).length} of 4 walk out. The fight took ${Math.floor(mins/60)} h ${mins%60} min of daylight.`,true,true);
+  else flash('Squad lost','Nobody walks out of the building.',false,true);
+  inkAll(); drawBar(); drawHud(); return true; }
+
+// ---------- input ----------
+$('bar').addEventListener('click',async e=>{ const b=e.target.closest('button'); if(!b||b.disabled) return;
+  if(b.dataset.i!==undefined){ const u=S.units[+b.dataset.i]; if(u.alive&&S.turn==='squad'&&!S.busy) select(u); return; }
+  if(b.dataset.t!==undefined){ const u=S.sel, t=S.units[+b.dataset.t]; showAim(null); S.busy=true; reachT.count=0; const free=u.free; await shoot(u,t,{free,mod:u.entryMod||0}); if(free) u.free=false; else u.ap=0; S.busy=false; S.mode='move'; if(!checkEnd()) afterAction(u); return; }
+  act(b.dataset.a); });
+$('bar').addEventListener('pointerover',e=>{ const b=e.target.closest('button[data-t]'); showAim(b?S.sel:null,b?S.units[+b.dataset.t]:null); });
+function act(a){ const u=S.sel;
+  if(a==='restart'){ setup(); return; } if(a==='reroll'){ S.seed++; setup(); return; }
+  if(!u||S.busy) return;
+  if(a==='stack'){ u.stack=u.stack?null:entryAt(u); drawBar(); return; }
+  if(a==='breach'){ breach(); return; }
+  if(a==='fire'){ startFight('squad','The squad opens fire.'); return; }
+  if(a==='wait'){ if(S.phase==='explore'){ S.minutes+=1; raidersLook(1); if(!spottedCheck()) drawSight(); drawHud(); } else endSquadTurn(); return; }
+  if(a==='shoot'){ S.mode='shoot'; drawBar(); return; } if(a==='back'){ S.mode='move'; showAim(null); drawBar(); return; }
+  if(a==='ow'){ u.ow=true; u.ap=0; ink(u); log(`${u.name} is on overwatch.`); afterAction(u); return; }
+  if(a==='hunker'){ u.hunker=true; u.ap=0; log(`${u.name} hunkers down: cover counts for more.`); afterAction(u); return; }
+  if(a==='close'){ const e=openDoorBeside(u); if(e){ S.w.setDoor(e.key,'closed'); rebuild(); u.ap--; log(`${u.name} closes the door.`); afterAction(u); } return; }
+  if(a==='end'){ endSquadTurn(); } }
+addEventListener('keydown',e=>{ if(e.target.tagName==='SELECT') return; const k=e.key;
+  if(k==='q'||k==='Q') view.az-=Math.PI/2; else if(k==='e'||k==='E') view.az+=Math.PI/2;
+  if(S.turn!=='squad'||S.busy) return;
+  if(k==='1') act(S.phase==='explore'?'fire':'shoot'); else if(k==='2') act('ow'); else if(k==='3') act('hunker'); else if(k==='b'||k==='B') act('breach');
+  else if(k==='Backspace'){ e.preventDefault(); act(S.phase==='explore'?'wait':'end'); } else if(k==='Escape') act('back');
+  else if(k==='Tab'){ e.preventDefault(); const sq=squad().filter(u=>u.alive); select(sq[(sq.indexOf(S.sel)+1)%sq.length]); } });
+const canvas3=renderer.domElement, ray=new THREE.Raycaster(), ndc=new THREE.Vector2(), plane=new THREE.Plane(new THREE.Vector3(0,1,0),-.08), hitP=new THREE.Vector3();
+function cellUnder(ev){ const r=canvas3.getBoundingClientRect(); ndc.set((ev.clientX-r.left)/r.width*2-1,-(ev.clientY-r.top)/r.height*2+1); ray.setFromCamera(ndc,camera); return ray.ray.intersectPlane(plane,hitP)?S.w.cellAt(hitP.x,hitP.z):-1; }
+let drag=null;
+canvas3.addEventListener('pointerdown',e=>{ drag={x:e.clientX,y:e.clientY,pan:e.button===2||e.shiftKey,moved:0}; canvas3.setPointerCapture(e.pointerId); });
+canvas3.addEventListener('pointermove',e=>{ if(!drag){ hover(cellUnder(e)); return; } const dx=e.clientX-drag.x, dy=e.clientY-drag.y; drag.x=e.clientX; drag.y=e.clientY; drag.moved+=Math.abs(dx)+Math.abs(dy);
+  if(drag.moved<6) return; S.camGoal=null;
+  if(drag.pan){ const s=view.dist*.0016, ca=Math.cos(view.az), sa=Math.sin(view.az); view.target.x-=(dx*ca-dy*sa)*s; view.target.z-=(-dx*sa-dy*ca)*s; }
+  else { view.az-=dx*.008; view.el=clamp(view.el+dy*.006,.3,1.45); } });
+canvas3.addEventListener('pointerup',e=>{ const click=drag&&drag.moved<6; drag=null; if(!click) return; const c=cellUnder(e); if(c<0) return;
+  const u=S.units.find(v=>v.alive&&v.team==='squad'&&v.c===c); if(u&&S.turn==='squad'&&!S.busy){ select(u); return; }
+  if(S.mode==='move'&&S.turn==='squad'&&!S.busy&&S.sel&&S.reach&&S.reach.cost.has(c)) moveTo(S.sel,c); });
+canvas3.addEventListener('contextmenu',e=>e.preventDefault());
+canvas3.addEventListener('wheel',e=>{ e.preventDefault(); view.dist=clamp(view.dist*Math.exp(e.deltaY*.0012),6,90); },{passive:false});
+function hover(c){ hoverT.count=0; drawShields(-1); if(c<0||!S.w||S.phase==='over'){ hoverEl.textContent=''; return; } const w=S.w;
+  paint(hoverT,[c],()=>0xf3d38a); drawShields(c);
+  const it=w.itemAt(c), parts=[];
+  if(it) parts.push(`${it.key}: ${it.spec.cover} cover${w.blocksSight(c)?', blocks sight':''}`);
+  else if(!w.passable(c)) parts.push(w.isInside(c)?'blocked':'yard wall');
+  else { const fs=S.units.filter(t=>t.team==='raider'&&t.alive), cv=fs.map(t=>w.coverFrom(c,t.x,t.z));
+    parts.push(`Cover vs ${fs.length}: ${cv.filter(v=>v===2).length} full · ${cv.filter(v=>v===1).length} half · flanked by ${cv.filter(v=>v===0).length}`);
+    if(S.reach&&S.reach.cost.has(c)){ const g=S.reach.cost.get(c); parts.push(`${g.toFixed(1)} effective m · ${S.phase==='explore'?'move':g<=CR.V.move?'1 action':'dash, 2 actions'}`); }
+    const e=S.w.entries().find(x=>x.outCell===c); if(e) parts.push(`${e.kind==='window'?'Window ('+e.edge.win.state+')':(e.role||'side')+' door ('+w.doorState(e.edge)+')'}: stand here to stack`); }
+  hoverEl.textContent=parts.join('\n'); hoverEl.style.whiteSpace='pre-line'; }
+
+// ---------- per frame ----------
+let last=performance.now();
+function resize(){ const st=$('stage'), w=st.clientWidth, h=st.clientHeight; renderer.setSize(w,h,false); camera.aspect=w/Math.max(1,h); camera.updateProjectionMatrix(); }
+new ResizeObserver(resize).observe($('stage'));
+const tmpV=new THREE.Vector3();
+function frame(now){ requestAnimationFrame(frame); const dt=Math.min(.05,(now-last)/1000)*S.timeScale; last=now;   // timeScale: tests on slow software rendering speed it up if(!S.w) return;
+  for(let i=waits.length-1;i>=0;i--){ waits[i].t-=dt*1000; if(waits[i].t<=0){ waits[i].r(); waits.splice(i,1); } }
+  const st=$('stage'), W=st.clientWidth, H=st.clientHeight;
+  for(const p of pops){ p.t+=dt; tmpV.set(p.x,p.y+p.t*1.1,p.z).project(camera); p.el.style.left=((tmpV.x+1)/2*W)+'px'; p.el.style.top=((1-tmpV.y)/2*H)+'px'; p.el.style.opacity=String(Math.max(0,1-p.t/1.6)); }
+  for(let i=pops.length-1;i>=0;i--) if(pops[i].t>1.6){ pops[i].el.remove(); pops.splice(i,1); }
+  for(const t of tracers) t.t+=dt; for(let i=tracers.length-1;i>=0;i--){ const t=tracers[i]; t.l.material.opacity=Math.max(0,1-t.t/.35); if(t.t>.35){ scene.remove(t.l); t.l.geometry.dispose(); tracers.splice(i,1); } }
+  for(const u of S.units){ const f=u.fig; let walking=false;
+    if(u.route&&!u.paused){ if(!u.route.length){ u.route=null; const r=u.done; u.done=null; r&&r(); }
+      else { const c=u.route[0], tx=S.w.cx(c), tz=S.w.cz(c), dx=tx-u.x, dz=tz-u.z, d=Math.hypot(dx,dz), sp=3.2*dt;
+        if(!u.entered){ u.entered=true; stepEvents(u,u.c,c); if(dirtyBuild) rebuild(); }
+        if(d<=sp){ u.x=tx; u.z=tz; u.c=c; u.route.shift(); u.entered=false;
+          if(S.phase==='explore'&&u.team==='squad'&&spottedCheck()){ u.route=[]; }
+          else if(S.phase==='combat') overwatchCheck(u); }
+        else { u.x+=dx/d*sp; u.z+=dz/d*sp; u.face=Math.atan2(dx,dz); }
+        walking=true; if(!u.alive){ u.route=null; const r=u.done; u.done=null; r&&r(); } } }
+    if(u.team==='raider'&&u.unaware&&u.alive&&S.phase==='explore'){ let a=u.look-u.face; a=Math.atan2(Math.sin(a),Math.cos(a)); u.face+=a*Math.min(1,dt*1.5); }
+    let a=u.face-f.root.rotation.y; a=Math.atan2(Math.sin(a),Math.cos(a)); f.root.rotation.y+=a*Math.min(1,dt*9);
+    const y=S.w.floorY(u.c); f.y=f.y===undefined?y:f.y+(y-f.y)*Math.min(1,dt*12); f.root.position.set(u.x,f.y,u.z);
+    if(!u.alive){ f.root.rotation.x+=((-Math.PI/2+.08)-f.root.rotation.x)*Math.min(1,dt*5); f.root.position.y=f.y+.25; continue; }
+    const J=Object.assign({},S.phase==='combat'||u.team==='squad'?FigureKit.POSES.ready:FigureKit.POSES.stand), ph=now/1000*9+u.x;
+    if(walking) Object.assign(J,{lgR:Math.sin(ph)*.5,lgL:-Math.sin(ph)*.5,knR:Math.max(0,-Math.sin(ph))*.9+.06,knL:Math.max(0,Math.sin(ph))*.9+.06,torsoX:.12,shRx:-.9,shLx:-.7,elR:-.5,elL:-1});
+    else if(u.aiming||u.ow) Object.assign(J,{shRx:-1.45,shRz:-.1,elR:-.12,shLx:-1.25,shLz:.4,elL:-.55,torsoY:.15,headX:0});
+    else if(u.hunker||(S.phase==='explore'&&u.team==='squad'&&u.stack)) Object.assign(J,{bodyY:-.38,lgR:-1.2,knR:1.7,lgL:-.5,knL:1.9,torsoX:.55,headX:.2});
+    if(u.flinch){ J.torsoX-=.4*u.flinch; u.flinch=Math.max(0,u.flinch-dt*3); } if(u.recoil){ J.shRx+=.25*u.recoil; u.recoil=Math.max(0,u.recoil-dt*5); }
+    const k=1-Math.exp(-dt*12); f.j=f.j||Object.assign({},J); for(const key in J) f.j[key]+=(J[key]-f.j[key])*k; FigureKit.applyPose(f,f.j); }
+  if(S.camGoal){ view.target.x+=(S.camGoal.x-view.target.x)*Math.min(1,dt*2.5); view.target.z+=(S.camGoal.z-view.target.z)*Math.min(1,dt*2.5); if(S.sel&&!S.busy&&S.turn==='squad') S.camGoal={x:S.sel.x,z:S.sel.z}; }
+  placeCamera(); applyView(); renderer.render(scene,camera); }
+
+// ---------- header ----------
+$('bSel').onchange=()=>{ S.seed=0; setup(); }; $('hSel').onchange=()=>setup();
+$('rerollBtn').onclick=()=>{ S.seed++; setup(); }; $('restartBtn').onclick=()=>setup();
+$('sightBtn').onclick=()=>{ S.sight=!S.sight; $('sightBtn').setAttribute('aria-pressed',S.sight); drawSight(); };
+const MODES=['cutaway','low','shell'], ML={cutaway:'Walls: cutaway',low:'Walls: low',shell:'Walls: full + roof'};
+$('wallsBtn').onclick=()=>{ view.mode=MODES[(MODES.indexOf(view.mode)+1)%MODES.length]; $('wallsBtn').textContent=ML[view.mode]; };
+resize(); setup(); requestAnimationFrame(frame);
+// for tests and the console
+window.__combat={S,CR,select,moveTo,act,breach,startFight,setup,entryAt};
+})();
+</script>
