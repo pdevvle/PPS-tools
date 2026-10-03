@@ -31,4 +31,8 @@ Building types:
 - Corner store, gas station store, pharmacy, supermarket, hardware store, small shops (jeweller, dry cleaner, postal counter)
 - Auto service (bays with lifts), hair salon, clinic (dental chairs or exam tables), fuel canopy
 
+Multi-storey buildings: `site.levels` gives the count. Cores are 3 × 6 m switchback stairs and a 3 × 3 m lift, chosen once by `coresFor` and shared by every floor. Each floor is planned, opened, furnished and stocked on its own seed stream (`|f1`, `|f2`…). The view shows one floor at a time, draws the floors below as shells, and has a roof level with plant, bulkheads and, for holdouts and dens, a lookout camp.
+
+`fetch_osm.py` caches buildings outside the baked sectors from the OSM API into `osm_extra.json`. Overpass was unreachable from the build container. 42015 North Venture Drive, the office block across the wash west of the Safeway strip, comes from there. OSM tags it `building=house` with no level count, so the mockup builds it as three storeys of offices.
+
 Rebuild after editing: `python3 tools/interiors/build.py`.

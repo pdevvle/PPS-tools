@@ -551,7 +551,7 @@ Object.assign(IT,{
     drawers(P,K,1.3,1.8,.05,.7,.7,3,1,STEELD,CHROME);
     for(let k=0;k<3;k++) P.push(B(.5+K.r()*1.2,.76,.2+K.r()*.3,.21,.004+k*.005,.28,'#efe9dc',{ry:(K.r()-.5)*.6}));
     if(K.r()<.6) P.push(B(1.6,.76,.12,.12,.15,.04,pick(K.r,PAL.product))); if(K.r()<.5) P.push(B(.85,.76,.15,.12,.14,.12,TERRA),B(.88,.9,.18,.06,.2,.06,K.mess>.4?'#7a6a3a':'#5f7d3f'));
-    chair(P,K,1.0+(K.r()-.5)*.4,1.2+K.r()*.4,[0,-1],{style:'office',col:BLACK,seat:K.st.fab,yawJ:(K.r()-.5)*1.6,down:K.down()?(K.r()<.5?1:2):0});
+    chair(P,K,1.0+(K.r()-.5)*.4,1.2+K.r()*.4,[0,-1],{style:'office',col:BLACK,seat:K.j(pick(K.r,[K.st.fab,'#2b2c2e','#3f5f86','#5f6f73','#7a2e35']),.05),yawJ:(K.r()-.5)*1.6,down:K.down()?(K.r()<.5?1:2):0});
     litter(P,K,.3,.9,1.5,1,Math.round(K.mess*4));
     return P; }},
   printer:{w:1,d:1,h:1.2,cover:'half',build(K){ const P=[B(.1,0,.1,.8,.95,.65,'#d8d2c4'),B(.12,.95,.12,.76,.15,.6,'#c9c4b8'),B(.2,.4,.75,.6,.12,.02,'#9c968a'),B(.2,.2,.75,.6,.12,.02,'#9c968a'),B(.6,1.1,.6,.2,.04,.1,BLACK)];

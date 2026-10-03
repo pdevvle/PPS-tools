@@ -113,6 +113,10 @@ pre{margin:0;font:12px/1.45 var(--mono);background:var(--bg);border:1px solid va
           <button id="canon">Canonical</button>
         </div>
       </div>
+      <div class="field" id="floorField" hidden>
+        <span class="lab">Floor · PgUp / PgDn</span>
+        <div class="chips" id="floorChips"></div>
+      </div>
       <div class="field">
         <label for="hSel">History (from the strategy layer)</label>
         <select id="hSel">
@@ -180,7 +184,7 @@ pre{margin:0;font:12px/1.45 var(--mono);background:var(--bg);border:1px solid va
       <div><span class="q">1 · Floor plans</span><p>Square the footprint onto its main axis and rasterise it to 1 m cells. Then split it by binary partition along a room grammar per type: garage, public rooms, then a bedroom wing with a hall spine. Each room pulls toward the street, the drive or the yard. L-shapes work because the splits run over cells, not rectangles.</p></div>
       <div><span class="q">2 · Openings</span><p>The front door goes in the hub room (living, dining or sales floor) on the run that faces the nearest road. The garage door faces the nearest drive. The back door faces away from the street. Windows depend on the room type: sill height, width, count, storefront glazing or bays. The generator returns them for the shell to cut.</p></div>
       <div><span class="q">3 · Grid</span><p>A 1 m interior grid with walls on cell edges. Each outside door links its outside cell to one 2 m movement cell (the gold squares). Interior cells never touch the 2 m grid anywhere else.</p></div>
-      <div><span class="q">4 · Storeys</span><p>Not in this draft. Proposal: one plan per storey from the same mask, stairs as a 1 × 3 cell item placed first, and the roof as a separate layer that hides in cutaway.</p></div>
+      <div><span class="q">4 · Storeys</span><p>One plan per storey from the same footprint. Stair and lift cores are chosen once (a main stair and lift near the middle, fire stairs at the far ends) and stay in the same cells on every floor. Upper floors get windows but no street doors. Floors below the one in view draw as shells, floors above are hidden, and the roof is its own level. Try the 42015 N Venture Dr offices.</p></div>
       <div><span class="q">5 · Decay</span><p>Decay is a separate seed stream layered on the plan, so a change of history never moves a wall. The strategy layer chooses the history (looted, holdout, den), and the seed picks which windows and doors were hit.</p></div>
       <div><span class="q">6 · Lifetime</span><p>Generation takes about 5 to 20 ms for a house (the time shows in the view), so build near the squad and drop it on leaving. Only the change record persists. It is keyed by the generator version, because item ids are stable only while the rules are.</p></div>
     </div>
@@ -223,7 +227,7 @@ const TYPES={
   fastfood:   {label:'Fast food', wallH:3.4, hub:'ffdining', units:26, mix:{food:4,water:2,goods:.5}, front:['ffdining'], back:['ffkitchen','office','walkin']},
   cafe:       {label:'Coffee shop', wallH:3.2, hub:'cafe', units:16, mix:{food:3,water:2,goods:1}, front:['cafe'], back:['cafeback']},
   bank:       {label:'Bank', wallH:3.4, hub:'lobby', units:14, mix:{goods:3,medicine:.3,gear:.3}, front:['lobby'], back:['breakroom','office','teller']},
-  office:     {label:'Offices', wallH:3.0, hub:'reception', units:18, mix:{goods:3,food:1,water:1,medicine:.4}, front:['reception'], back:['breakroom','server','openoffice','office']},
+  office:     {label:'Offices', wallH:3.0, hub:'reception', units:18, mix:{goods:3,food:1,water:1,medicine:.4}, front:['lobby','reception'], back:['breakroom','server','openoffice','office']},
   hardware:   {label:'Hardware store', wallH:4.4, hub:'sales', units:60, mix:{tools:5,fuel:1.5,goods:2,gear:1.5,water:.4}},
   supermarket:{label:'Supermarket', wallH:5.2, hub:'sales', units:120, mix:{food:5,water:3,goods:2,medicine:1}},
   carrepair:  {label:'Auto service', wallH:4.6, hub:'waiting', units:22, mix:{tools:3,fuel:3,goods:.5}, front:['waiting','bay'], back:['storage','office','bay']},
@@ -261,10 +265,25 @@ const ROOM={ // name, floor colour, min width (cells), pull toward front/drive
   breakroom:{n:'Break room',minW:3,f:-.5}, server:{n:'Server closet',minW:2,f:-1},
   bay:{n:'Service bay',minW:4,f:1.2}, waiting:{n:'Waiting room',minW:3,f:1.2},
   salon:{n:'Salon',minW:4,f:1.2}, exam:{n:'Exam room',minW:3,f:-.2}, forecourt:{n:'Forecourt',minW:3},
+  stair:{n:'Stairwell',minW:3}, elev:{n:'Elevator',minW:3},
 };
 function R(kind,area,extra){ return Object.assign({kind,area,name:ROOM[kind].n},extra||{}); }
 
-function program(typeKey,A,rng){
+// Big or multi-storey office floors: open offices and meeting rooms in the middle, private offices,
+// restrooms and break rooms along a hall; the ground floor adds a lobby and reception.
+function officeFloor(A,rng,fl){
+  const ground=!fl||fl.k===0;
+  const nOpen=clamp(Math.round(A/900),1,6), nConf=clamp(Math.round(A/800),1,5), nOff=clamp(Math.round(A/320),2,14), nW=clamp(Math.round(A/2200),1,3);
+  const front=[]; if(ground) front.push(R('lobby',Math.max(30,.05*A),{name:'Lobby'}),R('reception',Math.max(10,.015*A)));
+  const mid=[]; for(let k=0;k<Math.max(nOpen,nConf);k++){ if(k<nOpen) mid.push(R('openoffice',.42*A/nOpen,{name:'Open office '+(k+1)})); if(k<nConf) mid.push(R('conference',Math.max(14,.05*A/nConf),{name:'Conference '+(k+1)})); }
+  const priv=[]; for(let k=0;k<nOff;k++) priv.push(R('office',Math.max(9,.16*A/nOff),{name:'Office '+(k+1)}));
+  for(let k=0;k<nW;k++) priv.push(R('breakroom',Math.max(12,.025*A)),R('restroom',6,{name:'Restroom (M)'}),R('restroom',6,{name:'Restroom (W)'}));
+  priv.push(R('server',6),R('storage',Math.max(8,.01*A),{name:'Storage'}));
+  const g=x=>({kind:'group',rooms:x,mode:'bsp'});
+  return {groups:(ground?[g(front)]:[]).concat([g(mid),{kind:'group',rooms:priv,mode:'wing'}]),cars:0};
+}
+function program(typeKey,A,rng,fl){
+  if(typeKey==='office'&&((fl&&fl.levels>1)||A>3500)) return officeFloor(A,rng,fl);
   if(typeKey==='house'){
     let cars=A>=150?(rng()<.85?2:1):A>=110?1:0;
     const gA=cars===2?36:cars===1?21:0, L=A-gA;
@@ -465,7 +484,7 @@ function planRooms(M,prog,rng,sense,ctx){
     if(items.length===1){ place(items[0],cells); return; }
     const tot=items.reduce((s,it)=>s+weightOf(it),0), N=cells.length;
     const bb=bbox(cells);
-    let best=null;
+    let best=null; const cands=[];
     for(let k=1;k<items.length;k++){
       const A=items.slice(0,k), B=items.slice(k), wa=A.reduce((s,it)=>s+weightOf(it),0)/tot;
       const pa=A.reduce((s,it)=>{const p=pullSum(it);return [s[0]+p[0],s[1]+p[1]];},[0,0]);
@@ -481,14 +500,18 @@ function planRooms(M,prog,rng,sense,ctx){
             const err=Math.abs(fracLow-target); if(err>.22) continue;
             const pl=orient?pb:pa, ph=orient?pa:pb;
             const pull=(-(axis?pl[1]:pl[0])+(axis?ph[1]:ph[0]))/tot;
-            let score=err*7-pull*.9+rng()*.3;
-            if(best&&score-1>best.score) continue;
-            const low=[],high=[]; for(const q of cells){ const x=axis?((q/W)|0):q%W; (x<s?low:high).push(q); }
-            score+=shapePen(lowItems,low)+shapePen(highItems,high);
-            if(!best||score<best.score) best={score,lowItems,highItems,low,high};
+            cands.push({score:err*7-pull*.9+rng()*.3,lowItems,highItems,axis,s});
           }
         }
       }
+    }
+    // shape is the costly part: measure it for the most promising splits only
+    cands.sort((a,b)=>a.score-b.score);
+    for(const cd of cands.slice(0,14)){
+      if(best&&cd.score-1>best.score) break;
+      const low=[],high=[]; for(const q of cells){ const x=cd.axis?((q/W)|0):q%W; (x<cd.s?low:high).push(q); }
+      const score=cd.score+shapePen(cd.lowItems,low)+shapePen(cd.highItems,high);
+      if(!best||score<best.score) best={score,lowItems:cd.lowItems,highItems:cd.highItems,low,high};
     }
     if(!best){ // nothing fits: give everything to the largest item
       const big=items.reduce((a,b)=>weightOf(a)>=weightOf(b)?a:b); place(big,cells); return;
@@ -572,7 +595,7 @@ function planRooms(M,prog,rng,sense,ctx){
     let left=0;
     for(const c of all) if(roomOf[c]<0){
       const cnt={}; const i=c%W,j=(c/W)|0;
-      for(const [di,dj] of DIRS){ const q=(j+dj)*W+i+di; if(roomOf[q]>=0&&rooms[roomOf[q]].unit===U&&rooms[roomOf[q]].kind!=='hall') cnt[roomOf[q]]=(cnt[roomOf[q]]||0)+1; }
+      for(const [di,dj] of DIRS){ const q=(j+dj)*W+i+di; if(roomOf[q]>=0&&rooms[roomOf[q]].unit===U&&!/hall|stair|elev/.test(rooms[roomOf[q]].kind)) cnt[roomOf[q]]=(cnt[roomOf[q]]||0)+1; }
       const k=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a])[0];
       if(k!==undefined){ roomOf[c]=+k; rooms[+k].cells.push(c); } else left++;
     }
@@ -584,7 +607,7 @@ function planRooms(M,prog,rng,sense,ctx){
     for(const c0 of r.cells){ if(seen.has(c0)) continue; const piece=[c0]; seen.add(c0); for(let k=0;k<piece.length;k++){ const c=piece[k],i=c%W,j=(c/W)|0; for(const [di,dj] of DIRS){ const q=(j+dj)*W+i+di; if(set.has(q)&&!seen.has(q)){ seen.add(q); piece.push(q); } } } if(piece.length>bestP.length) bestP=piece; }
     if(bestP.length<r.cells.length){
       const keep=new Set(bestP);
-      for(const c of r.cells) if(!keep.has(c)){ const i=c%W,j=(c/W)|0; for(const [di,dj] of DIRS){ const q=(j+dj)*W+i+di; if(roomOf[q]>=0&&roomOf[q]!==r.id&&rooms[roomOf[q]].unit===U){ roomOf[c]=roomOf[q]; rooms[roomOf[q]].cells.push(c); break; } } }
+      for(const c of r.cells) if(!keep.has(c)){ const i=c%W,j=(c/W)|0; for(const [di,dj] of DIRS){ const q=(j+dj)*W+i+di; if(roomOf[q]>=0&&roomOf[q]!==r.id&&rooms[roomOf[q]].unit===U&&!/stair|elev/.test(rooms[roomOf[q]].kind)){ roomOf[c]=roomOf[q]; rooms[roomOf[q]].cells.push(c); break; } } }
       r.cells=bestP;
     }
   }
@@ -602,6 +625,7 @@ const LINK={
   ffkitchen:['ffdining'], cafeback:['cafe'], teller:['lobby'], vault:['teller','office','hall'], breakroom:['hall','openoffice','reception','teller','lobby','office'],
   conference:['reception','openoffice','hall'], openoffice:['reception','hall','conference'], server:['hall','openoffice','breakroom'],
   exam:['hall','waiting'], bay:['waiting','bay','storage','office'], waiting:['bay'],
+  stair:['hall','lobby','reception','openoffice','conference','breakroom','storage','office'], elev:['hall','lobby','reception','openoffice','conference','breakroom','office'],
 };
 const COUNTER=new Set(['dispensary|sales','sales|dispensary','teller|lobby','lobby|teller']);
 const OPEN=new Set(['bay|bay','living|kitchen','kitchen|living','living|dining','dining|living','kitchen|dining','dining|kitchen','hall|living','living|hall','hall|dining','dining|hall']);
@@ -615,7 +639,8 @@ const WIN={
   breakroom:{n:1,w:[1,2],sill:1.0,head:2.2}, exam:{n:1,w:[1],sill:1.2,head:2.1},
 };
 
-function openings(M,P,rng,sense,units){
+function openings(M,P,rng,sense,units,floorIdx){
+  const upper=floorIdx>0;
   const {W,H,mask}=M, {rooms,roomOf}=P;
   const edges=new Map(); // key → {type, a,b rooms (b=-1 outside), dir (outward for exterior), i,j cell of a}
   const ext=[];
@@ -696,28 +721,28 @@ function openings(M,P,rng,sense,units){
     }
     const shop=typeKey!=='house';
     let front=null;
-    for(const kind of T.front){
+    if(!upper) for(const kind of T.front){
       const cands=urooms.filter(r=>r.kind===kind).flatMap(r=>roomRuns(r.id)).filter(r=>dot(r[0].dir,f)>.45&&r.length>=(shop?4:3)).sort((a,b)=>(dot(b[0].dir,f)*3+b.length*.05)-(dot(a[0].dir,f)*3+a.length*.05));
       for(const run of cands){ front=putExt(run,shop?2:1,'door','front'); if(front) break; }
       if(front) break;
     }
-    if(!front){ const all=urooms.flatMap(r=>roomRuns(r.id)).sort((a,b)=>dot(b[0].dir,f)-dot(a[0].dir,f)); for(const run of all){ front=putExt(run,1,'door','front'); if(front) break; } }
+    if(!front&&!upper){ const all=urooms.flatMap(r=>roomRuns(r.id)).sort((a,b)=>dot(b[0].dir,f)-dot(a[0].dir,f)); for(const run of all){ front=putExt(run,1,'door','front'); if(front) break; } }
     if(front){ front.unit=uk; fronts.push(front); }
     // garage doors on the drive side; service bays open to the street
-    for(const gar of urooms.filter(r=>r.kind==='garage'||r.kind==='bay')){
+    for(const gar of upper?[]:urooms.filter(r=>r.kind==='garage'||r.kind==='bay')){
       const bay=gar.kind==='bay', dv=bay?f:sense.drive, cars=gar.cars||1;
       const runs=roomRuns(gar.id).sort((a,b)=>dot(b[0].dir,dv)+b.length*.02-dot(a[0].dir,dv)-a.length*.02);
       for(const run of runs){ const w=Math.min(bay?4:cars===2?5:3,run.length-1); if(w<2) continue; if(putExt(run,w,'gdoor','garage')) break; }
     }
     let back=null;
-    for(const kind of T.back){
+    if(!upper) for(const kind of T.back){
       const cands=urooms.filter(r=>r.kind===kind).flatMap(r=>roomRuns(r.id)).filter(r=>dot(r[0].dir,f)<-.4).sort((a,b)=>dot(a[0].dir,f)-dot(b[0].dir,f));
       for(const run of cands){ back=putExt(run,1,'door','back'); if(back) break; }
       if(back) break;
     }
-    if(!back){ for(const kind of T.back){ const cands=urooms.filter(r=>r.kind===kind).flatMap(r=>roomRuns(r.id)).filter(r=>dot(r[0].dir,f)<.3); for(const run of cands){ back=putExt(run,1,'door','back'); if(back) break; } if(back) break; } }
+    if(!back&&!upper){ for(const kind of T.back){ const cands=urooms.filter(r=>r.kind===kind).flatMap(r=>roomRuns(r.id)).filter(r=>dot(r[0].dir,f)<.3); for(const run of cands){ back=putExt(run,1,'door','back'); if(back) break; } if(back) break; } }
     if(back){ back.unit=uk; backs.push(back); }
-    for(const r of isolated) for(const run of roomRuns(r.id)){ if(putExt(run,1,'door','side')) break; }
+    if(!upper) for(const r of isolated) for(const run of roomRuns(r.id)){ if(putExt(run,1,'door','side')) break; }
     // windows
     const nearDoor=new Set();
     for(const d of extDoors) for(const e of d.edges){ const o=e.key[0], [p,q]=e.key.slice(1).split(',').map(Number); for(const s2 of [-1,1]) nearDoor.add(o==='v'?o+p+','+(q+s2):o+(p+s2)+','+q); }
@@ -826,6 +851,7 @@ const FURN={
   bay:[['liftcar','car',0],['toolchest','wall',[1,2]],['tires','wall',[1,2]],['drums','wall',[1,2]],['gshelf','wall',[0,1]]],
   salon:[['station','wall',8,{avoidWin:1}],['washsink','wall',[1,3],{farDoor:1}],['receptiondesk','nearDoor',1,{clear:1}],['chairs3','wall',[0,1]],['wallshelf','wall',[0,1]]],
   forecourt:[['pump','tables',0,{alt:'none',pitch:5}]],
+  stair:[], elev:[],
 };
 // Recipes that depend on what the tenant was
 {
@@ -841,6 +867,8 @@ const FURN={
     }
     return salesBase;
   };
+  const lobbyBase=FURN.lobby;
+  FURN.lobby=r=>r.unitType==='office'?[['receptiondesk','nearDoor',1,{clear:1}],['chairs3','wall',[2,4]],['cactus','wall',[2,4],{corner:1}],['coffee','free',[1,2],{center:1}],['watercooler','wall',[0,1]]]:lobbyBase;
   FURN.rdining=r=>r.cuisine==='bar'?[['barcounter','wall',[1,2],{clear:1}]].concat(rdBase):rdBase;
   FURN.rkitchen=r=>r.cuisine==='pizza'?[['pizzaoven','wall',[1,2]]].concat(rkBase):r.cuisine==='asian'?[['wok','wall',[1,2]]].concat(rkBase.slice(1)):rkBase;
 }
@@ -1021,7 +1049,7 @@ function decay(M,P,O,Fn,rng,history){
   for(const w of O.windows) w.win.state='intact';
   const containers=items.filter(it=>it.spec.slot);
   for(const it of containers) it.searched=false;
-  const freeCells=(room)=>room.cells.filter(c=>occ[c]<0&&!keep[c]);
+  const freeCells=(room)=>/stair|elev/.test(room.kind)?[]:room.cells.filter(c=>occ[c]<0&&!keep[c]);
   function addItem(room,key,c,f){
     const spec=IT[key]; const i=c%W,j=(c/W)|0;
     if(occ[c]>=0) return null;
@@ -1112,7 +1140,7 @@ const FLOORS={wood:['#a87b50','#8a6440','#b98d5f','#7a5a3c','#9c7448'],tile:[['#
 const FLOOR_OF={living:['wood','carpet'],dining:['wood','tile'],kitchen:['tile'],bath:['tile'],mbath:['tile'],restroom:['tile'],laundry:['tile'],bed:['carpet','wood'],master:['carpet','wood'],den:['carpet'],hall:['wood'],
   garage:['concrete'],rdining:['saltillo','wood'],rkitchen:['quarry'],walkin:['concrete'],office:['carpet'],storage:['concrete'],sales:['vinyl'],stock:['concrete'],dispensary:['vinyl'],
   ffdining:['tile','vinyl'],ffkitchen:['quarry'],cafe:['wood','tile'],cafeback:['tile'],lobby:['tile','carpet'],teller:['carpet'],vault:['concrete'],reception:['carpet','wood'],openoffice:['carpet'],
-  conference:['carpet'],breakroom:['tile','vinyl'],server:['vinyl'],bay:['concrete'],waiting:['tile','vinyl'],salon:['wood','tile'],exam:['vinyl'],forecourt:['concrete']};
+  conference:['carpet'],breakroom:['tile','vinyl'],server:['vinyl'],bay:['concrete'],waiting:['tile','vinyl'],salon:['wood','tile'],exam:['vinyl'],forecourt:['concrete'],stair:['concrete'],elev:['concrete']};
 function styleFor(seedStr,units,rooms){
   const blds=units.map((Un,k)=>{ const br=rngOf(seedStr+'|style'+(k?'|'+k:'')), chair=/restaurant|fastfood/.test(Un.typeKey)?pick(br,Un.typeKey==='fastfood'?['diner','diner','wood']:['wood','diner','wood']):'wood';
     return {vinyl:pick(br,PAL.vinyl),chair,chairCol:chair==='diner'?CHROME:pick(br,PAL.wood),what:Un.what||'',cuisine:Un.cuisine,unitType:Un.typeKey}; });
@@ -1125,36 +1153,75 @@ function styleFor(seedStr,units,rooms){
 }
 
 // ---------------------------------------------------------------- whole generation
+// Stair and elevator cores for multi-storey buildings: chosen once on the footprint so every floor
+// has them in the same cells. A main stair and an elevator near the middle, fire stairs at the far ends.
+function coresFor(M,levels){
+  if(levels<2) return [];
+  const {W,H,mask}=M, used=new Set(), out=[];
+  const inside=(i0,j0,w,h)=>{ for(let j=j0;j<j0+h;j++) for(let i=i0;i<i0+w;i++) if(i<0||j<0||i>=W||j>=H||!mask[j*W+i]||used.has(j*W+i)) return false; return true; };
+  const clearAround=(r,m)=>{ for(let j=r.j-m;j<r.j+r.h+m;j++) for(let i=r.i-m;i<r.i+r.w+m;i++) if(used.has(j*W+i)) return false; return true; };
+  let cx=0,cz=0,n=0; for(let c=0;c<W*H;c++) if(mask[c]){ cx+=c%W; cz+=(c/W)|0; n++; } cx/=n; cz/=n;
+  const rects=(w,h)=>{ const r=[]; for(let j=0;j<H;j++) for(let i=0;i<W;i++) for(const [a,b] of [[w,h],[h,w]]) if(inside(i,j,a,b)) r.push({i,j,w:a,h:b,cx:i+a/2,cz:j+b/2}); return r; };
+  const take=(cd,kind,name)=>{ const cells=[]; for(let j=cd.j;j<cd.j+cd.h;j++) for(let i=cd.i;i<cd.i+cd.w;i++){ cells.push(j*W+i); used.add(j*W+i); } out.push({kind,name,cells,rect:cd}); };
+  const c0=rects(3,6); if(!c0.length) return [];
+  const core=c0.sort((a,b)=>Math.hypot(a.cx-cx,a.cz-cz)-Math.hypot(b.cx-cx,b.cz-cz))[0]; take(core,'stair','Main stair');
+  for(const [i,j] of [[core.i+core.w,core.j],[core.i-3,core.j],[core.i,core.j+core.h],[core.i,core.j-3],[core.i+core.w,core.j+core.h-3],[core.i+core.w-3,core.j+core.h]]) if(inside(i,j,3,3)){ take({i,j,w:3,h:3},'elev','Elevator'); break; }
+  const extra=clamp(Math.round(n/2500),1,3);
+  for(let k=0;k<extra;k++){
+    const rs=rects(3,6).filter(r=>clearAround(r,2)); if(!rs.length) break;
+    const stairs=out.filter(o=>o.kind==='stair').map(o=>o.rect);
+    let best=null,bd=-1; for(const r of rs){ const d=Math.min(...stairs.map(t=>Math.hypot(r.cx-t.cx,r.cz-t.cz))); if(d>bd){bd=d;best=r;} }
+    if(bd<20) break; take(best,'stair','Fire stair '+(k+1));
+  }
+  return out;
+}
+
 function generate(site,typeKey,seedStr,history){
   const t0=performance.now();
   const M=prepFootprint(site);
   const sense=streetSense(site,M);
   const A=M.mask.reduce((s,x)=>s+x,0);
-  const units=splitUnits(M,site,sense,typeKey==='auto'?null:typeKey);
-  const roomOf=new Int32Array(M.W*M.H).fill(-1), rooms=[]; let cars=0;
-  units.forEach((Un,k)=>{
-    const sfx=k?'|'+k:'';
-    const prog=program(Un.typeKey,Un.cells.length,rngOf(seedStr+'|program'+sfx));
-    if(k===0) cars=prog.cars;
-    const n0=rooms.length;
-    planRooms(M,prog,rngOf(seedStr+'|plan'+sfx),sense,{cells:Un.cells,roomOf,rooms,unit:k});
-    for(const r of rooms.slice(n0)){ r.unitType=Un.typeKey; r.what=Un.what||''; r.cuisine=Un.cuisine; }
-  });
-  const P={rooms:rooms.filter(r=>r.cells.length>0),roomOf};
-  const tm={plan:performance.now()-t0};
-  const O=openings(M,P,rngOf(seedStr+'|openings'),sense,units);
-  tm.open=performance.now()-t0;
-  const Fn=furnish(M,P,O,rngOf(seedStr+'|furniture'),null,cars);
-  tm.furn=performance.now()-t0;
-  const D=decay(M,P,O,Fn,rngOf(seedStr+'|decay|'+history),history);
-  const L=stockLoot(site,units,P,Fn,rngOf(seedStr+'|loot|'+history),history);
-  const style=styleFor(seedStr,units,P.rooms);
-  typeKey=units.length>1?'strip':units[0].typeKey;
-  const wallH=Math.max(...units.map(u=>TYPES[u.typeKey].wallH));
-  const label=units.length>1?'Strip of '+units.length+' tenants':TYPES[units[0].typeKey].label;
+  const levels=Math.max(1,Math.round(site.levels||1));
+  const cores=coresFor(M,levels), coreSet=new Set(cores.flatMap(c=>c.cells));
+  const units0=splitUnits(M,site,sense,typeKey==='auto'?null:typeKey);
+  for(const u of units0) u.cells=u.cells.filter(c=>!coreSet.has(c));
+  const floors=[];
+  for(let fk=0;fk<levels;fk++){
+    const fs=fk?'|f'+fk:'';
+    // upper floors of shops and houses become offices; offices stay offices
+    const units=fk===0?units0:[{typeKey:units0.length>1||!/office|bank|clinic/.test(units0[0].typeKey)?'office':units0[0].typeKey,cells:units0.flatMap(u=>u.cells),what:'',name:units0[0].name,cuisine:'diner'}];
+    const roomOf=new Int32Array(M.W*M.H).fill(-1), rooms=[]; let cars=0;
+    for(const cd of cores){ const r=R(cd.kind,cd.cells.length,{name:cd.name}); r.id=rooms.length; r.cells=cd.cells.slice(); r.unit=0; r.rect=cd.rect; r.unitType=units[0].typeKey; rooms.push(r); for(const c of r.cells) roomOf[c]=r.id; }
+    units.forEach((Un,k)=>{
+      const sfx=fs+(k?'|'+k:'');
+      const prog=program(Un.typeKey,Un.cells.length,rngOf(seedStr+'|program'+sfx),{k:fk,levels});
+      if(k===0) cars=prog.cars;
+      const n0=rooms.length;
+      planRooms(M,prog,rngOf(seedStr+'|plan'+sfx),sense,{cells:Un.cells,roomOf,rooms,unit:k});
+      for(const r of rooms.slice(n0)){ r.unitType=Un.typeKey; r.what=Un.what||''; r.cuisine=Un.cuisine; }
+    });
+    const P={rooms:rooms.filter(r=>r.cells.length>0),roomOf};
+    const O=openings(M,P,rngOf(seedStr+fs+'|openings'),sense,units,fk);
+    const Fn=furnish(M,P,O,rngOf(seedStr+fs+'|furniture'),null,cars);
+    const D=decay(M,P,O,Fn,rngOf(seedStr+fs+'|decay|'+history),history);
+    const L=stockLoot(site,units,P,Fn,rngOf(seedStr+fs+'|loot|'+history),history);
+    const style=styleFor(seedStr+fs,units,P.rooms);
+    floors.push({k:fk,units,P,O,Fn,D,L,style,fseed:seedStr+fs});
+  }
+  const wallH=Math.max(...units0.map(u=>TYPES[u.typeKey].wallH));
+  const label=(units0.length>1?'Strip of '+units0.length+' tenants':TYPES[units0[0].typeKey].label)+(levels>1?' · '+levels+' storeys':'');
   const mess={untouched:.35,looted:.75,holdout:.3,den:.9}[history], gone={untouched:.3,looted:.7,holdout:.5,den:.6}[history];
-  const ms=performance.now()-t0;
-  return {tm,site,typeKey,seedStr,history,M,sense,A,units,P,O,Fn,D,L,ms,style,mess,gone,wallH,label,noise:noise2(seedStr+'|noise')};
+  const G={site,typeKey:units0.length>1?'strip':units0[0].typeKey,seedStr,history,M,sense,A,floors,levels,cores,
+    L:{units:floors.reduce((a,f)=>a+f.L.units,0),base:floors.reduce((a,f)=>a+f.L.base,0)},
+    ms:performance.now()-t0,mess,gone,wallH,FH:wallH+.45,label,noise:noise2(seedStr+'|noise')};
+  setLevel(G,0);
+  return G;
+}
+// Point the view-facing fields (plan, openings, furniture…) at one floor. Level = levels means the roof.
+function setLevel(G,k){
+  G.level=clamp(k,0,G.levels>1?G.levels:0); G.roofView=G.levels>1&&G.level===G.levels;
+  const F=G.floors[Math.min(G.level,G.levels-1)];
+  Object.assign(G,{P:F.P,O:F.O,Fn:F.Fn,D:F.D,style:F.style,units:F.units,fseed:F.fseed,Lf:F.L,fk:F.k});
 }
 
 // ================================================================= rendering
@@ -1191,7 +1258,7 @@ function partMatrix(p,L,out){
   return out.multiplyMatrices(L,_c);
 }
 function lookOf(G,it,opened){
-  const r=rngOf(G.seedStr+'|look|'+it.id), st=G.style[it.room]||G.style[Object.keys(G.style)[0]];
+  const r=rngOf(G.fseed+'|look|'+it.id), st=G.style[it.room]||G.style[Object.keys(G.style)[0]];
   const mess=clamp(G.mess+(G.noise(it.i*.3,it.j*.3)-.5)*.4,0,1);
   const K={w:it.wl||it.spec.w,d:it.spec.d,r,st,it,ci:it.i,cj:it.j,nz:G.noise,mess,gone:G.gone,open:opened,wallBack:!!it.wallBack,j:(c,a)=>jit(c,r,a==null?.06:a)};
   K.down=k=>r()<mess*.32*(k||1);
@@ -1268,6 +1335,11 @@ function build(G,rec){
     for(let k=0;k<pts.length-1;k++){ const [a,b]=[pts[k],pts[k+1]]; const dx=b[0]-a[0],dz=b[1]-a[1],L=Math.hypot(dx,dz)||1, nx=-dz/L*hw, nz=dx/L*hw; const y=.02+(r.cls==='service'?0:.005);
       gb.quad([a[0]+nx,y,a[1]+nz],[b[0]+nx,y,b[1]+nz],[b[0]-nx,y,b[1]-nz],[a[0]-nx,y,a[1]-nz],col); gb.quad([a[0]-nx,y,a[1]-nz],[b[0]-nx,y,b[1]-nz],[b[0]+nx,y,b[1]+nz],[a[0]+nx,y,a[1]+nz],col); }
   }
+  // washes: dry sandy channels with a few stones
+  for(const w of (G.site.water||[])){ const pts=w.pts.map(p=>M.toL(p[0],p[1])), hw=4, q=rngOf('wash'+w.pts.length);
+    for(let k=0;k<pts.length-1;k++){ const [a,b]=[pts[k],pts[k+1]]; const dx=b[0]-a[0],dz=b[1]-a[1],L=Math.hypot(dx,dz)||1, nx=-dz/L*hw, nz=dx/L*hw;
+      gb.quad([a[0]+nx,.012,a[1]+nz],[b[0]+nx,.012,b[1]+nz],[b[0]-nx,.012,b[1]-nz],[a[0]-nx,.012,a[1]-nz],'#d8c49a'); gb.quad([a[0]-nx,.012,a[1]-nz],[b[0]-nx,.012,b[1]-nz],[b[0]+nx,.012,b[1]+nz],[a[0]+nx,.012,a[1]+nz],'#d8c49a');
+      for(let s2=0;s2<L/3;s2++){ const t=q(), o=(q()-.5)*1.6; const x=a[0]+dx*t+nx*o, z=a[1]+dz*t+nz*o; gb.box(x,0,z,x+.3+q()*.4,.12+q()*.15,z+.3+q()*.3,'#9c8f7a'); } } }
   world.add(gb.mesh(solidMat,false));
   const yb=new Batch();
   for(const w of G.site.walls){ const a=M.toL(w[0],w[1]), b=M.toL(w[2],w[3]); const dx=b[0]-a[0],dz=b[1]-a[1],L=Math.hypot(dx,dz); if(L<.1) continue; const t=w[5]/2, nx=-dz/L*t, nz=dx/L*t, h=w[4], col=w[6]?'#8a7a62':'#bfae93';
@@ -1276,9 +1348,23 @@ function build(G,rec){
     for(let k=0;k<4;k++){ const p=P4[k],q=P4[(k+1)%4]; yb.quad([p[0],0,p[1]],[q[0],0,q[1]],[q[0],h,q[1]],[p[0],h,p[1]],col); yb.quad([p[0],h,p[1]],[q[0],h,q[1]],[q[0],0,q[1]],[p[0],0,p[1]],col); }
   }
   world.add(yb.mesh(solidMat,true));
+  // floors below the one in view are drawn as shells; the roof view shows them all
+  for(let j=0;j<(G.roofView?G.levels:G.level);j++) world.add(shellFloor(G,G.floors[j],j*G.FH));
+  const fg=new THREE.Group(); fg.position.y=Math.min(G.level,G.levels-1)*G.FH; world.add(fg);
+  if(G.roofView){ fg.add(roofTop(G)); applyView(); return; }
+  if(G.fk>0){ // the slab under an upper floor, open over the stairwells
+    const sb=new Batch(), hole=new Set(P.rooms.filter(r=>r.kind==='stair').flatMap(r=>r.cells));
+    for(let j=0;j<H;j++){ let i=0; while(i<W){ const c=j*W+i; if(mask[c]&&!hole.has(c)){ let k=i; while(k<W&&mask[j*W+k]&&!hole.has(j*W+k)) k++; sb.box(cx(i),-.42,cz(j),cx(k),0,cz(j+1),'#a8a399'); i=k; } else i++; } }
+    fg.add(sb.mesh(solidMat,true));
+  }
+  // stairs and lifts
+  const cb=new Batch();
+  for(const r of P.rooms){ if(r.kind==='stair') stairBoxes(cb,M,r,G.FH,G.fk===G.levels-1,G.fk); if(r.kind==='elev') liftBoxes(cb,M,r,G.fk,G.mess,rngOf(G.fseed+'|lift'));}
+  if(cb.p.length) fg.add(cb.mesh(solidMat,true));
   // floors: one box per row run of a room
   const fb=new Batch();
-  for(const r of P.rooms){ const st=G.style[r.id], q=rngOf(G.seedStr+'|floor|'+r.id);
+  for(const r of P.rooms){ const st=G.style[r.id], q=rngOf(G.fseed+'|floor|'+r.id);
+    if(r.kind==='stair'&&G.fk>0) continue;
     for(const c of r.cells){ const i=c%W, j=(c/W)|0, x0=cx(i), z0=cz(j), n=G.noise(i*.45,j*.45);
       if(st.pat==='tile'||st.pat==='vinyl'||st.pat==='quarry'){
         fb.box(x0,0,z0,x0+1,FY-.008,z0+1,'#8a857c');
@@ -1299,10 +1385,10 @@ function build(G,rec){
   for(const e of O.edges.values()){
     const open=(e.type==='window'&&e.win.state==='broken')||(e.ext&&e.door&&(e.door.state==='broken'||e.door.open));
     if(!e.ext||!open) continue;
-    const q=rngOf(G.seedStr+'|sand|'+e.key), x0=cx(e.i), z0=cz(e.j);
+    const q=rngOf(G.fseed+'|sand|'+e.key), x0=cx(e.i), z0=cz(e.j);
     for(let k=0;k<3;k++){ const a=q()*.7, b=q()*.7; fb.box(x0+a,FY,z0+b,x0+a+.3+q()*.4,FY+.012+q()*.02,z0+b+.3+q()*.4,'#cdb48c'); }
   }
-  world.add(fb.mesh(solidMat,false));
+  fg.add(fb.mesh(solidMat,false));
   // walls by bucket: four outside faces and the inside walls, full and low
   const LOW=.7;
   const groups={};
@@ -1349,16 +1435,16 @@ function build(G,rec){
     const bd=new Batch();
     for(const [o,L,s0,h0,dir] of (boardBy[bk]||[])){ const off=bk==='int'?0:(DIRS[dir][0]+DIRS[dir][1])*.15; for(let k=0;k<3;k++){ const y=FY+s0+.12+(h0-s0-.3)*k/2; if(o==='v') bd.box(L[0]+off-.03,y,L[1]-.1,L[0]+off+.03,y+.18,L[1]+1.1,'#8a6a4a'); else bd.box(L[0]-.1,y,L[1]+off-.03,L[0]+1.1,y+.18,L[1]+off+.03,'#8a6a4a'); } }
     if(bd.p.length){ const m=bd.mesh(solidMat,true); full.add(m); }
-    world.add(full); world.add(low);
+    fg.add(full); fg.add(low);
     buckets[bk]={full,low};
   }
   // door leaves
-  const leafMat=new THREE.MeshLambertMaterial({color:0x8a6a4a}), gMat=new THREE.MeshLambertMaterial({color:0xd8d2c4});
+  const leafMat=new THREE.MeshLambertMaterial({color:0x8a6a4a}), liftMat=new THREE.MeshLambertMaterial({color:0xa9adb0}), gMat=new THREE.MeshLambertMaterial({color:0xd8d2c4});
   for(const e of O.doors){
     const d=e.door; if(!d) continue;
     const o=e.key[0], [p,q]=e.key.slice(1).split(',').map(Number);
     const fixed=o==='v'?p:q, along=o==='v'?q:p;
-    const st=rec.doors[e.key]!==undefined?rec.doors[e.key]:(d.state==='broken'?'broken':d.open?'open':'closed');
+    const st=rec.doors[G.level+':'+e.key]!==undefined?rec.doors[G.level+':'+e.key]:(d.state==='broken'?'broken':d.open?'open':'closed');
     const width=d.width||1, isG=e.type==='gdoor';
     const len=width-(isG?.1:.12);
     let geo, mesh;
@@ -1387,12 +1473,13 @@ function build(G,rec){
       if(width>1){ ms.push(mk(along+.06,1)); ms.push(mk(along+width-.06,-1)); } else ms.push(mk(along+.06,1));
       mesh=new THREE.Group(); for(const m of ms){ mesh.add(m); const eg=new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry),inkMat); eg.position.copy(m.position); eg.rotation.copy(m.rotation); mesh.add(eg); }
     }
+    if(!isG&&(/elev/.test((P.rooms.find(r=>r.id===e.a)||{}).kind)||/elev/.test((P.rooms.find(r=>r.id===e.b)||{}).kind))) mesh.traverse(m=>{ if(m.isMesh) m.material=liftMat; });
     mesh.userData={door:e.key,bucket:e.ext?'e'+e.dir:'int',label:(e.ext?(d.role==='front'?'Front door':d.role==='back'?'Back door':d.role==='garage'?'Garage door':'Side door'):'Door')+' · '+st};
-    world.add(mesh); leaves.push(mesh);
+    fg.add(mesh); leaves.push(mesh);
     // pick target
     const pg=new THREE.BoxGeometry(o==='v'?.6:width,2.1,o==='v'?width:.6); const pm=new THREE.Mesh(pg,pickMat);
     if(o==='v') pm.position.set(cx(fixed),FY+1.05,cz(along+width/2)); else pm.position.set(cx(along+width/2),FY+1.05,cz(fixed));
-    pm.userData={door:e.key,label:mesh.userData.label}; world.add(pm); picks.push(pm);
+    pm.userData={door:e.key,label:mesh.userData.label}; fg.add(pm); picks.push(pm);
   }
   // furniture: the kit builds each item's boxes in its own frame; L maps that frame into the building
   const fur=new Batch(), furG=new Batch(), occAt=Fn.occ;
@@ -1400,18 +1487,18 @@ function build(G,rec){
   const emit=(parts,L,into)=>{ for(const pt of parts){ partMatrix(pt,L,_pm); if(pt[6]==='glass') furG.cube(_pm,'#9cc8d6'); else (into||fur).cube(_pm,pt[6]); } };
   const decorB={};
   for(const it of Fn.items){
-    const opened=it.searched||rec.taken.includes(it.id);
+    const opened=it.searched||rec.taken.includes(G.level+':'+it.id);
     emit(it.spec.build(lookOf(G,it,opened)),itemL(it.i,it.j,it.f,FY));
     if(it.spec.slot){
       let mi=1e9,ma=-1e9,ni=1e9,na=-1e9; const hy=Math.min(it.spec.h,2.1); for(const c of it.cells){ const i=c%W,j=(c/W)|0; mi=Math.min(mi,cx(i)); ma=Math.max(ma,cx(i+1)); ni=Math.min(ni,cz(j)); na=Math.max(na,cz(j+1)); }
       const pm=new THREE.Mesh(new THREE.BoxGeometry(ma-mi,hy+.2,na-ni),pickMat); pm.position.set((mi+ma)/2,FY+(hy+.2)/2,(ni+na)/2);
-      pm.userData={item:it.id}; world.add(pm); picks.push(pm);
+      pm.userData={item:it.id}; fg.add(pm); picks.push(pm);
       it.top=[(mi+ma)/2,FY+hy,(ni+na)/2];
     }
   }
   // wall decor and floor clutter
   for(const r of P.rooms){
-    const q=rngOf(G.seedStr+'|decor|'+r.id), st=G.style[r.id]; let list=DECOR_BY[r.kind]; if(typeof list==='function') list=list(st);
+    const q=rngOf(G.fseed+'|decor|'+r.id), st=G.style[r.id]; let list=DECOR_BY[r.kind]; if(typeof list==='function') list=list(st);
     const dens=r.kind==='rdining'?.38:r.kind==='sales'?.1:.13;
     const K={r:q,st,mess:G.mess,gone:G.gone,j:(c,a)=>jit(c,q,a==null?.06:a)};
     if(list) for(const c of r.cells){ const i=c%W,j=(c/W)|0;
@@ -1421,38 +1508,106 @@ function build(G,rec){
     for(let k=0;k<n;k++){ const c=r.cells[Math.floor(q()*r.cells.length)]; if(occAt[c]>=0) continue; const L2=[]; litter(L2,K,.05,.05,.9,.9,1+Math.floor(q()*3)); emit(L2,itemL(c%W,(c/W)|0,0,FY)); }
   }
   // outside: a patio behind a house, pots and benches in front of a shop
-  const xr=rngOf(G.seedStr+'|outside');
+  const xr=rngOf(G.fseed+'|outside');
   const XK={r:xr,st:G.style[P.rooms[0].id],mess:G.mess,gone:G.gone,nz:G.noise,ci:0,cj:0,w:1,d:1,j:(c,a)=>jit(c,xr,a==null?.06:a),down:k=>xr()<G.mess*.32*(k||1),doorState:()=>0,drawerState:()=>0};
   const outL=d=>{ const e=d.edges[0], mid=edgeMid(M,e,d.edges.length), F=DIRS[e.dir], Tt=DIRS[(e.dir+1)%4]; return new THREE.Matrix4().set(Tt[0],0,F[0],mid[0], 0,1,0,0, Tt[1],0,F[1],mid[1], 0,0,0,1); };
-  for(const d of O.backs) if(G.units[d.unit].typeKey==='house') emit(patio(XK),outL(d));
-  for(const d of O.fronts){ const t=G.units[d.unit].typeKey; if(t!=='house') emit(storefront(XK,t),outL(d)); }
+  if(G.fk===0) for(const d of O.backs) if(G.units[d.unit].typeKey==='house') emit(patio(XK),outL(d));
+  if(G.fk===0) for(const d of O.fronts){ const t=G.units[d.unit].typeKey; if(t!=='house') emit(storefront(XK,t),outL(d)); }
   // decor hangs on its wall, so it hides when the cutaway lowers that wall
   for(const bk in decorB) buckets[bk].full.add(decorB[bk].mesh(solidMat,true));
-  world.add(fur.mesh(solidMat,true));
-  if(furG.p.length) world.add(furG.mesh(glassMat,false));
+  fg.add(fur.mesh(solidMat,true));
+  if(furG.p.length) fg.add(furG.mesh(glassMat,false));
   // loot markers
   const mk=new THREE.Group(); mk.name='marks';
   const gem=new THREE.OctahedronGeometry(.16,0), mFull=new THREE.MeshBasicMaterial({color:0xe0a526}), mEmpty=new THREE.MeshBasicMaterial({color:0x6c6a66});
-  for(const it of Fn.items) if(it.spec.slot&&it.top){ const empty=it.searched||rec.taken.includes(it.id)||!it.contents.length; const m=new THREE.Mesh(gem,empty?mEmpty:mFull); m.position.set(it.top[0],it.top[1]+.35,it.top[2]); mk.add(m); }
-  mk.visible=view.marks; world.add(mk);
+  for(const it of Fn.items) if(it.spec.slot&&it.top){ const empty=it.searched||rec.taken.includes(G.level+':'+it.id)||!it.contents.length; const m=new THREE.Mesh(gem,empty?mEmpty:mFull); m.position.set(it.top[0],it.top[1]+.35,it.top[2]); mk.add(m); }
+  mk.visible=view.marks; fg.add(mk);
   // people
   for(const p of D.people){ const i=p.c%W,j=(p.c/W)|0; const g=new THREE.Group(); const col=PEOPLE[p.side];
     const body=new THREE.Mesh(new THREE.CylinderGeometry(.22,.26,1.25,8),new THREE.MeshLambertMaterial({color:p.side==='raider'?0x8a5a48:0x8f97a8})); body.position.y=.63;
     const head=new THREE.Mesh(new THREE.SphereGeometry(.17,10,8),new THREE.MeshLambertMaterial({color:0xc9a07c})); head.position.y=1.42;
     const ring=new THREE.Mesh(new THREE.RingGeometry(.34,.44,20),new THREE.MeshBasicMaterial({color:col,side:THREE.DoubleSide})); ring.rotation.x=-Math.PI/2; ring.position.y=.03;
-    g.add(body,head,ring); if(p.boss) g.scale.setScalar(1.12); g.position.set(cx(i)+.5,FY,cz(j)+.5); world.add(g); }
+    g.add(body,head,ring); if(p.boss) g.scale.setScalar(1.12); g.position.set(cx(i)+.5,FY,cz(j)+.5); fg.add(g); }
   // outside door → 2 m movement cell
   const lk=new Batch();
   for(const d of O.extDoors){ for(const e of d.edges.slice(0,1)){ const mid=edgeMid(M,e,d.edges.length); const ox=mid[0]+DIRS[e.dir][0]*.6, oz=mid[1]+DIRS[e.dir][1]*.6;
       const [wx,wz]=M.toW(ox,oz); const gx=Math.floor(wx/2)*2, gz=Math.floor(wz/2)*2;
       const corners=[[gx,gz],[gx+2,gz],[gx+2,gz+2],[gx,gz+2]].map(p=>M.toL(p[0],p[1]));
       lk.quad([corners[0][0],.05,corners[0][1]],[corners[3][0],.05,corners[3][1]],[corners[2][0],.05,corners[2][1]],[corners[1][0],.05,corners[1][1]],'#e0a526'); } }
-  if(lk.p.length){ const m=lk.mesh(new THREE.MeshBasicMaterial({vertexColors:true,transparent:true,opacity:.55}),false); world.add(m); }
+  if(lk.p.length){ const m=lk.mesh(new THREE.MeshBasicMaterial({vertexColors:true,transparent:true,opacity:.55}),false); fg.add(m); }
   // roof (shell view)
   const rb=new Batch();
   for(let j=0;j<H;j++){ let i=0; while(i<W){ if(mask[j*W+i]){ let k=i; while(k<W&&mask[j*W+k]) k++; rb.box(cx(i)-.3,FY+WH,cz(j)-(mask[(j-1)*W+i]?0:.3),cx(k)+.3,FY+WH+(G.typeKey==='canopy'?.7:.25),cz(j+1)+(mask[(j+1)*W+i]?0:.3),G.typeKey==='house'?'#a8553d':G.typeKey==='canopy'?'#e8e4da':'#b8b0a2'); i=k; } else i++; } }
-  const roof=rb.mesh(solidMat,false); roof.name='roof'; world.add(roof);
+  const roof=rb.mesh(solidMat,false); roof.name='roof'; if(G.fk===G.levels-1) fg.add(roof);
   applyView();
+}
+// A storey seen from above the floor in view: slab, outside walls with their windows, and the stairs.
+function shellFloor(G,F,y){
+  const {M}=G, {W,H,u0,v0,mask}=M, WH=G.wallH, g=new THREE.Group(); g.position.y=y;
+  const cx=i=>u0+i, cz=j=>v0+j, sb=new Batch(), wb=new Batch(), gl=new Batch(), stucco='#cfc3ae';
+  const hole=new Set(F.k>0?F.P.rooms.filter(r=>r.kind==='stair').flatMap(r=>r.cells):[]);
+  for(let j=0;j<H;j++){ let i=0; while(i<W){ const c=j*W+i; if(mask[c]&&!hole.has(c)){ let k=i; while(k<W&&mask[j*W+k]&&!hole.has(j*W+k)) k++; sb.box(cx(i),F.k?-.42:0,cz(j),cx(k),FY,cz(j+1),'#a8a399'); i=k; } else i++; } }
+  const runs={};
+  for(const e of F.O.edges.values()){ if(!e.ext||e.type==='none') continue;
+    const o=e.key[0], [p,q]=e.key.slice(1).split(',').map(Number), fixed=o==='v'?p:q, along=o==='v'?q:p;
+    let parts=[[0,WH]]; if(e.type==='window') parts=[[0,e.win.sill],[e.win.head,WH]]; else if(e.type==='door') parts=[[2.1,WH]]; else if(e.type==='gdoor') parts=[[2.3,WH]];
+    for(const [a,b] of parts){ const k=o+'|'+fixed+'|'+a+'|'+b; (runs[k]=runs[k]||{o,fixed,a,b,al:[]}).al.push(along); }
+    if(e.type==='window'&&e.win.state!=='broken'){ if(o==='v') gl.box(cx(fixed)-.02,FY+e.win.sill,cz(along),cx(fixed)+.02,FY+e.win.head,cz(along+1),'#9cc8d6'); else gl.box(cx(along),FY+e.win.sill,cz(fixed)-.02,cx(along+1),FY+e.win.head,cz(fixed)+.02,'#9cc8d6'); }
+  }
+  for(const k in runs){ const r=runs[k]; r.al.sort((x,y)=>x-y); let s0=r.al[0], pv=s0;
+    const out=(x0,x1)=>{ if(r.o==='v') wb.box(cx(r.fixed)-.12,FY+r.a,cz(x0)-.12,cx(r.fixed)+.12,FY+r.b,cz(x1+1)+.12,stucco); else wb.box(cx(x0)-.12,FY+r.a,cz(r.fixed)-.12,cx(x1+1)+.12,FY+r.b,cz(r.fixed)+.12,stucco); };
+    for(let n=1;n<r.al.length;n++){ if(r.al[n]!==pv+1){ out(s0,pv); s0=r.al[n]; } pv=r.al[n]; } out(s0,pv); }
+  for(const r of F.P.rooms) if(r.kind==='stair') stairBoxes(wb,M,r,G.FH,F.k===G.levels-1,F.k);
+  g.add(sb.mesh(solidMat,false)); g.add(wb.mesh(solidMat,true)); if(gl.p.length) g.add(gl.mesh(glassMat,false));
+  return g;
+}
+// Switchback stairs in a 3 × 6 m well: up one flight to a half landing, back up the other to the floor above.
+function stairBoxes(Bt,M,room,FH,top,fk){
+  const {W,u0,v0}=M; let i0=1e9,i1=-1e9,j0=1e9,j1=-1e9; for(const c of room.cells){ const i=c%W,j=(c/W)|0; i0=Math.min(i0,i); i1=Math.max(i1,i); j0=Math.min(j0,j); j1=Math.max(j1,j); }
+  const alongU=(i1-i0)>(j1-j0), L=(alongU?i1-i0:j1-j0)+1, Wd=(alongU?j1-j0:i1-i0)+1;
+  const map=(a,b)=>alongU?[u0+i0+a,v0+j0+b]:[u0+i0+b,v0+j0+a];
+  const box=(a0,a1,b0,b1,y0,y1,col)=>{ const p=map(a0,b0), q=map(a1,b1); Bt.box(Math.min(p[0],q[0]),FY+y0,Math.min(p[1],q[1]),Math.max(p[0],q[0]),FY+y1,Math.max(p[1],q[1]),col); };
+  const conc='#a8a399', rail='#5f6f73', nose='#e0a526';
+  if(top){ box(.6,.7,Wd/2-.3,Wd/2+.3,0,FH-.3,rail); for(let k=0;k<8;k++) box(.55,.75,Wd/2-.3,Wd/2+.3,.3+k*.35,.34+k*.35,rail); box(.2,1.4,.3,Wd-.3,FH-.45,FH-.35,'#4a4d50'); return; } // ladder to the roof hatch
+  const half=FH/2, n=11, run=(L-2.4)/n, A=[.12,Wd/2-.1], Bl=[Wd/2+.1,Wd-.12];
+  for(let k=0;k<n;k++){ const a=1.1+k*run, y=(k+1)*half/n; box(a,a+run+.02,A[0],A[1],Math.max(0,y-.3),y,conc); box(a,a+.04,A[0],A[1],y-.01,y+.005,nose); }
+  box(L-1.3,L-.05,.1,Wd-.1,half-.25,half,conc);
+  for(let k=0;k<n;k++){ const a=L-1.3-(k+1)*run, y=half+(k+1)*half/n; box(a,a+run+.02,Bl[0],Bl[1],y-.3,y,conc); box(a+run-.04,a+run,Bl[0],Bl[1],y-.01,y+.005,nose); }
+  box(1.1,L-1.3,Wd/2-.06,Wd/2+.06,0,half+1.0,rail); box(1.1,L-1.3,Wd/2-.05,Wd/2+.05,half+.95,half+1.05,'#2b2c2e');
+}
+function liftBoxes(Bt,M,room,fk,mess,r){
+  const {W,u0,v0}=M; let i0=1e9,i1=-1e9,j0=1e9,j1=-1e9; for(const c of room.cells){ const i=c%W,j=(c/W)|0; i0=Math.min(i0,i); i1=Math.max(i1,i); j0=Math.min(j0,j); j1=Math.max(j1,j); }
+  const x0=u0+i0, x1=u0+i1+1, z0=v0+j0, z1=v0+j1+1;
+  Bt.box(x0+.1,FY,z0+.1,x1-.1,FY+.02,z1-.1,'#2b2c2e');
+  if(fk===0){ const ok=r()>mess*.5; Bt.box(x0+.25,FY,z0+.25,x1-.25,FY+.12,z1-.25,'#7d8285'); Bt.box(x0+.3,FY+.12,z0+.3,x1-.3,FY+.14,z1-.3,ok?'#8a6a4a':'#4a4038'); Bt.box(x0+.25,FY+.95,z0+.25,x0+.32,FY+1.0,z1-.25,CHROME); }
+  else for(const k of [0,1]) Bt.box(x0+.6+k*1.4,FY-.4,z0+.3,x0+.65+k*1.4,FY+3,z0+.35,'#3a3d40'); // cables down the shaft
+}
+// The roof: parapet, stair bulkheads and the lift overrun, air handlers and vents; a camp if people live here.
+function roofTop(G){
+  const {M}=G, {W,H,u0,v0,mask}=M, F=G.floors[G.levels-1], y=FY+G.wallH, g=new THREE.Group(), Bt=new Batch(), r=rngOf(G.seedStr+'|roof');
+  const cx=i=>u0+i, cz=j=>v0+j;
+  for(let j=0;j<H;j++){ let i=0; while(i<W){ if(mask[j*W+i]){ let k=i; while(k<W&&mask[j*W+k]) k++; Bt.box(cx(i),y,cz(j),cx(k),y+.3,cz(j+1),'#b8b0a2'); i=k; } else i++; } }
+  for(const e of F.O.edges.values()){ if(!e.ext) continue; const o=e.key[0], [p,q]=e.key.slice(1).split(',').map(Number);
+    if(o==='v') Bt.box(u0+p-.12,y+.3,v0+q-.12,u0+p+.12,y+1.1,v0+q+1.12,'#cfc3ae'); else Bt.box(u0+p-.12,y+.3,v0+q-.12,u0+p+1.12,y+1.1,v0+q+.12,'#cfc3ae'); }
+  const busy=new Set();
+  for(const rm of F.P.rooms){ if(!/stair|elev/.test(rm.kind)) continue; let i0=1e9,i1=-1e9,j0=1e9,j1=-1e9; for(const c of rm.cells){ busy.add(c); const i=c%W,j=(c/W)|0; i0=Math.min(i0,i); i1=Math.max(i1,i); j0=Math.min(j0,j); j1=Math.max(j1,j); }
+    const h=rm.kind==='elev'?2.4:2.7; Bt.box(cx(i0),y+.3,cz(j0),cx(i1+1),y+.3+h,cz(j1+1),'#c9bfae'); Bt.box(cx(i0)-.1,y+.3+h,cz(j0)-.1,cx(i1+1)+.1,y+.45+h,cz(j1+1)+.1,'#8a8478');
+    if(rm.kind==='stair'){ const open=r()<G.mess; Bt.box(cx(i0)+.9,y+.3,cz(j0)-.06,cx(i0)+1.9,y+2.4,cz(j0)-.02,open?'#1a1a1a':'#7d8285'); } }
+  const cells=[]; for(let c=0;c<W*H;c++) if(mask[c]&&!busy.has(c)){ const i=c%W,j=(c/W)|0; let ok=true; for(let dj=-2;dj<=3&&ok;dj++) for(let di=-2;di<=4;di++) if(!mask[(j+dj)*W+i+di]||busy.has((j+dj)*W+i+di)){ ok=false; break; } if(ok) cells.push(c); }
+  const taken=new Set();
+  for(const c of cells){ if(r()>1/70) continue; const i=c%W,j=(c/W)|0; let free=true; for(let dj=-1;dj<=2;dj++) for(let di=-1;di<=3;di++) if(taken.has((j+dj)*W+i+di)) free=false; if(!free) continue;
+    for(let dj=-1;dj<=2;dj++) for(let di=-1;di<=3;di++) taken.add((j+dj)*W+i+di);
+    const x=cx(i), z=cz(j), t=r();
+    if(t<.6){ Bt.box(x,y+.3,z,x+2.6,y+1.7,z+1.6,'#b9bec2'); for(const k of [0,1]) Bt.box(x+.3+k*1.2,y+1.7,z+.3,x+1.3+k*1.2,y+1.75,z+1.3,r()<G.mess*.5?'#4a4d50':'#2b2c2e'); Bt.box(x+2.6,y+.3,z+.5,x+3.4,y+.9,z+1.1,'#9aa1a6'); }
+    else if(t<.85){ Bt.box(x+.3,y+.3,z+.3,x+.8,y+1.2,z+.8,'#9aa1a6'); Bt.box(x+.2,y+1.2,z+.2,x+.9,y+1.4,z+.9,'#7d8285'); }
+    else { Bt.box(x,y+.3,z,x+1.2,y+.4,z+2,'#5f6f73'); Bt.box(x+.1,y+.4,z+.1,x+1.1,y+.45,z+1.9,'#2f4f6a'); } // a solar panel
+  }
+  if(G.history==='holdout'||G.history==='den'){ // a lookout camp: tarp, water barrels, bedrolls
+    const c=cells[Math.floor(r()*cells.length)]; if(c!==undefined){ const x=cx(c%W), z=cz((c/W)|0);
+      Bt.box(x,y+.3,z,x+3,y+.32,z+3,'#5d6b4e'); for(const [a,b] of [[0,0],[3,0],[0,3],[3,3]]) Bt.box(x+a-.04,y+.3,z+b-.04,x+a+.04,y+1.9,z+b+.04,'#8a6a4a'); Bt.box(x-.1,y+1.9,z-.1,x+3.1,y+1.95,z+3.1,'#3f5f86');
+      for(let k=0;k<3;k++) Bt.box(x+3.5+k*.7,y+.3,z+.2,x+4.0+k*.7,y+1.2,z+.7,'#2f6fa0'); Bt.box(x+.4,y+.32,z+.5,x+1.0,y+.44,z+2.4,'#7a2e35'); Bt.box(x+1.6,y+.32,z+.5,x+2.2,y+.44,z+2.4,'#5d6b4e'); } }
+  g.add(Bt.mesh(solidMat,true));
+  return g;
 }
 function edgeMid(M,e,width){
   const o=e.key[0], [p,q]=e.key.slice(1).split(',').map(Number);
@@ -1503,15 +1658,15 @@ function hit(e){ const r=canvas.getBoundingClientRect(); ndc.set((e.clientX-r.le
 const hudHover=document.getElementById('hudHover');
 function describe(u){
   if(!u) return 'Hover a door or container';
-  if(u.door){ const e=G.O.edges.get(u.door); const st=REC.doors[u.door]||(e.door.state==='broken'?'broken':e.door.open?'open':'closed'); return (u.label.split(' · ')[0])+' · '+st+(e.door.state==='barricaded'?' (barricaded)':'')+' · click to '+(st==='open'?'close':'open'); }
-  const it=G.Fn.items[u.item]; const empty=it.searched||REC.taken.includes(it.id); const sl=SLOTS[it.spec.slot];
+  if(u.door){ const e=G.O.edges.get(u.door); const st=REC.doors[G.level+':'+u.door]||(e.door.state==='broken'?'broken':e.door.open?'open':'closed'); return (u.label.split(' · ')[0])+' · '+st+(e.door.state==='barricaded'?' (barricaded)':'')+' · click to '+(st==='open'?'close':'open'); }
+  const it=G.Fn.items[u.item]; const empty=it.searched||REC.taken.includes(G.level+':'+it.id); const sl=SLOTS[it.spec.slot];
   return sl.n+' · '+(empty?'searched':it.contents.length?it.contents.map(c=>c.name+(c.qty>1?' ×'+c.qty:'')).join(', '):'empty')+' · '+sl.t+' s';
 }
 function hover(e){ const u=hit(e); hudHover.innerHTML=''; hudHover.textContent=describe(u); canvas.style.cursor=u?'pointer':'grab'; }
 function click(e){
   const u=hit(e); if(!u) return;
-  if(u.door){ const ed=G.O.edges.get(u.door); if(ed.door.state==='barricaded') { hudHover.textContent='Barricaded from inside'; return; } const cur=REC.doors[u.door]||(ed.door.state==='broken'?'broken':ed.door.open?'open':'closed'); if(cur==='broken') return; REC.doors[u.door]=cur==='open'?'closed':'open'; }
-  else if(u.item!==undefined){ const it=G.Fn.items[u.item]; if(!it.searched&&!REC.taken.includes(it.id)) REC.taken.push(it.id); }
+  if(u.door){ const ed=G.O.edges.get(u.door); if(ed.door.state==='barricaded') { hudHover.textContent='Barricaded from inside'; return; } const cur=REC.doors[G.level+':'+u.door]||(ed.door.state==='broken'?'broken':ed.door.open?'open':'closed'); if(cur==='broken') return; REC.doors[G.level+':'+u.door]=cur==='open'?'closed':'open'; }
+  else if(u.item!==undefined){ const it=G.Fn.items[u.item]; if(!it.searched&&!REC.taken.includes(G.level+':'+it.id)) REC.taken.push(G.level+':'+it.id); }
   refresh(false);
 }
 
@@ -1544,7 +1699,7 @@ function drawPlan(G){
   // furniture
   for(const it of Fn.items){ const cov=it.spec.cover; px.fillStyle=cov==='full'?'#7a6a58':cov==='half'?'#b9a483':'rgba(120,110,95,.35)'; if(it.key==='debris') px.fillStyle='rgba(90,80,70,.5)'; if(it.key==='bedroll') px.fillStyle='#5d6b4e';
     for(const c of it.cells){ const i=c%W,j=(c/W)|0; px.fillRect(X(u0+i)+1,Y(v0+j)+1,k-2,k-2); }
-    if(it.spec.slot){ const c=it.cells[0]; let a=0,b=0; for(const q of it.cells){ a+=q%W; b+=(q/W)|0; } a/=it.cells.length; b/=it.cells.length; const empty=it.searched||REC.taken.includes(it.id)||!it.contents.length; px.fillStyle=empty?'#55534f':'#e0a526'; px.beginPath(); px.arc(X(u0+a+.5),Y(v0+b+.5),Math.max(2.5,k*.16),0,7); px.fill(); } }
+    if(it.spec.slot){ const c=it.cells[0]; let a=0,b=0; for(const q of it.cells){ a+=q%W; b+=(q/W)|0; } a/=it.cells.length; b/=it.cells.length; const empty=it.searched||REC.taken.includes(G.level+':'+it.id)||!it.contents.length; px.fillStyle=empty?'#55534f':'#e0a526'; px.beginPath(); px.arc(X(u0+a+.5),Y(v0+b+.5),Math.max(2.5,k*.16),0,7); px.fill(); } }
   // walls, windows, doors
   for(const e of O.edges.values()){
     const o=e.key[0], [p,q]=e.key.slice(1).split(',').map(Number);
@@ -1585,14 +1740,28 @@ let G=null, REC=null, reroll=0;
 function typeNow(){ return tSel.value; }
 function seedNow(){ const s=SITES[+bSel.value]; return s.id+(reroll?'#'+reroll:''); }
 function freshRecord(){ return {generator:GEN_VERSION,building:SITES[+bSel.value].id,type:typeNow(),seed:seedNow(),doors:{},taken:[]}; }
+let viewLevel=0;
+function floorChips(){
+  const ff=document.getElementById('floorField'), fc=document.getElementById('floorChips');
+  ff.hidden=G.levels<2; fc.innerHTML='';
+  if(G.levels<2) return;
+  const names=['Ground'].concat(Array.from({length:G.levels-1},(_,k)=>'Floor '+(k+2)),['Roof']);
+  names.forEach((n,k)=>{ const b=document.createElement('button'); b.textContent=n; b.setAttribute('aria-pressed',k===G.level?'true':'false'); b.onclick=()=>goLevel(k); fc.appendChild(b); });
+}
+function goLevel(k){ if(!G||G.levels<2) return; viewLevel=clamp(k,0,G.levels); setLevel(G,viewLevel); view.target.y=Math.min(G.level,G.levels-1)*G.FH+(G.roofView?G.wallH:0); floorChips(); refresh(false); }
+addEventListener('keydown',e=>{ if(e.key==='PageUp'){ e.preventDefault(); goLevel(viewLevel+1); } if(e.key==='PageDown'){ e.preventDefault(); goLevel(viewLevel-1); } });
 function regen(keepCam){
   const s=SITES[+bSel.value];
   G=generate(s,typeNow(),seedNow(),hSel.value);
+  if(!keepCam) viewLevel=0;
+  setLevel(G,Math.min(viewLevel,G.levels>1?G.levels:0)); viewLevel=G.level;
+  view.target.y=Math.min(G.level,G.levels-1)*G.FH+(G.roofView?G.wallH:0);
+  floorChips();
   if(!REC||REC.building!==s.id||REC.seed!==seedNow()||REC.type!==typeNow()) REC=freshRecord();
   if(!keepCam){
     const f=G.sense.front; view.azOff=0; view.az=Math.atan2(f[0],f[1])+.45; view.el=.92;
     view.dist=clamp(Math.max(G.M.W,G.M.H)*1.6,22,190);
-    const cU=G.M.u0+G.M.W/2, cV=G.M.v0+G.M.H/2; view.target.set(cU,0,cV);
+    const cU=G.M.u0+G.M.W/2, cV=G.M.v0+G.M.H/2; view.target.set(cU,view.target.y,cV);
   }
   refresh(true);
 }
@@ -1602,27 +1771,27 @@ function refresh(rebuild){
 }
 function panel(){
   const s=SITES[+bSel.value];
-  document.getElementById('bNote').textContent=s.note+'. OSM type "'+s.type+'"'+(s.what?', '+s.what:'')+(s.loot?', loot '+s.loot:'')+(s.house?', house flag':'')+'.';
+  document.getElementById('bNote').textContent=s.note+'. OSM type "'+s.type+'"'+(s.what?', '+s.what:'')+(s.loot?', loot '+s.loot:'')+(s.house?', house flag':'')+(s.levelsAssumed?'. OSM has no level count; built as '+s.levels+' storeys':'')+'.';
   document.getElementById('seedTxt').textContent=G.seedStr+' · '+GEN_VERSION;
   document.getElementById('hudName').innerHTML='<b>'+bSel.options[bSel.selectedIndex].textContent.split(' · ')[0]+'</b> · '+G.label+' · '+G.A+' m² · built in '+G.ms.toFixed(1)+' ms';
-  const conts=G.Fn.items.filter(it=>it.spec.slot);
-  let left=0,time=0; for(const it of conts){ const empty=it.searched||REC.taken.includes(it.id); if(!empty){ left+=it.contents.reduce((a,c)=>a+c.qty,0); time+=SLOTS[it.spec.slot].t; } }
+  const conts=G.roofView?[]:G.Fn.items.filter(it=>it.spec.slot);
+  let left=0,time=0; for(const it of conts){ const empty=it.searched||REC.taken.includes(G.level+':'+it.id); if(!empty){ left+=it.contents.reduce((a,c)=>a+c.qty,0); time+=SLOTS[it.spec.slot].t; } }
   document.getElementById('sUnits').textContent=G.L.units;
   document.getElementById('sLeft').textContent=left;
   document.getElementById('sCont').textContent=conts.length;
   document.getElementById('sTime').textContent=Math.round(time/60)+' min';
   const hist={untouched:'untouched',looted:'already looted (a quarter left)',holdout:'held by survivors (stockpiled)',den:'a raider den'}[G.history];
-  document.getElementById('lootNote').textContent='The strategy map says this site holds '+G.L.units+' units ('+G.L.base+' when untouched, now '+hist+'). Those units are dealt across the unsearched containers, so the map and the interior always agree. Click a container here or in the view to search it.';
+  document.getElementById('lootNote').textContent=(G.levels>1?(G.roofView?'Roof. ':'Floor '+(G.level+1)+' of '+G.levels+': the list and "still inside" count this floor. '):'')+'The strategy map says this site holds '+G.L.units+' units ('+G.L.base+' when untouched, now '+hist+'). Those units are dealt across the unsearched containers, so the map and the interior always agree. Click a container here or in the view to search it.';
   const list=document.getElementById('lootList'); list.innerHTML='';
   const byRoom={}; for(const it of conts) (byRoom[it.room]=byRoom[it.room]||[]).push(it);
   for(const r of G.P.rooms){ const its=byRoom[r.id]; if(!its) continue;
     const h=document.createElement('div'); h.className='rm'; h.textContent=r.name; list.appendChild(h);
-    for(const it of its){ const empty=it.searched||REC.taken.includes(it.id); const b=document.createElement('button'); b.className='ct'+(empty?' empty':'');
+    for(const it of its){ const empty=it.searched||REC.taken.includes(G.level+':'+it.id); const b=document.createElement('button'); b.className='ct'+(empty?' empty':'');
       const sl=SLOTS[it.spec.slot];
-      const what=empty?(REC.taken.includes(it.id)?'taken by the squad':'searched before you came'):it.contents.length?it.contents.map(c=>c.name+(c.qty>1?' ×'+c.qty:'')).join(', '):'nothing';
+      const what=empty?(REC.taken.includes(G.level+':'+it.id)?'taken by the squad':'searched before you came'):it.contents.length?it.contents.map(c=>c.name+(c.qty>1?' ×'+c.qty:'')).join(', '):'nothing';
       b.innerHTML='<span><span class="name">'+sl.n+(it.stash?' (stash)':'')+'</span><br><span class="what"></span></span><span class="t">'+sl.t+' s</span>';
       b.querySelector('.what').textContent=what;
-      b.onclick=()=>{ if(!empty){ REC.taken.push(it.id); refresh(false); } };
+      b.onclick=()=>{ if(!empty){ REC.taken.push(G.level+':'+it.id); refresh(false); } };
       list.appendChild(b); } }
   const nDoors=G.O.doors.length, nWin=new Set(G.O.windows.map(w=>w.key)).size;
   document.getElementById('sArea').textContent=G.A;
@@ -1630,7 +1799,7 @@ function panel(){
   document.getElementById('sDoors').textContent=nDoors;
   document.getElementById('sWin').textContent=nWin;
   const road=G.sense.road;
-  document.getElementById('planNote').textContent='Main axis turned '+(G.M.th*180/Math.PI).toFixed(1)+'° from east. The footprint squares to '+(G.M.W-2)+' × '+(G.M.H-2)+' m of 1 m cells. The front faces '+(road?(road.name||('the '+road.cls+' road'))+', '+road.d.toFixed(0)+' m away':'the default side')+'. '+G.O.extDoors.length+' outside doors are linked to the 2 m movement grid.'+(G.units.length>1?' Tenants, street order not kept: '+G.units.map(u=>u.name+' ('+TYPES[u.typeKey].label.toLowerCase()+', '+u.cells.length+' m²)').join('; ')+'.':'');
+  document.getElementById('planNote').textContent='Main axis turned '+(G.M.th*180/Math.PI).toFixed(1)+'° from east. The footprint squares to '+(G.M.W-2)+' × '+(G.M.H-2)+' m of 1 m cells. The front faces '+(road?(road.name||('the '+road.cls+' road'))+', '+road.d.toFixed(0)+' m away':'the default side')+'. '+G.O.extDoors.length+' outside doors are linked to the 2 m movement grid.'+(G.levels>1?' '+G.levels+' storeys, '+G.FH.toFixed(2)+' m floor to floor. Every floor shares the same cores: '+G.cores.map(c=>c.name.toLowerCase()).join(', ')+'. Each flight links a stair cell on one floor to the stair cell above it; the lift links all floors.':'')+(G.units.length>1?' Tenants, street order not kept: '+G.units.map(u=>u.name+' ('+TYPES[u.typeKey].label.toLowerCase()+', '+u.cells.length+' m²)').join('; ')+'.':'');
   document.getElementById('record').textContent=JSON.stringify(REC,null,1);
 }
 bSel.onchange=()=>{ reroll=0; REC=null; regen(false); };
