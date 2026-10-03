@@ -1,0 +1,13 @@
+# Region to tactical zoom
+
+`mockups/streaming/zoom.html` puts the region map and the streamed tactical ground in one page. It shares `mockups/streaming/block/` with the streaming prototype, so serve that folder over HTTP.
+
+- `../region/campaign.js` and `../region/region-main.js` are the region map, the same files as the standalone `region-map.html`. When `NF` is defined, the map outlines the baked block and adds a dive: past the closest zoom, on a double-click or with Go tactical, it hands the point and any idle squad in the block to the tactical layer. From an encounter it hands over the encounter as well, as `NF.encounter`.
+- `stream-z.js` is `tools/stream/stream-main.js` that starts only when entered, follows the camera when no squad came down, and climbs back to the map past its widest zoom.
+- `glue-pre.js` converts between the region frame (centred on 33.945 N, 112.14 W) and the block frame (centred on New River). `glue-post.js` swaps the stages with a short fade and writes the squad's tactical position back to the map. It then calls `__region.back(realSeconds, NF.tacResult?.())`, which runs the map clock forward for the time spent on the ground and settles an encounter that was fought there. Exploration runs in near real time; a fight adds 5 game minutes per character turn once combat reports `turns` in its result.
+
+Assemble with `./build.sh`, which `../region/build.sh` also runs. It concatenates `zoom-head.html`, `const REGION=<data/region/region_i17.json>;`, `glue-pre.js`, `../region/campaign.js`, `../region/region-main.js`, `../stream/sector-core.js`, `../stream/figure-kit.js`, `../motion/motion.js`, `stream-z.js` and `glue-post.js`, then closes the script.
+
+## Combat demonstration
+
+`combat.js` is spliced into `stream-z.js` just before its frame loop and shares its scope (movement grid, heights, figures, camera). One encounter: three raiders round the fire in the New River bridge undercroft. Raiders see 16 m in a 130° cone (5 m all round), drawn as red fans; the squad spots them at 30 m with line of sight. Whoever sees first decides the opening: the squad gets a first strike (one free shot each, +10 aim, raiders without cover), or the raiders scramble into cover before your first turn. Then turns on the 2 m grid: two actions, 12 effective metres per action so terrain speed shapes the range (blue one action, amber two), shoot ends the turn, overwatch takes a −15 reaction shot, hunker doubles cover. Walls, buildings, piers and steep ground are full cover; saguaros, palo verdes and boulders half; no cover toward the shooter means flanked (40% crit). +15 aim from 2 m higher ground. Ink shows state: concealed blue while undetected, gold selected, blue overwatch, red wounded.
