@@ -2,7 +2,7 @@
 """Assemble the interior combat demonstration.
 
 Inlines the interiors generator and renderer (sliced out of tools/interiors/interiors.src.html, which belongs to the
-interiors topic and is not edited here), FigureKit, the combat rules and the interior world adapter into
+interiors topic and is not edited here), FigureKit, the combat rules, the free-space world and the demo script into
 demo.src.html. Writes ../../mockups/combat-interior.html (repo copy, with doctype) and, when given a path, the
 Artifact fragment that starts with <title>."""
 import os, sys, subprocess, json
@@ -15,7 +15,8 @@ rd = lambda *p: open(os.path.join(*p)).read()
 page = rd(HERE, 'demo.src.html')
 for key, val in [('/*FIGUREKIT*/', rd(TOOLS, 'stream', 'figure-kit.js')),
                  ('/*INTERIORS_GEN*/', slices['gen']), ('/*INTERIORS_RENDER*/', slices['render']),
-                 ('/*RULES*/', rd(HERE, 'rules.js')), ('/*WORLD*/', rd(HERE, 'interior-world.js'))]:
+                 ('/*RULES*/', rd(HERE, 'rules.js')), ('/*WORLD*/', rd(HERE, 'space.js')),
+                 ('/*DEMO*/', rd(HERE, 'demo-script.js'))]:
     assert key in page, key
     page = page.replace(key, val)
 frag = page

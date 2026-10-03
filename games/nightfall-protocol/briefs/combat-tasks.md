@@ -331,7 +331,12 @@ These are `chooseAction` branches in `rules.js`, tested headless on a fixed seed
 
 ### Progress
 
-Steps 1 and 2 of 7h are done, and so are the sight and cover rules (7b), breaching (7c) and roles for the sentry and boss (7d); see `tools/combat/README.md`. Diagonal steps never pass through a door frame. Doorway overwatch, fall back and flee (7e), holdouts (7f), loot (7g) and joining the streamed world (step 3) are still to do.
+Steps 1 and 2 of 7h are done, and so are the sight and cover rules (7b), breaching (7c) and roles for the sentry and boss (7d); see `tools/combat/README.md`. After the first demo, movement moved off the grid to **free placement**. 7a's node grids are replaced by geometry:
+- walls, doors and windows are line segments, and furniture is boxes;
+- a hidden 0.5 m cost field with 16 step directions is used for pathfinding only;
+- doors, windows and counters are portals, so routes pass through the middle of openings.
+
+Doorway overwatch, fall back and flee (7e), holdouts (7f), loot (7g) and joining the streamed world (step 3) are still to do.
 
 ### 7h. Order of work for 7
 
