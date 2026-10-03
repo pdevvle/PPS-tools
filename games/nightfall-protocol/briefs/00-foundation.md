@@ -42,8 +42,8 @@ The world is hybrid: a sector map you plan on, and real-time exploration that dr
 ## Time: two clocks
 
 - **World clock** (sun, weather, travel, water, food, sleep): at 1× map speed 10 game minutes pass per real second, so one real hour is 25 game days. 4× fast-forward on the map; tactical exploration and fights run at their own pace and advance the world clock by the time they really take in the world.
-- **Life clock** (ageing, pregnancy, growing up, skills that build over years): **one year of life per real hour of play at 1×**, which is 14.6 life days per game day. It is tied to the world clock, so fast-forwarded travel and long fights advance it too; that is what keeps an hour-per-year pace from feeling glacial.
-- Rough consequences at 1×: pregnancy about 45 minutes of play (18 game days); a child becomes an adult (16 years) in about 16 hours; a 25-year-old reaches old age (60) in about 35 hours. A 40–80 hour campaign spans two generations.
+- **Life clock** (ageing, pregnancy, growing up, skills that build over years): **one day of life per real hour of play at 1×**, which is one life day per 25 game days. It is tied to the world clock, so 4× fast-forward on the map ages people four times as fast, and time in fights counts as the world time it takes.
+- Consequences at 1×: about 3–4 life months in a 100-hour campaign. A pregnancy (about 270 life days) takes about 270 hours of play at 1× (about 68 at 4×), and children effectively stay children. Ageing is close to frozen within a campaign: a survivor's age is mostly who they are, not a timer. Population changes mainly through newcomers, departures and deaths; births are rare, late events. The ratio is one constant, so it can be tuned after playtests.
 - Needs (water, food, sleep) run on the world clock; age and lifespan run on the life clock. Systems state which clock each rate uses.
 
 ## Simulation rules
