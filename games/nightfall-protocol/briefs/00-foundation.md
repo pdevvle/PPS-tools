@@ -4,7 +4,7 @@ Owned by the home conversation. Topic conversations follow this; propose changes
 
 ## The game
 
-An XCOM 2-inspired survival tactics game set in real places. The pilot region is the I-17 corridor north of Phoenix, Arizona: Desert Hills and Anthem north past New River towards Black Canyon City, about 18 by 32 km. A small group of survivors runs a home base and sends squads out.
+An XCOM 2-inspired survival tactics game set in real places, in **post-apocalyptic America, years after a solar flare fried the grid and all electronics** and society broke down. The harsh Sonoran Desert has been left to isolated nomads, fierce cartel-descended gangs, armed militias and lonely survivors (see `lore.md`). The pilot region is the I-17 corridor north of Phoenix, Arizona: Desert Hills and Anthem north past New River towards Black Canyon City, about 18 by 32 km. A small group of survivors runs a home base and sends squads out.
 
 Three layers compete for the player's attention:
 
@@ -38,6 +38,30 @@ The world is hybrid: a sector map you plan on, and real-time exploration that dr
 - **Clock**: at 1×, 10 game minutes pass per real second on the map; 4× and pause.
 - **Knowledge** of a sector: unknown, rumoured, scouted, current. Scouted goes stale after 3 days. Lookouts reveal 1 to 3 sectors around them, more from high ground.
 - **Loot categories**: food, medicine, tools, fuel, gear, water, shelter, goods (derived from what a place really is).
+
+## Time: two clocks
+
+- **World clock** (sun, weather, travel, water, food, sleep): at 1× map speed 10 game minutes pass per real second, so one real hour is 25 game days. 4× fast-forward on the map. Tactical exploration runs close to real time. **In a fight, every character's turn (squad and enemies alike) advances the world clock 5 game minutes**, so a round with 4 soldiers and 3 raiders is 35 minutes and an 8-round fight is about 4.7 game hours: fights cost water, food, daylight and life time like anything else.
+- **Life clock** (ageing, pregnancy, growing up, skills that build over years): **one day of life per real hour of play at 1×**, which is one life day per 25 game days. It is tied to the world clock, so 4× fast-forward on the map ages people four times as fast, and time in fights counts as the world time it takes.
+- Effective ageing depends on how the time is spent:
+
+| What you're doing | World time per real hour | Life days per real hour |
+|---|---|---|
+| Map at 1× | 25 days | 1 |
+| Map at 4× | 100 days | 4 |
+| A fight (7 characters, a turn about every 20 real seconds) | about 1.75 days | about 0.07 |
+| Tactical exploration (near real time) | about 1 hour | about 0 |
+
+- Consequences if everything were played at 1×: about 3–4 life months in a 100-hour campaign. A pregnancy (about 270 life days) takes about 270 hours of play at 1× (about 68 at 4×), and children effectively stay children. Ageing is close to frozen within a campaign: a survivor's age is mostly who they are, not a timer. Population changes mainly through newcomers, departures and deaths; births are rare, late events. The ratio is one constant, so it can be tuned after playtests.
+- Needs (water, food, sleep) run on the world clock; age and lifespan run on the life clock. Systems state which clock each rate uses.
+
+## Simulation rules
+
+- **Tiers.** The player's settlement runs at full detail: every survivor simulated individually (first draft target 15–30 people). Other settlements, raider groups and traders in the region are aggregates (population, stocks, attitude) and become individuals only when visited or fought. The tactical window is the only place with per-frame simulation.
+- **Cadence.** Needs drain at continuous rates settled each game hour; jobs are chosen when a task ends (utility AI); social interactions every few game hours; stores, spoilage and prices daily; demographics and civics daily to seasonal. Continuous rates let any stretch of time be fast-forwarded in one step.
+- **Control.** Indirect for the settlement: the player sets priorities, roles and rules, and survivors decide what to do (RimWorld-style). Direct for squads in the field and in combat.
+- **Portable logic.** Simulation is plain functions over plain data, with no rendering inside, deterministic from seeds, runnable in a worker and later in WebAssembly or native code. Saves record the state and what changed from the generated world, not snapshots of it.
+- **Region.** A few other settlements in the corridor (abstract until visited) plus travelling traders; first draft can start with traders only.
 
 ## Combat values (from the demonstration; combat owns tuning)
 

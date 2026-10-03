@@ -24,6 +24,8 @@ Turn the combat demonstration into the game's combat layer: real-time exploratio
 - Uses from the tactical runtime: `cellOf`, `kindG` (movement kinds), `nodeSpeed`, `nearestPassable`, `heightAt`, `deckAt`, the sector `data.plants`, `figs`, `squad`, `scene`, `cam`, `target`. Hooks it exposes: `CB.frame(dt,now)`, `CB.click(hit)`, `CB.hover(hit)`, `CB.onBuilt(sector)`, `CB.onDropped(sector)`, `CB.active`, `CB.prompt`.
 - Figures and poses come from FigureKit (`models.md`, `animation.md`). Ask those topics for weapon models and combat animations rather than building final ones here.
 
+- Time: every character's turn advances the world clock 5 game minutes (foundation). Water, food, daylight and the life clock move with it.
+
 ## Known gaps
 
 - Fighting under a bridge: the deck hides units from the camera. Needs a cutaway (fade or hide what is above the focus).
@@ -42,6 +44,7 @@ Turn the combat demonstration into the game's combat layer: real-time exploratio
 3. Encounter data format (pods, patrols, alert states) and two or three encounters placed in the New River block.
 4. Weapons and classes: start with the original game's four (Ranger, Sharpshooter, Grenadier, Specialist) adapted to survivors.
 5. Persist wounds and deaths back to the squad (the region map shows people per squad).
+6. Advance the world clock 5 game minutes per character turn and show the time of day in the fight.
 
 ## Out of scope
 

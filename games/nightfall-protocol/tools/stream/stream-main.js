@@ -312,8 +312,8 @@ function updatePanels(){
     <div><dt>GPU geometries · textures</dt><dd>${inf.memory.geometries} · ${inf.memory.textures}</dd></div><div><dt>JS heap</dt><dd>${mem}</dd></div><div><dt>Loaded · dropped</dt><dd>${stats.loads} · ${stats.drops}</dd></div>`; }
 
 // ---------- frame loop ----------
-const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches, PACE=2.6;
-let last=performance.now(), phase=0, boost=1, panelT=0; const tmp=new THREE.Vector3();
+const PACE=2.6, GAIT=PACE/1.39;   // the squad moves faster than real walking pace (1.39 m/s); motion shows a walk played faster
+let last=performance.now(), boost=1, panelT=0; const tmp=new THREE.Vector3();
 const speedHere=(x,z,l)=>{ if(l) return 1; const c=cellOf(x,z); return c<0?.7:Math.max(.15,nodeSpeed(c)||.3); };
 function trailAt(back){ const T=squad.trail; let acc=Math.hypot(squad.x-T[T.length-1].x,squad.z-T[T.length-1].z); if(acc>=back) return null;
   for(let i=T.length-1;i>0;i--){ const a=T[i], b=T[i-1], l=Math.hypot(a.x-b.x,a.z-b.z); if(acc+l>=back){ const t=(back-acc)/(l||1); return {x:a.x+(b.x-a.x)*t,z:a.z+(b.z-a.z)*t,l:t<.5?a.l:b.l}; } acc+=l; } return T[0]; }
@@ -325,19 +325,16 @@ function loop(now){
   if(squad.path){ const wp=squad.path[squad.wp], dx=wp.x-squad.x, dz=wp.z-squad.z, d=Math.hypot(dx,dz), m=speedHere(squad.x,squad.z,squad.l), step=PACE*m*dt;
     if(wp.l&&!squad.l&&d<1.5) squad.l=1; if(!wp.l&&squad.l&&d<1.5) squad.l=0;
     if(d<=step){ squad.x=wp.x; squad.z=wp.z; squad.l=wp.l; if(++squad.wp>=squad.path.length) squad.path=null; } else { squad.x+=dx/d*step; squad.z+=dz/d*step; }
-    if(d>.01) squad.heading=Math.atan2(dx,dz); phase+=dt*7.5*Math.max(.55,m); moving=true;
+    if(d>.01) squad.heading=Math.atan2(dx,dz); moving=true;
     const T=squad.trail, lt=T[T.length-1]; if(Math.hypot(lt.x-squad.x,lt.z-squad.z)>.4){ T.push({x:squad.x,z:squad.z,l:squad.l}); if(T.length>300) T.shift(); } }
   // crossing into another sector moves the window
   const q=secAt(squad.x,squad.z); if(q&&(q[0]!==centre[0]||q[1]!==centre[1])) setCentre(...q);
-  figs.forEach((f,i)=>{ let walk=false;
-    if(i===0){ walk=moving; f.x=squad.x; f.z=squad.z; f.l=squad.l; if(moving){ let a=squad.heading-f.root.rotation.y; a=Math.atan2(Math.sin(a),Math.cos(a)); f.root.rotation.y+=a*Math.min(1,dt*10); } }
-    else { const tp=trailAt(i*1.9); if(tp){ const ddx=tp.x-f.x, ddz=tp.z-f.z, dd=Math.hypot(ddx,ddz); if(dd>.12){ walk=true; const sp=Math.min(dd,PACE*1.15*speedHere(f.x,f.z,f.l)*dt+Math.max(0,dd-1)*dt*2); f.x+=ddx/dd*sp; f.z+=ddz/dd*sp; let a=Math.atan2(ddx,ddz)-f.root.rotation.y; a=Math.atan2(Math.sin(a),Math.cos(a)); f.root.rotation.y+=a*Math.min(1,dt*8); } f.l=tp.l; } }
+  figs.forEach((f,i)=>{
+    if(i===0){ f.x=squad.x; f.z=squad.z; f.l=squad.l; if(moving){ let a=squad.heading-f.root.rotation.y; a=Math.atan2(Math.sin(a),Math.cos(a)); f.root.rotation.y+=a*Math.min(1,dt*10); } }
+    else { const tp=trailAt(i*1.9); if(tp){ const ddx=tp.x-f.x, ddz=tp.z-f.z, dd=Math.hypot(ddx,ddz); if(dd>.12){ const sp=Math.min(dd,PACE*1.15*speedHere(f.x,f.z,f.l)*dt+Math.max(0,dd-1)*dt*2); f.x+=ddx/dd*sp; f.z+=ddz/dd*sp; let a=Math.atan2(ddx,ddz)-f.root.rotation.y; a=Math.atan2(Math.sin(a),Math.cos(a)); f.root.rotation.y+=a*Math.min(1,dt*8); } f.l=tp.l; } }
     const swim=inWater(f.x,f.z,f.l), y=yOf(f.x,f.z,f.l); f.y=(f.y===undefined?y:f.y+(y-f.y)*Math.min(1,dt*(swim?4:14))); f.root.position.set(f.x,f.y,f.z);
-    const J=Object.assign({},FigureKit.POSES.stand), sn=Math.sin(phase+i*.7);
-    if(swim){ const t=now/1000*2.2+i; Object.assign(J,{torsoX:.35,headX:-.25,shRx:-1.4+Math.sin(t)*1.3,shLx:-1.4-Math.sin(t)*1.3,shRz:-.5,shLz:.5,elR:-.4,elL:-.4,lgR:Math.sin(t*2)*.35,lgL:-Math.sin(t*2)*.35,knR:.3,knL:.3}); }
-    else if(walk) Object.assign(J,{lgR:sn*.5,lgL:-sn*.5,knR:Math.max(0,-sn)*.9+.06,knL:Math.max(0,sn)*.9+.06,bodyY:-Math.abs(Math.cos(phase+i*.7))*.03,torsoX:.05,shRx:-sn*.35,shLx:sn*.35,elR:-.25,elL:-.25});
-    else if(!reduce){ const t=now/1000+i*3; J.torsoX+=Math.sin(t*1.2)*.01; J.headX+=Math.sin(t*.35)*.04; }
-    const k=1-Math.exp(-dt*10); for(const key2 in J) f.j[key2]+=(J[key2]-f.j[key2])*k; FigureKit.applyPose(f,f.j); });
+    // gait, idles and swimming come from the shared motion module; feet find the ground or the bridge deck they are on
+    Motion.update(f,{act:swim?'swim':'idle',ground:(x,z)=>yOf(x,z,f.l),compress:GAIT},dt); });
   if(marker.visible){ const a=(now-markerT)/900; marker.material.opacity=Math.max(0,.8-a*.6); marker.scale.setScalar(1+a*.4); if(a>1.4) marker.visible=false; }
   // camera
   const sy=figs[0].y||0;

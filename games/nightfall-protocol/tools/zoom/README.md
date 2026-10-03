@@ -6,7 +6,7 @@
 - `stream-z.js` is `tools/stream/stream-main.js` that starts only when entered, follows the camera when no squad came down, and climbs back to the map past its widest zoom.
 - `glue-pre.js` converts between the region frame (centred on 33.945 N, 112.14 W) and the block frame (centred on New River); `glue-post.js` swaps the stages with a short fade and writes the squad's tactical position back to the map.
 
-Assemble: `zoom-head.html`, `const REGION=<data/region/region_i17.json>;`, `glue-pre.js`, `region-z.js`, `../stream/sector-core.js`, `../stream/figure-kit.js`, `stream-z.js`, `glue-post.js`, then close the script.
+Assemble with `./build.sh`: `zoom-head.html`, `const REGION=<data/region/region_i17.json>;`, `glue-pre.js`, `region-z.js`, `../stream/sector-core.js`, `../stream/figure-kit.js`, `../motion/motion.js`, `stream-z.js`, `glue-post.js`, then close the script.
 
 ## Combat demonstration
 
