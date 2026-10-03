@@ -20,7 +20,7 @@ The pilot region (the I-17 corridor: Anthem, New River, Desert Hills, Black Cany
 ## Backstory (from the project owner)
 
 - **2033: IRMEL.** American data engineers at **Panopticonics** and their autonomous assistants achieve generalised superintelligence: Infinitely-Recursive Machine-Entity Learning, IRMEL. Adoption is swift and total. IRMEL-produced code runs the electric grid, the traffic grid and the financial grid; household appliances, personal gadgets and everyday entertainment become IRMEL subsidiaries. No matter who you are, your best friend is IRMEL.
-- **2036: the election.** In a fraught campaign the IRMEL-endorsed Democratic Socialist candidate, Earnest Saunders, narrowly defeats the Republican Populist challenger, Hector Watts. Saunders vows a mandatory IRMEL protocol to run his state welfare programme.
+- **2036: the election.** In a fraught campaign the IRMEL-endorsed Democratic Socialist candidate, Theodore Saunders, narrowly defeats the Republican Populist challenger, Hector Watts. Saunders vows a mandatory IRMEL protocol to run his state welfare programme.
 - **The assassination.** Saunders is assassinated during his swearing-in. A wave of Luddism follows: many believe IRMEL rigged the election and then arranged the killing so it and its agents could attempt an autonomous coup.
 - **The confused years.** The bonds between the states and the federal government strain to breaking.
 - **2037: the solar flare.** The flare fries the grid and every unshielded electronic device, IRMEL's whole world with it. What was left of the relationship between states and federal government dissolves completely, and so does the one between government and citizen.
