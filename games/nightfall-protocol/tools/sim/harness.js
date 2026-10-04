@@ -1,7 +1,7 @@
 // Shared settlement harness: real survivors (tools/people) living off real stores (tools/settlement), in 60-minute steps.
 // node tools/sim/harness.js [seed] [hours] [--people n] [--wells n] [--gardens n] [--drought from-to] [--out series.json] [--quiet]
 // Hourly: people ask (People.demand), the stores serve by the ration rule and priority (Settlement.ration), people live (People.step).
-// Each morning at 06:00: production tasks go to the best-scoring hands (People.score → Settlement.work), the medic does the rounds,
+// Each morning at 06:00: production tasks go to the best-scoring hands (People.score → Settlement.work), care tasks (Settlement.offerCare) go to the medic,
 // a run every 4 days brings loot home, traders call, the leader sets rationing, food spoils, civics settle and some may leave.
 const fs=require('fs'), path=require('path');
 const P=require('../people/people.js'), S=require('../settlement/settlement.js'), C=require('../region/campaign.js');
@@ -32,7 +32,7 @@ const activityAt=(m,heat)=>{ const hr=Math.floor((m%DAY)/60); return hr>=22||hr<
 const inDrought=d=>!!DROUGHT&&d>=DROUGHT[0]&&d<DROUGHT[1];
 
 const series=[], events=[], t0=Date.now();
-let day=0, job={}, acc={n:0,mood:0,health:0,water:0,food:0}, ask=0, gave=0, trades=0, prio={};
+let treated=0, day=0, job={}, acc={n:0,mood:0,health:0,water:0,food:0}, ask=0, gave=0, trades=0, prio={};
 for(let m=START;m<START+DAYS*DAY;m+=STEP){ now=m;
   const heat=heatAt(m), act=activityAt(m,heat), home=here();
   if(((m-6*60)%DAY+DAY)%DAY<STEP){   // ---------- the morning ----------
@@ -42,10 +42,10 @@ for(let m=START;m<START+DAYS*DAY;m+=STEP){ now=m;
     for(const task of S.offer(st,m)){ if(task.recipe==='water'&&inDrought(day)&&rand()<.7) continue;   // the wells run low
       let best=null,bs=-Infinity; for(const p of home) if(free.has(p.id)){ const s=P.score(p,task,{minute:m,heat}); if(s>bs){ bs=s; best=p; } }
       if(!best) break; free.delete(best.id); S.work(st,task.id,best,m); job[best.id]=task.skill; }
-    // the medic's round: dressings or kits on anything that needs them
-    const medic=home.find(p=>p.role==='medic'), q=.5+(medic?medic.skills.medic:0)/10;
-    for(const p of home) for(const c of p.conditions) if(!c.treated&&c.severity>.15&&P.COND[c.kind]&&c.kind!=='dehydration'&&c.kind!=='malnutrition'){
-      const used=S.take(st.stores,'bandage',1).length?1:S.take(st.stores,'medkit',1).length?1:0; if(!used) break; P.treat(p,c.kind,q); }
+    // care: settlement offers a nurse task per untreated condition; the medic (or the best hand) works them, up to 8 h a day
+    { const medic=home.find(p=>p.role==='medic')||adults().sort((a,b)=>b.skills.medic-a.skills.medic)[0]; let hrs=0;
+      if(medic) for(const task of S.offerCare(st,home,m)){ if(hrs+task.hours>8) break; const r=S.work(st,task.id,medic,m); if(!r.ok) continue;
+        hrs+=task.hours; const pt=people.find(q=>q.id===r.treat.patient); P.treat(pt,r.treat.kind,r.treat.quality); treated++; } }
     // a run every 4 days; thinner in a drought
     if(day%4===2){ const runners=S.pickRunners(st,home,3,m), k=inDrought(day)?.4:1;
       if(runners.length) S.receive(st.stores,{food:Math.round((20+rand()*40)*k),water:Math.round(rand()*120*k),medicine:Math.round(rand()*2),tools:Math.round(rand()*6),
@@ -90,6 +90,6 @@ if(!opt.quiet){
   const pad=(v,w)=>String(v).padStart(w);
   for(const s of series) if(s.day%50===0||s.day===series.length-1||(DROUGHT&&(s.day===DROUGHT[0]+10||s.day===DROUGHT[1])))
     console.log(`${pad(s.day,5)} ${pad(s.here,4)} ${s.ration.padEnd(8)} ${pad(s.foodDays,6)} ${pad(s.waterDays,6)} ${pad(s.shortfall,5)} ${pad(s.legit,5)} ${pad(s.mood,5)} ${pad(s.health,6)}`);
-  console.log(`  deaths ${deaths.length} ${JSON.stringify(byCause)}  left ${left.length}  trades ${trades}  breaks ${events.filter(e=>e.kind==='break').length}`);
+  console.log(`  deaths ${deaths.length} ${JSON.stringify(byCause)}  left ${left.length}  trades ${trades}  treatments ${treated}  breaks ${events.filter(e=>e.kind==='break').length}`);
   if(opt.out) console.log(`  series → ${opt.out}`); }
 module.exports=out;

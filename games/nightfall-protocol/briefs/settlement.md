@@ -81,7 +81,7 @@ First draft in `tools/settlement/` (`settlement.js`, `test.js`, `harness.js`). I
     - **equal**: everyone is cut in proportion. This is the default for food.
   - `ration()` adds a `cooked` field (the share of kcal that came as meals) beside `water` and `food`, for people's mood.
   - `allowance()` gives what the rules allow. A shortfall is measured against that, not against appetite.
-- **Production**: recipes at amenities, once a day per amenity unit. They are offered as tasks in the contract's shape, with urgency 1 − days of supply / target. Under 7 days of water (half the target), recipes that use water (gardens) aren't offered, so people drink first; the shared harness found gardens otherwise drink the tanks dry in a drought. Recipes that use water are not offered under 7 days of water.
+- **Production**: recipes at amenities, once a day per amenity unit. They are offered as tasks in the contract's shape, with urgency 1 − days of supply / target. Under 7 days of water (half the target), recipes that use water (gardens) aren't offered, so people drink first; the shared harness found gardens otherwise drink the tanks dry in a drought.
 
   | Recipe | Amenity | In | Out |
   | --- | --- | --- | --- |

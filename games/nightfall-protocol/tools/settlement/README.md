@@ -24,7 +24,7 @@
     - **ordered** (the default for water): people are served in full one after another, by `rules.order` and then by id. An equal water cut dehydrates everyone at once.
     - **equal** (the default for food): everyone is cut in proportion.
   - `priorities(people, minute)` builds the tiers. `allowance(demands, rules)` gives what the rules allow, the yardstick for a real shortfall.
-- **Production**: recipes run at an amenity, once a day per amenity unit, and are offered as tasks `{id, kind, skill, where, hours, urgency, recipe}`. Urgency is 1 − days of supply / target. `work(S, taskId, worker, minute)` takes the inputs and adds the outputs. Skill s scales the yield by 0.7 + 0.15s (0.5 to 1.5).
+- **Production**: recipes run at an amenity, once a day per amenity unit, and are offered as tasks `{id, kind, skill, where, hours, urgency, recipe}`. Urgency is 1 − days of supply / target. Under 7 days of water, recipes that use water (gardens) are not offered, so people drink first. `work(S, taskId, worker, minute)` takes the inputs and adds the outputs. Skill s scales the yield by 0.7 + 0.15s (0.5 to 1.5).
 
   | Recipe | Amenity | Hours | In | Out at skill 2 |
   | --- | --- | --- | --- | --- |

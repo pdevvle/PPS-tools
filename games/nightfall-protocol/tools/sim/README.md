@@ -63,7 +63,7 @@ Settlement and building offer tasks as `{ id, kind:'cook'|'haul'|'build'|'grow'|
 `node tools/sim/harness.js [seed] [hours] [--people n] [--wells n] [--gardens n] [--drought from-to] [--out series.json] [--quiet]` runs real survivors (`tools/people`) off real stores (`tools/settlement`) in 60-minute steps. 20 hours of play (500 game days) takes about a second.
 
 - Each hour: `People.demand` → `Settlement.ration` (rule level, priority tiers, water served in order so a shortage doesn't dehydrate everyone at once) → `People.step`.
-- Each morning at 06:00: production tasks go to whoever `People.score`s them best and are resolved with `Settlement.work`. The medic treats with dressings or kits (`People.treat`). A run every 4 days brings loot in. Traders call. The leader sets rationing and a curfew in a drought. Food spoils, and `Settlement.civicsDay` settles legitimacy, unrest and departures.
+- Each morning at 06:00: production tasks go to whoever `People.score`s them best and are resolved with `Settlement.work`. Care tasks from `Settlement.offerCare` go to the medic (up to 8 h a day), and the result is applied with `People.treat`. A run every 4 days brings loot in. Traders call. The leader sets rationing and a curfew in a drought. Food spoils, and `Settlement.civicsDay` settles legitimacy, unrest and departures.
 - Settlement hooks take hours, while `People.addMood` takes the world minute a modifier ends; the harness converts between them.
 - Water-using production (gardens) isn't offered under 7 days of water, so people drink first.
 
