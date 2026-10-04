@@ -26,6 +26,16 @@ if(Motion.busy(fig)) { /* a clip or ragdoll owns the root: read fig.root back in
 
 - A foot that bears weight is pinned to its spot in the world. Hip (three axes), knee and the new ankle are solved to reach it, with the knee pointing forward.
 - Walking swaps feet by the gait phase, which moves by the distance covered divided by the stride. Standing still, a foot steps when the stance wants it elsewhere or the body has turned 30° away from it. That gives turning on the spot, small shuffles and changes of stance, and no foot slides round tight bends.
+- **Gait height.** Only feet bearing weight hold the pelvis down; a swinging foot bends its knee to fit and counts only as it lands. The back foot rolls onto the ball of the foot before push-off (the ankle pivots round the ball, so the ball stays put), and the front foot lands heel first (pivoting round the heel). The foot lands slightly under the body, and the stance leg is nearly straight (99.3% of its length). Measured pelvis bob over four people:
+
+| Gait | Pelvis bob | Knee at mid-stance |
+|---|---|---|
+| Walk at 1.4 m/s | 36 mm (was 74) | 15° (was 23°) |
+| Stroll at 0.8 m/s | 18 mm (was 48) | 15° (was 23°) |
+| Squad pace on the streaming page | 40 mm (was 80) | 15° (was 23°) |
+| Run at 3.4 m/s | 58 mm (was 82) | |
+
+  The contact point (heel while landing, ball while rolling off) stays within 1 mm/s on flat ground and slopes.
 - Ankles keep each planted foot flat on its own ground (capped at 23° where a foot straddles a step). The heel lifts before toe-off and the toes come up through the swing.
 - **Hands.** FigureKit's hand is one mitten mesh and a thumb. The first time `Motion` sees a figure, it swaps each for a palm, four fingers of three joints each and a two-joint thumb. They are sized from the mitten, use the same skin and keep the ink outline.
   - Joints: `fig.fingers[hand][finger][joint]` (index to little, base to tip) and `fig.thumbs[hand][joint]`. `Motion.setHand(fig, i, {curl, index, thumb, spread})` poses one hand directly.

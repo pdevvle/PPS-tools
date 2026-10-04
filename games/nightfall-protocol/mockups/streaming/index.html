@@ -911,9 +911,9 @@ function legs(fig,M,s,def,O,dt,dist,vr,W,Pn,shift){
   M.gaitW+=((M.moving?1:0)-M.gaitW)*Math.min(1,dt*7);
   const wantRun=(def.run?1:0)||(vr>2.3&&!def.crouch?1:0); M.runW+=(wantRun-M.runW)*Math.min(1,dt*4);
   const rw=M.runW, gw=M.gaitW, cr=def.crouch?1:0;
-  const strideLen=clamp(R.L*(.8+.5*Math.min(vr,4))*tr.stride*(def.stride||1)*(cr?.75:1)*(1-.22*W)*(1-.12*Pn),R.L*.7,R.L*3.2);
+  const strideLen=clamp(R.L*(.78+.48*Math.min(vr,4))*tr.stride*(def.stride||1)*(cr?.75:1)*(1-.22*W)*(1-.12*Pn),R.L*.7,R.L*3.2);
   if(M.moving) M.ph=(M.ph+dist/strideLen)%1;
-  const beta=.6-.24*rw, lift=(.06+.04*Math.min(1,vr/1.5))*(cr?.8:1)+.16*rw;
+  const beta=.58-.22*rw, lift=(.06+.04*Math.min(1,vr/1.5))*(cr?.8:1)+.16*rw;
   // nominal stance: where the action's pose puts each foot (root frame)
   const nom=[0,1].map(i=>{ const f=fk(R,i?O.lgL:O.lgR,i?O.knL:O.knR); return V((i?1:-1)*R.hipX*(1+tr.toe),0,f.z+(i===tr.favour?1:-1)*shift*.02); });
   if(!M.feet){ M.feet=[0,1].map(i=>{ const w=footWorld(fig,M,i)||toWorld(fig,nom[i].x,0,nom[i].z); w.y=groundW(fig,s,w.x,w.z)+SOLE; return {st:'stance',a:w,yaw,from:null,t:0,dur:.3,gait:false}; }); }
@@ -921,22 +921,32 @@ function legs(fig,M,s,def,O,dt,dist,vr,W,Pn,shift){
   const out={w:[],pitch:[],n:[0,0]}, loc=[];
   const groundL=(l)=>{ const w=toWorld(fig,l.x,0,l.z); return groundW(fig,s,w.x,w.z)-root.position.y; };
   for(let i=0;i<2;i++){ const F=M.feet[i], injured=W>.01&&i===tr.favour, b=beta-(injured?.1*W:0), ph=(M.ph+(i?.5:0))%1;
-    const land=V(nom[i].x,0,lerp(nom[i].z,strideLen*b*.5,gw));
-    let heel=0, swingU=-1;
+    const land=V(nom[i].x,0,lerp(nom[i].z,strideLen*b*.42,gw)), s1=.28*gw*(1-rw);   // land a little under the body; the toe roll covers the longer push-off behind
+    let heel=0, roll=0, strike=0, swingU=-1;
     if(M.moving){
-      if(F.st==='stance'&&ph>=b){ F.st='swing'; F.from=F.a.clone(); F.gait=true; }
-      if(F.st==='swing'&&F.gait&&ph<b){ F.st='stance'; F.a=toWorld(fig,F.cur.x,0,F.cur.z); F.a.y=groundW(fig,s,F.a.x,F.a.z)+SOLE; F.yaw=yaw; }
-      if(F.st==='stance'&&ph<b) heel=.045*smooth((ph/b-.62)/.38)*(1-rw);
+      // hand-offs keep the ankle where it is: lift off from the rolled-up ankle, and on landing put the anchor (the
+      // flat-foot ankle) where the heel-strike pose says it is
+      const s0=.28*gw*(1-rw);
+      if(F.st==='stance'&&ph>=b){ F.st='swing'; F.from=F.cur?toWorld(fig,F.cur.x,F.cur.y,F.cur.z):F.a.clone(); F.roll0=F.roll||0; F.gait=true; }
+      if(F.st==='swing'&&F.gait&&ph<b){ F.st='stance'; F.a=toWorld(fig,F.cur.x,0,F.cur.z-(.05*(Math.cos(s0)-1)-SOLE*Math.sin(s0))); F.a.y=groundW(fig,s,F.a.x,F.a.z)+SOLE; F.yaw=yaw; }
+      // the back foot rolls up onto its toes before push-off (pivoting on the toe, so the ankle rises and comes
+      // forward a little); the front foot lands on its heel with the toes up and rolls flat
+      if(F.st==='stance'&&ph<b){ const u=ph/b; roll=.66*smooth((u-.5)/.5)*(1-.6*rw)*gw; strike=.28*(1-smooth(u/.16))*gw*(1-rw); heel=.13*Math.sin(roll); F.roll=roll; }
     } else if(F.st==='swing'&&F.gait){ F.gait=false; F.t=0; F.dur=.22; F.from=toWorld(fig,F.cur.x,F.cur.y,F.cur.z); }
     if(F.st==='swing'){ const u=F.gait?clamp((ph-b)/(1-b),0,1):clamp((F.t+=dt)/F.dur,0,1); swingU=u;
       const fl=toLocal(fig,F.from), e=smooth(u), c=V(lerp(fl.x,land.x,e),0,lerp(fl.z,land.z,e));
-      c.y=lerp(F.from.y-root.position.y,groundL(land)+SOLE,e)+(F.gait?lift:.07)*Math.sin(Math.PI*u); F.cur=c;
+      c.y=lerp(F.from.y-root.position.y,groundL(land)+SOLE+(F.gait?SOLE*(Math.cos(s1)-1)+.05*Math.sin(s1):0),e)+(F.gait?lift:.07)*Math.sin(Math.PI*u); F.cur=c;
       if(!F.gait&&u>=1){ F.st='stance'; F.a=toWorld(fig,c.x,0,c.z); F.a.y=groundW(fig,s,F.a.x,F.a.z)+SOLE; F.yaw=yaw; } }
-    if(F.st==='stance'){ const l=toLocal(fig,F.a); l.y=F.a.y-root.position.y+heel; F.cur=l; }
-    loc.push(F.cur); out.n[i]=F.cur.z/(R.L*.5);
+    // the ankle swings round the contact point: the ball of the foot (0.12 ahead, on the sole) while rolling off,
+    // the heel (0.05 behind) while landing; so that point stays where it is on the ground
+    // (on a slope the foot's flat pitch is the ground's, so the pivot turns from there)
+    if(F.st==='stance'){ const l=toLocal(fig,F.a), g=clamp(Math.atan2(groundL(V(l.x,0,l.z-.07))-groundL(V(l.x,0,l.z+.12)),.19),-.4,.4);
+      const R2=(z,y,p)=>[z*Math.cos(p)+y*Math.sin(p),-z*Math.sin(p)+y*Math.cos(p)], piv=(z,y,p)=>{ const a=R2(z,y,g), b2=R2(z,y,g+p); return [a[0]-b2[0],a[1]-b2[1]]; };
+      const rb=piv(.12,-SOLE,roll), hs=piv(-.05,-SOLE,-strike); l.y=F.a.y-root.position.y+rb[1]+hs[1]; l.z+=rb[0]+hs[0]; F.cur=l; }
+    loc.push(F.cur); out.n[i]=F.cur.z/(R.L*.5); F.u=swingU;
     // foot pitch: flat on its ground, heel up before toe-off, toes up through the swing
     const h1=groundL(V(F.cur.x,0,F.cur.z-.07)), h2=groundL(V(F.cur.x,0,F.cur.z+.12));
-    let pitch=F.st==='stance'?clamp(Math.atan2(h1-h2,.19),-.4,.4)+Math.atan2(heel,.13):-.22*Math.sin(Math.PI*clamp(swingU,0,1))-.1*smooth((swingU-.7)/.3);
+    let pitch=F.st==='stance'?clamp(Math.atan2(h1-h2,.19),-.4,.4)+roll-strike:(F.gait?(F.roll0||0)*(1-smooth(swingU/.35))-.28*gw*(1-rw)*smooth((swingU-.55)/.45):0)-.18*Math.sin(Math.PI*clamp(swingU,0,1));
     out.pitch.push(pitch); }
   // standing still: step a foot that is out of place or turned away (one at a time)
   if(!M.moving&&M.feet.every(F=>F.st==='stance')){ let worst=-1, wv=0;
@@ -944,10 +954,12 @@ function legs(fig,M,s,def,O,dt,dist,vr,W,Pn,shift){
       if(v>1&&v>wv){ wv=v; worst=i; } }
     if(worst>=0&&(M.lastStep===undefined||M.t-M.lastStep>.12)){ const F=M.feet[worst]; F.st='swing'; F.gait=false; F.t=0; F.dur=.26; F.from=F.a.clone(); M.lastStep=M.t; } }
   // pelvis: as high as the action wants, low enough that every foot reaches
-  const reach=R.L*(lerp(.997,.985,gw)-.05*rw)-(W>.01?.01:0);
+  const reach=R.L*(lerp(.997,.993,gw)-.05*rw)-(W>.01?.01:0);
   const minG=Math.min(groundL(V(nom[0].x,0,nom[0].z)),groundL(V(nom[1].x,0,nom[1].z)));
-  let by=lerp(O.bodyY+minG,O.bodyY-Math.abs(Math.sin(M.ph*TAU))*.012*tr.bounce*(1+rw),gw);
-  for(let i=0;i<2;i++){ const l=loc[i], dx=l.x-(i?1:-1)*R.hipX, room=reach*reach-dx*dx-l.z*l.z; if(room>0) by=Math.min(by,l.y-R.hipH+Math.sqrt(room)); else by=Math.min(by,l.y-R.hipH+.05); }
+  let by=O.bodyY+minG*(1-gw)+(rw*(.012*tr.bounce*Math.cos(M.ph*TAU*2)-.045))*gw;   // walking: as high as the stance legs allow; a run keeps a little lift
+  // only feet bearing weight hold the pelvis down; a swinging foot bends its knee to fit, and only counts as it lands
+  for(let i=0;i<2;i++){ const l=loc[i], dx=l.x-(i?1:-1)*R.hipX, room=reach*reach-dx*dx-l.z*l.z, lim=room>0?l.y-R.hipH+Math.sqrt(room):l.y-R.hipH+.05;
+    const F=M.feet[i], w=F.st==='stance'?1:smooth((F.u-(.75-.4*rw))/.25); by=Math.min(by,lerp(by,lim,w)); }
   if(W>.01) for(let i=0;i<2;i++) if(i===tr.favour&&M.feet[i].st==='stance') by-=.03*W*gw;
   O.bodyY=by; M.stance=M.feet.map(F=>F.st==='stance');
   out.w=loc.map(l=>toWorld(fig,l.x,l.y,l.z));
