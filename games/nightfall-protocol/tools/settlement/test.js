@@ -6,7 +6,7 @@ const near=(a,b,e=1e-6)=>Math.abs(a-b)<=e;
 const DAY=S.DAY, ADULT=-30*365, CHILD=-8*365;
 const person=(id,o={})=>Object.assign({id,seed:1,name:id,sex:'f',born:ADULT,body:{water:0,food:0,energy:1},conditions:[],traits:[],skills:{},mood:[],rel:{},partner:null,role:null,at:'base',alive:true},o);
 // stands in for People.addMood / People.setRole: logs, and keeps one modifier per key on the record
-const moodHook=(now=()=>0)=>{ const log=[]; return {log,addMood:(p,key,value,hours)=>{ log.push({id:p.id,key,value,hours}); p.mood=p.mood.filter(m=>m.key!==key).concat({key,value,until:now()+hours*60}); },setRole:(p,role)=>log.push({id:p.id,role})}; };
+const moodHook=(now=()=>0)=>{ const log=[]; return {log,removeMood:(p,key)=>{ log.push({id:p.id,removed:key}); p.mood=p.mood.filter(m=>m.key!==key); },addMood:(p,key,value,hours)=>{ log.push({id:p.id,key,value,hours}); p.mood=p.mood.filter(m=>m.key!==key).concat({key,value,until:now()+hours*60}); },setRole:(p,role)=>log.push({id:p.id,role})}; };
 
 t('items stay inside the eight loot categories and every category has a default',()=>{
   for(const it of Object.values(S.ITEMS)){ assert(S.LOOT.includes(it.cat),it.id); assert(it.kg>0&&it.value>0,it.id); }
@@ -42,32 +42,54 @@ t('full rationing gives what is asked and takes it out of the stores, most peris
 
 t('rationing levels cut what is handed out; children and the sick are exempt',()=>{
   const people=[person('kid',{born:CHILD}),person('sick',{conditions:[{kind:'fever',severity:.5,since:0}]}),person('guard',{role:'guard'}),person('cook',{role:'cook'})];
-  const pr=S.priorities(people,0); assert.deepEqual(pr,{kid:0,sick:0,guard:1,cook:2});
+  const pr=S.priorities(people,0); assert.deepEqual(pr,{kid:0,sick:1,guard:2,cook:3});
   const st=S.newStores(); S.add(st,'ration',100); S.add(st,'tankwater',100); const dem={}; for(const p of people) dem[p.id]={water:5,food:2000};
   const red=S.ration(st,dem,{ration:'reduced',priority:pr}); assert.equal(red.kid.food,2000); assert.equal(red.cook.food,1500); assert.equal(red.cook.water,4.5);
   const sur=S.ration(st,dem,{ration:'survival',priority:pr}); assert.equal(sur.sick.food,2000); assert.equal(sur.guard.food,1000); assert.equal(sur.guard.water,3.75); });
 
 t('in a shortfall the priority tiers are served first, the rest share what is left',()=>{
-  const pr={kid:0,guard:1,a:2,b:2}, dem={kid:{water:5,food:1000},guard:{water:5,food:2000},a:{water:5,food:2000},b:{water:5,food:2000}};
+  const pr={kid:0,guard:2,a:3,b:3}, dem={kid:{water:5,food:1000},guard:{water:5,food:2000},a:{water:5,food:2000},b:{water:5,food:2000}};
   const st=S.newStores(); S.add(st,'ration',2); S.add(st,'tankwater',12);
   const got=S.ration(st,dem,{ration:'full',priority:pr});
   assert.equal(got.kid.food,1000); assert.equal(got.guard.food,2000); assert.equal(got.a.food,500); assert.equal(got.b.food,500);
-  assert.equal(got.kid.water,5); assert.equal(got.guard.water,5); assert.equal(got.a.water,1); assert(S.amount(st,'water')<1e-6); });
+  assert.equal(got.kid.water,5); assert.equal(got.guard.water,5); assert.equal(got.a.water,2,'water is served in order by default'); assert.equal(got.b.water,0);
+  assert(S.amount(st,'water')<1e-6);
+  const st2=S.newStores(); S.add(st2,'tankwater',7);
+  const ord=S.ration(st2,{a:{water:5},b:{water:5}},{order:['b','a']}); assert.equal(ord.b.water,5); assert.equal(ord.a.water,2);
+  const st3=S.newStores(); S.add(st3,'tankwater',7);
+  const eq=S.ration(st3,{a:{water:5},b:{water:5}},{share:{water:'equal'}}); assert.equal(eq.a.water,3.5); assert.equal(eq.b.water,3.5); });
+
+t('under 7 days of water nothing that uses water is offered, so people drink first',()=>{
+  const st=S.newState({heads:10,amen:{well:1,garden:2}}); S.add(st.stores,'tankwater',300);
+  const kinds=S.offer(st,DAY+600).map(x=>x.recipe); assert(kinds.includes('water'),'the well is still worked'); assert(!kinds.includes('garden'),'gardens wait');
+  S.add(st.stores,'tankwater',700); assert(S.offer(st,DAY+600).some(x=>x.recipe==='garden')); });
 
 t('production: tasks come from amenities and inputs, urgency from supply, and resolve when worked',()=>{
   const st=S.newState({heads:10,amen:{well:1,garden:2,kitchen:1,workshop:1}});
-  S.add(st.stores,'tankwater',30); S.add(st.stores,'produce',10); S.add(st.stores,'firewood',20); S.add(st.stores,'scrap',2);
+  S.add(st.stores,'tankwater',1000); S.add(st.stores,'produce',10); S.add(st.stores,'firewood',20); S.add(st.stores,'scrap',2);
   const tasks=S.offer(st,DAY+600); const kinds=tasks.map(x=>x.recipe);
   assert(kinds.includes('water')&&kinds.includes('garden')&&kinds.includes('cook')); assert(!kinds.includes('tools'),'needs 3 scrap'); assert(!kinds.includes('medicine'),'no infirmary');
   for(const x of tasks) for(const k of ['id','kind','skill','where','hours','urgency']) assert(k in x,k);
   assert.equal(tasks[0].urgency,1); assert.equal(kinds.filter(k=>k==='garden').length,2);
-  const w=tasks.find(x=>x.recipe==='water'); assert(S.work(st,w.id,person('a'),DAY+700).ok); assert.equal(S.count(st.stores,'tankwater'),90);
+  const w=tasks.find(x=>x.recipe==='water'); assert(S.work(st,w.id,person('a'),DAY+700).ok); assert.equal(S.count(st.stores,'tankwater'),1150);
   assert.equal(S.work(st,w.id,person('a'),DAY+800).ok,false,'once per slot a day'); assert(!S.offer(st,DAY+900).some(x=>x.id===w.id));
   const g=tasks.find(x=>x.recipe==='garden'); const r=S.work(st,g.id,person('b',{skills:{grow:4}}),DAY+700); assert(r.ok); assert(near(r.made.produce,8*1.3));
   const c=tasks.find(x=>x.recipe==='cook'); const before=S.count(st.stores,'firewood');
   const cr=S.work(st,c.id,person('c',{skills:{cook:2}}),DAY+720); assert(cr.ok);
   assert.equal(before-S.count(st.stores,'firewood'),3,'burns the cheapest fuel'); assert(near(cr.made.meal,5600*.9/700,.01),'meals from up to 5,600 kcal of produce');
   assert(S.offer(st,2*DAY+600).some(x=>x.recipe==='water'),'new slots the next day'); });
+
+t('care: treatment tasks for the hurt, resolved with supplies and the medic\'s skill',()=>{
+  const st=S.newState({amen:{infirmary:1}}); S.add(st.stores,'bandage',1); S.add(st.stores,'antibiotics',1);
+  const hurt=person('h',{conditions:[{kind:'wound',severity:.7,since:0,treated:0},{kind:'infection',severity:.2,since:0,treated:0},{kind:'dehydration',severity:.5,since:0,treated:0}]});
+  const fine=person('f',{conditions:[{kind:'wound',severity:.2,since:0,treated:.8}]}), away=person('a',{at:'sq1',conditions:[{kind:'wound',severity:.5,since:0,treated:0}]});
+  const tasks=S.offerCare(st,[hurt,fine,away],600); assert.deepEqual(tasks.map(x=>x.condition),['wound','infection']);
+  assert.equal(tasks[0].kind,'nurse'); assert.equal(tasks[0].skill,'medic'); assert.equal(tasks[0].urgency,1); assert.equal(tasks[0].patient,'h');
+  const r=S.work(st,tasks[0].id,person('m',{skills:{medic:3}}),620); assert(r.ok); assert.deepEqual(r.treat,{patient:'h',kind:'wound',quality:.95,by:'m'});
+  assert.equal(S.count(st.stores,'bandage'),0); assert.equal(S.work(st,tasks[0].id,null,630).ok,false,'once a day');
+  assert(!S.offerCare(st,[hurt],640).some(x=>x.condition==='wound'));
+  const r2=S.work(st,tasks[1].id,null,650); assert.equal(r2.treat.quality,.85,'antibiotics, no medic skill');
+  const st2=S.newState(), t2=S.offerCare(st2,[hurt],600)[0]; assert.equal(S.work(st2,t2.id,null,600).treat.quality,.25,'care alone'); });
 
 t('the same item is worth more to a holder short of it',()=>{
   const rich={stores:S.newStores(),need:S.needOf(10)}, poor={stores:S.newStores(),need:S.needOf(10)};
@@ -122,9 +144,11 @@ t('rules give moods through the hook; a hard ration in plenty costs legitimacy a
   S.assign(st,people,'p0','leader'); const h=moodHook(()=>now);
   S.setRule(st,people,'ration','survival',{},h,0);
   assert(h.log.some(x=>x.key==='decision:ration'&&x.value<0)); assert(!h.log.some(x=>x.id==='kid'),'children take no part');
+  assert(h.log.some(x=>x.removed==='rule:ration'),'the old rule mood is removed'); assert.equal(people[1].mood.filter(m=>m.key==='rule:ration').length,1);
   let gone=[]; const l0=st.legit;
   for(let d=0;d<60;d++){ now=d*DAY; const r=S.civicsDay(st,people,{shortfall:0},h,now); gone=gone.concat(r.departures); }
   assert(st.legit<l0,'legitimacy falls'); assert(gone.length>0,'people leave'); assert(!gone.includes('kid'));
+  assert(!people.find(p=>p.id===gone[0]).mood.some(m=>m.key.startsWith('rule:')),'leavers lose the settlement moods');
   const m=h.log.find(x=>x.key==='rule:ration'); assert(m.value<=-10&&m.hours===24);
   const st2=S.newState({heads:11,seed:9}); S.add(st2.stores,'ration',500); S.add(st2.stores,'tankwater',2000); const people2=band(); S.assign(st2,people2,'p0','leader');
   let gone2=0; for(let d=0;d<60;d++){ now=d*DAY; gone2+=S.civicsDay(st2,people2,{},moodHook(()=>now),now).departures.length; }

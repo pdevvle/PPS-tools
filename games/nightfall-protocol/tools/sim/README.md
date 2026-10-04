@@ -57,3 +57,14 @@ People.step(p, dt, env, got[p.id]);          // drains, eats, drinks, settles he
 ## Tasks offered to job choice
 
 Settlement and building offer tasks as `{ id, kind:'cook'|'haul'|'build'|'grow'|'guard'|'trade'|'nurse'|..., skill:'cook'|..., where:{x,z}|null, hours, urgency:0..1 }`. People score them with `People.score(p, task, ctx)` (utility from needs, skills, traits, priorities and distance) and pick the best when a task ends.
+
+## The shared harness
+
+`node tools/sim/harness.js [seed] [hours] [--people n] [--wells n] [--gardens n] [--drought from-to] [--out series.json] [--quiet]` runs real survivors (`tools/people`) off real stores (`tools/settlement`) in 60-minute steps. 20 hours of play (500 game days) takes about a second.
+
+- Each hour: `People.demand` → `Settlement.ration` (rule level, priority tiers, water served in order so a shortage doesn't dehydrate everyone at once) → `People.step`.
+- Each morning at 06:00: production tasks go to whoever `People.score`s them best and are resolved with `Settlement.work`. The medic treats with dressings or kits (`People.treat`). A run every 4 days brings loot in. Traders call. The leader sets rationing and a curfew in a drought. Food spoils, and `Settlement.civicsDay` settles legitimacy, unrest and departures.
+- Settlement hooks take hours, while `People.addMood` takes the world minute a modifier ends; the harness converts between them.
+- Water-using production (gardens) isn't offered under 7 days of water, so people drink first.
+
+First results (seed 1, 20 people, 6 wells): food is what limits the base. One garden plot feeds about 1.4 people and a run every 4 days about 9, so 4 gardens can't feed 20 (12–16 leave over 500 days, no deaths), while 10 gardens hold everyone. A 65-day drought kills nobody but empties the base through departures: civics unrest is too quick to drive people out. Tune that next.

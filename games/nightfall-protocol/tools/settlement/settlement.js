@@ -102,25 +102,33 @@ const LEVEL_NAMES=Object.keys(LEVELS);
 const lifeDay=minute=>minute/(DAY*LIFE_RATIO);
 const ageYears=(p,minute)=>(lifeDay(minute)-(p.born||0))/365;
 const isChild=(p,minute)=>ageYears(p,minute)<13;
-const isSick=p=>(p.conditions||[]).some(c=>c.kind==='pregnant'||(c.severity||0)>=.3);
-// priority tiers: 0 children, the sick and pregnant (never rationed, served first); 1 guards, scavengers and builders (heavy work);
-// 2 everyone else. Within a tier a shortfall is shared in proportion to what was asked.
+// sick or wounded: pregnant, or any condition but the need ones (dehydration, malnutrition) at severity 0.3 or more
+const isSick=p=>(p.conditions||[]).some(c=>c.kind==='pregnant'||(c.kind!=='dehydration'&&c.kind!=='malnutrition'&&(c.severity||0)>=.3));
+// priority tiers (lower is served first): 0 children; 1 the sick, wounded and pregnant; 2 working roles (guard, scavenger,
+// builder, medic); 3 everyone else. Tiers 0 and 1 are never cut by the rationing level. rules.priority may hold any numbers.
+const TIER={child:0,sick:1,role:2,rest:3}, EXEMPT_TIER=1, WORK_ROLES=['guard','scavenger','builder','medic'];
 function priorities(people,minute=0){ const pr={};
-  for(const p of people){ if(p.alive===false) continue; pr[p.id]=isChild(p,minute)||isSick(p)?0:['guard','scavenger','builder'].includes(p.role)?1:2; }
+  for(const p of people){ if(p.alive===false) continue; pr[p.id]=isChild(p,minute)?TIER.child:isSick(p)?TIER.sick:WORK_ROLES.includes(p.role)?TIER.role:TIER.rest; }
   return pr; }
+const tierIn=(pr,id)=>pr[id]==null?TIER.rest:pr[id];
 // what the rules allow each person before the stores are counted (the yardstick for a real shortfall)
 function allowance(demands,rules={}){ const lv=LEVELS[rules.ration]||LEVELS.full, pr=rules.priority||{}, out={};
-  for(const [id,d] of Object.entries(demands)){ const f=pr[id]===0?1:null; out[id]={water:(d.water||0)*(f||lv.water),food:(d.food||0)*(f||lv.food)}; } return out; }
-// demands {[id]:{water:L, food:kcal}}; rules {ration:'full'|'reduced'|'survival', priority:{[id]:tier}}
+  for(const [id,d] of Object.entries(demands)){ const ex=tierIn(pr,id)<=EXEMPT_TIER; out[id]={water:(d.water||0)*(ex?1:lv.water),food:(d.food||0)*(ex?1:lv.food)}; } return out; }
+// how a tier that cannot be served in full shares what is left: 'ordered' serves people in full one after another
+// (rules.order, a list of ids, then by id), 'equal' cuts everyone in proportion. Water defaults to ordered: an equal cut
+// in a water shortage dehydrates everyone at once (people.md), so some are kept whole instead. Food defaults to equal.
+const SHARE={water:'ordered',food:'equal'};
+// demands {[id]:{water:L, food:kcal}}; rules {ration:'full'|'reduced'|'survival', priority:{[id]:tier}, share:{water,food}, order:[ids]}
 // returns {[id]:{water, food, cooked}} where cooked is the share of the food that came as cooked meals
-function ration(stores,demands,rules={},minute=0){ const lv=LEVELS[rules.ration]||LEVELS.full, pr=rules.priority||{}, out={}, ids=Object.keys(demands);
+function ration(stores,demands,rules={},minute=0){ const pr=rules.priority||{}, out={}, ids=Object.keys(demands), allow=allowance(demands,rules);
+  const order=rules.order||[], rank=id=>{ const i=order.indexOf(id); return i<0?1e9:i; };
   for(const id of ids) out[id]={water:0,food:0,cooked:0};
-  const tierOf=id=>pr[id]==null?2:pr[id];
   for(const res of ['water','food']){
-    const allow={}; for(const id of ids) allow[id]=Math.max(0,(demands[id][res]||0))*(tierOf(id)===0?1:lv[res]);
+    const mode=(rules.share||{})[res]||SHARE[res], tiers=[...new Set(ids.map(id=>tierIn(pr,id)))].sort((a,b)=>a-b);
     let avail=res==='water'?amount(stores,'water'):edibleKcal(stores), total=0;
-    for(const tier of [0,1,2]){ const who=ids.filter(id=>tierOf(id)===tier), want=who.reduce((a,id)=>a+allow[id],0); if(!want) continue;
-      const share=Math.min(1,avail/want); for(const id of who){ out[id][res]=allow[id]*share; total+=allow[id]*share; } avail-=want*share; }
+    for(const tier of tiers){ const who=ids.filter(id=>tierIn(pr,id)===tier), want=who.reduce((a,id)=>a+Math.max(0,allow[id][res]),0); if(!want) continue;
+      if(mode==='ordered'&&want>avail) for(const id of who.slice().sort((a,b)=>rank(a)-rank(b)||(a<b?-1:1))){ const g=Math.min(Math.max(0,allow[id][res]),avail); out[id][res]=g; total+=g; avail-=g; }
+      else { const share=Math.min(1,avail/want); for(const id of who){ const g=Math.max(0,allow[id][res])*share; out[id][res]=g; total+=g; } avail-=want*share; } }
     if(res==='water') take(stores,'cat:water',total,'L');
     else { const got=[]; let left=total;   // edible food only, most perishable first (meals, produce, then the cans)
       for(const l of stores.lots.filter(l=>ITEMS[l.item].kcal&&!ITEMS[l.item].tags.includes('needscook')).sort((a,b)=>daysLeft(a)-daysLeft(b)||a.at-b.at)){
@@ -131,8 +139,8 @@ function ration(stores,demands,rules={},minute=0){ const lv=LEVELS[rules.ration]
   return out; }
 
 // ---------- needs of a holder for valuation and urgency: daily use per category ----------
-// food kcal, water L, the rest in default-item units (med kits, scrap parts, L gasoline, field gear, lumber, trade goods)
-const PER_HEAD={food:2000,water:6,medicine:.02,tools:.03,fuel:.5,gear:.02,shelter:.03,goods:.02};
+// food kcal, water L (people.md: about 2,250 kcal and 13 L a day for an adult in early summer), the rest in default-item units (med kits, scrap parts, L gasoline, field gear, lumber, trade goods)
+const PER_HEAD={food:2250,water:13,medicine:.02,tools:.03,fuel:.5,gear:.02,shelter:.03,goods:.02};
 const TARGET={food:30,water:14,medicine:60,tools:60,fuel:60,gear:60,shelter:60,goods:60};   // days of supply that feel comfortable
 const needOf=(heads,mult={})=>{ const n={}; for(const c of LOOT) n[c]=PER_HEAD[c]*heads*(mult[c]==null?1:mult[c]); return n; };
 const daysOf=(stores,need,cat)=>need[cat]>0?amount(stores,cat)/need[cat]:Infinity;
@@ -142,7 +150,7 @@ const daysOf=(stores,need,cat)=>need[cat]>0?amount(stores,cat)/need[cat]:Infinit
 // {L:x} for litres; min = the least the recipe runs on (it takes up to the full amount).
 // Yields at skill 2 are the listed ones; skill s gives ×clamp(0.7+0.15s, 0.5, 1.5); cooking keeps min(1, 0.9 × that) of the kcal. Each amenity unit runs a recipe once a day.
 const RECIPES={
-  water:   {kind:'haul',  skill:null,   hours:3, needs:'well',      in:{},                                  out:{tankwater:60}, cat:'water', label:'draw and carry water'},
+  water:   {kind:'haul',  skill:null,   hours:3, needs:'well',      in:{},                                  out:{tankwater:150}, cat:'water', label:'draw and carry water'},
   garden:  {kind:'grow',  skill:'grow', hours:4, needs:'garden',    in:{'cat:water':{L:25}},                out:{produce:8},    cat:'food',  label:'tend a garden plot'},
   tools:   {kind:'craft', skill:'craft',hours:4, needs:'workshop',  in:{scrap:3},                           out:{handtools:1},  cat:'tools', label:'make tools from scrap'},
   cook:    {kind:'cook',  skill:'cook', hours:2, needs:'kitchen',   in:{'tag:cookable':{kcal:5600,min:1400},'cat:fuel':{n:3,how:'cheap'}}, out:{meal:'kcal'}, cat:'food', label:'cook meals'},
@@ -155,13 +163,41 @@ function canRun(stores,key){ const r=RECIPES[key];
     if(ordered(stores,sel).reduce((a,l)=>a+l.n*(m==='n'?1:ITEMS[l.item][m]),0)<want-EPS) return false; } return true; }
 // tasks for today's open slots: {id, kind, skill, where, hours, urgency, recipe}; urgency rises as the output runs short
 function offer(S,minute){ const day=Math.floor(minute/DAY), out=[];
+  const dry=daysOf(S.stores,S.need,'water')<TARGET.water/2;   // under 7 days of water, nothing that uses water is offered: people drink first
   for(const [key,r] of Object.entries(RECIPES)){ const slots=(S.amen||{})[r.needs]||0; if(!slots||!canRun(S.stores,key)) continue;
+    if(dry&&Object.keys(r.in).includes('cat:water')) continue;
     const d=key==='cook'?count(S.stores,'meal')*ITEMS.meal.kcal/Math.max(1,S.need.food)/2:daysOf(S.stores,S.need,r.cat)/TARGET[r.cat];
     const urgency=r2(clamp(1-d,0,1));
     for(let k=0;k<slots;k++){ const id=`${key}:${day}:${k}`; if(!S.done[id]) out.push({id,kind:r.kind,skill:r.skill,where:null,hours:r.hours,urgency,recipe:key}); } }
   return out.sort((a,b)=>b.urgency-a.urgency); }
-// the task was worked: take the inputs, add the outputs. worker = survivor record (for skills) or null.
+// ---------- care: a medic treats someone; the integration turns the result into People.treat(patient, kind, quality) ----------
+// supplies tried in order for each condition kind (people.md kinds), with the quality each adds; hours per treatment.
+// quality = 0.25 + 0.1 × medic skill + the supply's bonus + 0.1 at an infirmary, at most 1. Without supplies, care alone.
+const CARE={
+  wound:     {hours:1,  use:[['bandage',1,.3],['medkit',1,.4]]},
+  infection: {hours:.5, use:[['antibiotics',1,.5],['medkit',1,.2]]},
+  illness:   {hours:.5, use:[['painkillers',1,.2],['medkit',1,.2]]},
+  heatstroke:{hours:1,  use:[['cat:water',{L:3},.3]]},
+  chronic:   {hours:.5, use:[['painkillers',1,.2]]},
+};
+const CARE_BELOW=.5;   // a condition treated below this quality is offered again (once a day per patient and kind)
+// treatment tasks for the people at base: {id, kind:'nurse', skill:'medic', where, hours, urgency, patient, condition}
+function offerCare(S,people,minute){ const day=Math.floor(minute/DAY), out=[];
+  for(const p of people){ if(p.alive===false||(p.at&&p.at!=='base')) continue;
+    for(const c of p.conditions||[]){ const care=CARE[c.kind]; if(!care||(c.treated||0)>=CARE_BELOW) continue;
+      const id=`treat:${day}:${p.id}:${c.kind}`; if(S.done[id]||out.some(t=>t.id===id)) continue;
+      out.push({id,kind:'nurse',skill:'medic',where:null,hours:care.hours,urgency:r2(clamp(c.severity*1.5,.1,1)),patient:p.id,condition:c.kind}); } }
+  return out.sort((a,b)=>b.urgency-a.urgency); }
+function care(S,taskId,medic,minute){ const [,,patient,kind]=taskId.split(':'), cr=CARE[kind]; if(!cr) return {ok:false,why:'no such care'};
+  let bonus=0; const used=[];
+  for(const [sel,v,b] of cr.use){ const sp=inSpec(v), m=sp.L?'L':'n', want=sp.L||sp.n;
+    if(ordered(S.stores,sel).reduce((a,l)=>a+l.n*(m==='n'?1:ITEMS[l.item][m]),0)>=want-EPS){ used.push(...take(S.stores,sel,want,m)); bonus=b; break; } }
+  const quality=r2(clamp(.25+.1*(medic?(medic.skills||{}).medic||0:0)+bonus+((S.amen||{}).infirmary?.1:0),0,1));
+  S.done[taskId]=minute; return {ok:true,treat:{patient,kind,quality,by:medic?medic.id:null},used:used.map(u=>({item:u.item,n:r2(u.n)})),made:{}}; }
+// the task was worked: take the inputs, add the outputs (or, for care, say who was treated and how well).
+// worker = survivor record (for skills) or null.
 function work(S,taskId,worker,minute){ const [key,day]=taskId.split(':'), r=RECIPES[key];
+  if(key==='treat'){ if(S.done[taskId]) return {ok:false,why:'already done'}; const res=care(S,taskId,worker,minute); for(const k in S.done) if(minute-S.done[k]>2*DAY) delete S.done[k]; return res; }
   if(!r) return {ok:false,why:'no such recipe'}; if(S.done[taskId]) return {ok:false,why:'already done'};
   if(!canRun(S.stores,key)) return {ok:false,why:'missing inputs'};
   const used=[], made={}; let kcal=0;
@@ -254,7 +290,8 @@ const TRAIT_BIAS={
   cautious:{curfew:.6}, nervous:{curfew:.8}, 'night-owl':{curfew:-.8}, 'free-spirit':{curfew:-.8,runs:{leader:-.4}},
   brave:{runs:{volunteers:.4}}, lazy:{runs:{volunteers:.3,rota:-.4}}, fair:{runs:{rota:.4}}, kind:{runs:{rota:.2}},
   loyal:{runs:{leader:.4}}, ambitious:{runs:{leader:.2}} };
-const isAdult=(p,minute)=>p.alive!==false&&ageYears(p,minute)>=16;
+// adults (16+) who are still here: alive, not walked out (people marks at:'gone') and not on the settlement's leavers list
+const isAdult=(p,minute,S)=>p.alive!==false&&p.at!=='gone'&&!(S&&S.left.some(l=>l.id===p.id))&&ageYears(p,minute)>=16;
 const moodSum=(p,minute)=>(p.mood||[]).reduce((a,m)=>a+(m.until==null||m.until>=minute?m.value:0),0);
 // support (−1..1) of survivor p for an option of a rule, from stores, threat, hunger, role, traits and opinion of the leader.
 // ctx: {foodDays, waterDays, threat 0..1, leader id}
@@ -284,11 +321,13 @@ function assign(S,people,id,role,hooks={}){ if(role!=null&&!ROLES.includes(role)
   if(hooks.setRole) hooks.setRole(p,role); return true; }
 function context(S,ctx={}){ return {foodDays:ctx.foodDays!=null?ctx.foodDays:daysOf(S.stores,S.need,'food'), waterDays:ctx.waterDays!=null?ctx.waterDays:daysOf(S.stores,S.need,'water'),
   threat:ctx.threat||0, shortfall:ctx.shortfall||0, leader:S.leader}; }
-// change a rule: supporters of the new option get +3 for 3 days, opponents −3, and legitimacy moves by 5 × the average support
+// change a rule: the old rule's mood is removed (hooks.removeMood) and the new one set; supporters of the new option get +3
+// for 3 days, opponents −3, and legitimacy moves by 5 × the average support
 function setRule(S,people,rule,option,ctx={},hooks={},minute=0){ if(!RULES[rule]||!RULES[rule].includes(option)) throw new Error('bad rule '+rule+'='+option);
-  S.rules[rule]=option; const c=context(S,ctx); let sum=0,n=0;
-  for(const p of people){ if(!isAdult(p,minute)) continue; const s=support(p,rule,option,c); sum+=s; n++;
-    if(hooks.addMood&&Math.abs(s)>=.2) hooks.addMood(p,'decision:'+rule,s>0?3:-3,72); }
+  S.rules[rule]=option; const c=context(S,ctx), idx=RULES[rule].indexOf(option); let sum=0,n=0;
+  for(const p of people){ if(!isAdult(p,minute,S)) continue; const s=support(p,rule,option,c); sum+=s; n++;
+    if(hooks.removeMood) hooks.removeMood(p,'rule:'+rule);   // the old rule's mood goes at once, the new one starts now
+    if(hooks.addMood){ hooks.addMood(p,'rule:'+rule,r2(RULE_MOOD[rule][idx]+SUPPORT_MOOD*s),24); if(Math.abs(s)>=.2) hooks.addMood(p,'decision:'+rule,s>0?3:-3,72); } }
   const avg=n?sum/n:0; S.legit=clamp(S.legit+5*avg,0,100); return avg; }
 // daily civics: rule moods, support, legitimacy, unrest and who leaves. ctx: {threat, shortfall (0..1 of demand unmet yesterday)}
 // legitimacy moves 15% a day towards 50 + 30 × average stance + 20 × average opinion of the leader / 100 − 30 × shortfall
@@ -297,7 +336,7 @@ function setRule(S,people,rule,option,ctx={},hooks={},minute=0){ if(!RULES[rule]
 const UNREST={opp:10,mood:.25,short:12,calm:6,decay:1.5,leaveAt:60,leaveSpan:400};
 // a survivor's overall stance: rationing weighs half, curfew and runs a quarter each, opposition counts double
 const RULE_WEIGHT={ration:.5,curfew:.25,runs:.25};
-function civicsDay(S,people,ctx={},hooks={},minute=0){ const c=context(S,ctx), adults=people.filter(p=>isAdult(p,minute)), sup={}, departures=[];
+function civicsDay(S,people,ctx={},hooks={},minute=0){ const c=context(S,ctx), adults=people.filter(p=>isAdult(p,minute,S)), sup={}, departures=[];
   let all=0,n=0,op=0,on=0;
   for(const p of adults){ const s={}; let ps=0;
     for(const rule of Object.keys(RULES)){ const v=support(p,rule,S.rules[rule],c); s[rule]=v; ps+=v;
@@ -308,12 +347,14 @@ function civicsDay(S,people,ctx={},hooks={},minute=0){ const c=context(S,ctx), a
     S.unrest[p.id]=r2(clamp(u,0,100)); }
   const avg=n?all/n:0, target=S.leader?50+30*avg+20*(on?op/on:0)/100-30*c.shortfall:25;
   S.legit=r2(clamp(S.legit+(target-S.legit)*.15,0,100));
-  for(const p of adults){ const u=S.unrest[p.id]; if(u>UNREST.leaveAt&&rand(S)<(u-UNREST.leaveAt)/UNREST.leaveSpan){ departures.push(p.id); S.left.push({id:p.id,minute,unrest:u}); delete S.unrest[p.id]; if(S.roles[p.id]) assign(S,people,p.id,null,hooks); } }
+  for(const p of adults){ const u=S.unrest[p.id]; if(u>UNREST.leaveAt&&rand(S)<(u-UNREST.leaveAt)/UNREST.leaveSpan){ departures.push(p.id); S.left.push({id:p.id,minute,unrest:u}); delete S.unrest[p.id]; clearMoods(p,hooks); if(S.roles[p.id]) assign(S,people,p.id,null,hooks); } }
   return {support:sup,avgSupport:r2(avg),legit:S.legit,departures}; }
 // exile: the community sends someone away (a decision; mood hooks for the rest are the caller's)
-function exile(S,people,id,hooks={},minute=0){ if(S.roles[id]) assign(S,people,id,null,hooks); S.left.push({id,minute,exiled:true}); delete S.unrest[id]; return id; }
+// settlement moods all expire within 3 days, none use until:null; this removes them at once (departure, exile)
+function clearMoods(p,hooks={}){ if(!hooks.removeMood||!p) return; for(const r of Object.keys(RULES)){ hooks.removeMood(p,'rule:'+r); hooks.removeMood(p,'decision:'+r); } }
+function exile(S,people,id,hooks={},minute=0){ if(S.roles[id]) assign(S,people,id,null,hooks); clearMoods(people.find(q=>q.id===id),hooks); S.left.push({id,minute,exiled:true}); delete S.unrest[id]; return id; }
 // who goes on a run under the run rule: volunteers (the most willing), a rota (in turn), or the leader's picks (best shots, scavengers first)
-function pickRunners(S,people,n,minute=0){ const pool=people.filter(p=>isAdult(p,minute)&&p.at!=='away'&&(p.at==null||p.at==='base')&&!isSick(p)&&p.id!==S.leader);
+function pickRunners(S,people,n,minute=0){ const pool=people.filter(p=>isAdult(p,minute,S)&&p.at!=='away'&&(p.at==null||p.at==='base')&&!isSick(p)&&p.id!==S.leader);
   if(S.rules.runs==='rota'){ const ids=pool.map(p=>p.id).sort(), out=[]; for(let k=0;k<Math.min(n,ids.length);k++) out.push(ids[(S.rota+k)%ids.length]); S.rota=(S.rota+out.length)%Math.max(1,ids.length); return out; }
   const score=S.rules.runs==='leader'?p=>((p.skills||{}).shoot||0)+(p.role==='scavenger'?2:0)
     :p=>((p.traits||[]).includes('brave')?2:0)-((p.traits||[]).includes('lazy')?2:0)+(p.role==='scavenger'?1.5:0)+((p.body||{}).energy==null?1:p.body.energy)-(S.unrest[p.id]||0)/50;
@@ -321,15 +362,15 @@ function pickRunners(S,people,n,minute=0){ const pool=people.filter(p=>isAdult(p
 // factions (stub): who would pick which option of each rule
 function factions(S,people,ctx={},minute=0){ const c=context(S,ctx), out={};
   for(const rule of Object.keys(RULES)){ out[rule]={}; for(const o of RULES[rule]) out[rule][o]=[];
-    for(const p of people){ if(!isAdult(p,minute)) continue; let best=null,bv=-2; for(const o of RULES[rule]){ const v=support(p,rule,o,c); if(v>bv){ bv=v; best=o; } } out[rule][best].push(p.id); } }
+    for(const p of people){ if(!isAdult(p,minute,S)) continue; let best=null,bv=-2; for(const o of RULES[rule]){ const v=support(p,rule,o,c); if(v>bv){ bv=v; best=o; } } out[rule][best].push(p.id); } }
   return out; }
 // curfew effects for other systems: share of night exposure kept, and whether outside work is barred at a time of day
 const CURFEW={none:{exposure:1,from:null,to:null},dusk:{exposure:.6,from:20*60,to:5*60},strict:{exposure:.3,from:19*60,to:6*60}};
 function curfewBlocks(rules,minute){ const c=CURFEW[rules.curfew||'none']; if(c.from==null) return false; const m=((minute%DAY)+DAY)%DAY; return m>=c.from||m<c.to; }
 
 return {VERSION,DAY,LIFE_RATIO,LOOT,ITEMS,DEFAULT_ITEM,newStores,add,receive,take,count,amount,edibleKcal,kgOf,placeLots,spoilRate,spoil,SPOIL,
-  LEVELS,LEVEL_NAMES,priorities,allowance,ration,ageYears,isChild,isSick,PER_HEAD,TARGET,needOf,daysOf,RECIPES,skillMult,canRun,offer,work,
+  LEVELS,LEVEL_NAMES,TIER,SHARE,priorities,allowance,ration,ageYears,isChild,isSick,PER_HEAD,TARGET,needOf,daysOf,RECIPES,skillMult,canRun,offer,work,CARE,offerCare,
   SCARCITY,scarcity,valueOf,bundleValue,move,makeTrader,restock,margin,proposals,fair,visit,traders,REP,FLOOR,
-  ROLES,RULES,RULE_MOOD,TRAIT_BIAS,support,newState,assign,setRule,civicsDay,exile,pickRunners,factions,CURFEW,curfewBlocks,rand};
+  ROLES,RULES,RULE_MOOD,TRAIT_BIAS,support,newState,assign,setRule,civicsDay,clearMoods,exile,pickRunners,factions,CURFEW,curfewBlocks,rand};
 })();
 if(typeof module!=='undefined') module.exports=Settlement;
