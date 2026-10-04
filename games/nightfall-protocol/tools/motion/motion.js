@@ -94,7 +94,7 @@ const HG={}, hg=(k,f)=>HG[k]||(HG[k]=f());
 function buildHands(fig){ fig.fingers=[]; fig.thumbs=[];
   fig.hand.forEach((h,i)=>{ const side=i?1:-1, meshes=h.children.filter(c=>c.isMesh), mitten=meshes[0], thumb=meshes[2]||null;
     if(!mitten){ fig.fingers.push([]); fig.thumbs.push([]); return; }
-    mitten.geometry.computeBoundingBox(); const bb=mitten.geometry.boundingBox, k=(bb.max.z-bb.min.z)/.084, skin=mitten.material;
+    mitten.geometry.computeBoundingBox(); const bb=mitten.geometry.boundingBox, k=(bb.max.z-bb.min.z)/.084, skin=mitten.material; fig.handK=k;
     const ink=mitten.children.find(c=>c.userData&&c.userData.ink&&c.isMesh), inkM=ink&&ink.material;
     const add=(parent,geo,x,y,z,sx=1,sy=1,sz=1)=>{ const m=new THREE.Mesh(geo,skin); m.position.set(x,y,z); m.scale.set(sx,sy,sz); m.castShadow=true; parent.add(m);
       if(inkM){ const o=new THREE.Mesh(geo,inkM); o.userData.ink=true; o.castShadow=false; m.add(o); } return m; };
@@ -106,12 +106,12 @@ function buildHands(fig){ fig.fingers=[]; fig.thumbs=[];
     const fingers=FING.map(F=>{ const chain=[]; let parent=h, y=-.088*k, z=F.z*k, r=F.r*k;
       PHAL.forEach((pf,j)=>{ const len=F.len*pf*k, g=new THREE.Group(); g.position.set(0,y,j?0:z); parent.add(g);
         const geo=hg('ph'+len.toFixed(4)+r.toFixed(4),()=>{ const c=new THREE.CylinderGeometry(r*.86,r,len,5); c.translate(0,-len/2,0); return c; });
-        add(g,geo,0,0,0); add(g,ball,0,0,0,r*1.05,r*1.05,r*1.05); chain.push(g); parent=g; y=-len; r*=.88; });
+        g.userData.seg={len,r}; add(g,geo,0,0,0); add(g,ball,0,0,0,r*1.05,r*1.05,r*1.05); chain.push(g); parent=g; y=-len; r*=.88; });
       return chain; });
-    const thumbs=[]; { let parent=h; const r0=.0098*k, base=new THREE.Group(); base.position.set(side*-.004*k,-.022*k,.036*k); h.add(base);
+    const thumbs=[]; { let parent=h; const r0=.0098*k, base=new THREE.Group(); base.position.set(side*.006*k,-.022*k,.036*k); h.add(base);
       [.04,.032].forEach((len,j)=>{ len*=k; const g=j?new THREE.Group():base; if(j){ g.position.set(0,-.04*k,0); thumbs[0].add(g); }
         const rr=r0*(j?.85:1), geo=hg('th'+len.toFixed(4)+rr.toFixed(4),()=>{ const c=new THREE.CylinderGeometry(rr*.85,rr,len,5); c.translate(0,-len/2,0); return c; });
-        add(g,geo,0,0,0); add(g,ball,0,0,0,rr*1.1,rr*1.1,rr*1.1); thumbs.push(g); }); }
+        g.userData.seg={len,r:rr}; add(g,geo,0,0,0); add(g,ball,0,0,0,rr*1.1,rr*1.1,rr*1.1); thumbs.push(g); }); }
     fig.fingers.push(fingers); fig.thumbs.push(thumbs); setHand(fig,i,{curl:.3}); }); }
 // curl 0 (flat) to 1 (wrapped round a grip); index alone for a trigger finger; thumb 0 (alongside) to 1 (across the palm)
 function setHand(fig,i,{curl=.3,index,thumb,spread=.15}){ const side=i?1:-1, c=side*-1, F=fig.fingers&&fig.fingers[i]; if(!F||!F.length) return;
@@ -165,7 +165,7 @@ const WOOD='#7a5236', STEEL='#34373a', DARK='#232426', BRASS='#b08a3e';
 const WEAPONS={
   // a Mauser-pattern bolt-action rifle, 1.1 m
   rifle:{kind:'rifle', len:1.1, butt:V(0,.005,-.4), muzzle:V(0,.045,.7), flip:.1, back:.035, cycle:'bolt', reload:3.0,
-    grip:[{p:V(0,-.005,0),axis:V(.1,-.55,.83),palm:V(1,0,0),index:.5}, {p:V(.0,-.018,.3),axis:V(-.5,.3,.81),palm:V(-.35,.94,0)}],
+    grip:[{p:V(0,-.02,-.035),axis:V(.05,-.85,.5),palm:V(1,0,0),index:.5}, {p:V(0,-.005,.24),axis:V(-.85,0,.5),palm:V(0,1,0)}],
     build(){ const g=new THREE.Group();
       part(g,box(.042,.12,.26),WOOD,0,-.025,-.27,-.1); part(g,box(.036,.055,.13),WOOD,0,-.012,-.07,-.25); part(g,box(.046,.05,.52),WOOD,0,.012,.24);
       part(g,box(.032,.036,.22),STEEL,0,.044,.04); part(g,cyl(.0105,.5),STEEL,0,.046,.45); part(g,box(.006,.016,.012),STEEL,0,.062,.69);
@@ -176,7 +176,7 @@ const WEAPONS={
       return {g,bolt,mag:clip}; }},
   // a service pistol, 0.21 m
   pistol:{kind:'pistol', len:.21, muzzle:V(0,.035,.15), flip:.32, back:.025, cycle:'slide', reload:1.9,
-    grip:[{p:V(0,-.02,0),axis:V(.05,-.6,.8),palm:V(1,0,0),index:.45}, {p:V(.034,-.035,-.005),axis:V(-.55,-.35,.76),palm:V(-1,.1,.1)}],
+    grip:[{p:V(0,-.035,-.015),axis:V(0,-.3,.95),palm:V(1,0,0),index:.45}, {p:V(.03,-.045,-.01),axis:V(-.1,-.45,.89),palm:V(-1,0,0)}],
     build(){ const g=new THREE.Group();
       part(g,box(.028,.105,.052),DARK,0,-.035,-.018,-.22); part(g,box(.026,.012,.13),DARK,0,.006,.05); part(g,box(.008,.022,.04),DARK,0,-.008,.035);
       const slide=new THREE.Group(); g.add(slide); part(slide,box(.03,.034,.2),STEEL,0,.034,.045); part(slide,box(.005,.008,.01),STEEL,0,.054,.13); part(slide,cyl(.006,.012),DARK,0,.034,.15);
@@ -215,8 +215,8 @@ function holdTarget(fig,M,name,s,out){ const W=M.w.spec, R=M.R, torso=fig.torso;
     case 'reload': { q=aimQ(-.5,0,.4); const c=chest(); p=c.add(V(-.02,-.14,.3).applyQuaternion(aimQ(0))); break; }
     case 'holster': q=torsoQ().multiply(Q().setFromEuler(_e.set(Math.PI/2,0,0))); p=toLocal(fig,fig.hips.localToWorld(V(-.19,-.06,.02))); hands=[0,0]; break;
     default: { // in the right hand: the weapon follows the hand, the arm keeps its swing
-      const h=fig.hand[0]; h.updateWorldMatrix(true,false); h.getWorldQuaternion(_q); qYaw(-fig.root.rotation.y,_q2); q=_q2.multiply(_q).clone().multiply(Q().setFromEuler(_e.set(-.25,0,0)));
-      p=toLocal(fig,h.localToWorld(V(0,-.085,.012))); hands=[0,0]; M.inHand=1; } }
+      const h=fig.hand[0]; h.updateWorldMatrix(true,false); h.getWorldQuaternion(_q); qYaw(-fig.root.rotation.y,_q2); q=_q2.multiply(_q).clone().multiply(Q().setFromEuler(_e.set(1.25,0,0)));   // grip across the palm like a hammer handle, muzzle down and a little forward
+      p=toLocal(fig,h.localToWorld(V(0,-.075,.005))); hands=[0,0]; M.inHand=1; } }
   out.p=p; out.q=q; out.hands=hands; return out; }
 
 // weapon-cycle timelines: each a list of [time, target] for one hand; targets are {w:Vector3} (weapon frame),
@@ -276,6 +276,9 @@ function pose(fig,M,s,def,actName,dt,dist,vr){
     T.torsoX+=.22*sw; T.headX+=.08*sw; T.shRx+=-.45*sw; T.shLx+=-.45*sw; T.elR+=.25*Math.cos(c); T.elL+=.25*Math.cos(c); T.bodyY+=-.04*(sw*.5+.5); }
   if(def.cycle==='swim'){ const t=M.t*2.2; Object.assign(T,{shRx:-1.4+Math.sin(t)*1.3,shLx:-1.4-Math.sin(t)*1.3,lgR:Math.sin(t*2)*.35,lgL:-Math.sin(t*2)*.35}); }
   if(M.w&&M.w.spec.kind==='rifle'&&(actName==='aim'||actName==='shoot')) T.headX+=.12;   // cheek on the stock
+  // a rifle is shot bladed: the body turns right so the left shoulder leads and the support hand reaches the fore-end;
+  // the neck turns the head back to the target
+  const blade=M.w&&M.w.spec.kind==='rifle'&&['aim','shoot','ready','reload'].includes(actName)?-.8:0; M.blade=(M.blade||0)+(blade-(M.blade||0))*Math.min(1,dt*8); T.torsoY+=M.blade;
   // look: spine takes part of it, the neck the rest (neck yaw is set on the head directly)
   let look=s.look||0; if(s.lookAt) look=wrap(Math.atan2(s.lookAt.x-p.x,s.lookAt.z-p.z)-fig.root.rotation.y);
   M.look=look; T.torsoY+=clamp(look,-1.2,1.2)*.5;
@@ -301,7 +304,7 @@ function pose(fig,M,s,def,actName,dt,dist,vr){
   if(M.hit>0){ const h=M.hit*M.hit; O.torsoX-=.45*h; O.headX-=.3*h; O.torsoY+=M.hitSide*.25*h; O.shRz-=.3*h; O.shLz+=.3*h; O.bodyY-=.04*h; M.hit=Math.max(0,M.hit-dt*2.2); }
   if(M.recoil>0){ const r=M.recoil; O.torsoX-=.05*r; O.headX-=.04*r; if(!M.w){ O.shRx+=.25*r; O.shLx+=.18*r; } }
   M.out=O; FigureKit.applyPose(fig,O);
-  fig.head.rotation.y=clamp(M.look-clamp(M.look,-1.2,1.2)*.5,-.8,.8)*.9;
+  fig.head.rotation.y=clamp(M.look-clamp(M.look,-1.2,1.2)*.5,-.8,.8)*.9-(M.blade||0)*.85;
   fig.root.updateMatrixWorld(true);
   // ---- solve legs and ankles to their targets ----
   if(feet) for(let i=0;i<2;i++) solveLeg(fig,M,i,feet.w[i],feet.pitch[i]);
@@ -391,7 +394,66 @@ function fingers(fig,M,def,actName,dt){ const want=[0,1].map(i=>{ const g=M.grip
     if(actName==='work') return {curl:1,thumb:.9,spread:.02};
     if(M.panic>.5) return {curl:1.05,thumb:1,spread:0};
     return {curl:.28+.1*noise(M.t*.3,20+i)+.15*M.wound,thumb:.3,spread:.18}; });
-  smoothHands(fig,M,want,dt); }
+  smoothHands(fig,M,want,dt);
+  M.contact=[null,null];
+  if(Motion.grasp!==false) for(let i=0;i<2;i++){ if(!(M.w&&(M.grip[i]==='grip'||(M.inHand&&i===0)))){ if(M.gc) M.gc[i]=null; continue; }
+    // reuse the last solve while the hand sits the same way on the weapon (within 1.5 mm and about 1.5°) and asks for
+    // the same curl; otherwise solve again
+    const h=fig.hand[i]; h.updateMatrixWorld(true); const rel=_m.copy(h.matrixWorld).invert().multiply(M.w.g.matrixWorld), e=rel.elements, cu=M.hc[i];
+    const key=[e[12],e[13],e[14],e[0],e[1],e[2],e[8],e[9],e[10],cu.curl,cu.index,cu.thumb];
+    M.gc=M.gc||[null,null]; const C=M.gc[i];
+    if(C&&C.key.every((v,n)=>Math.abs(v-key[n])<(n<3?.0015:.025))){ C.apply(); M.contact[i]=C.out; continue; }
+    const out=graspContact(fig,M,i), chains=[...fig.fingers[i],fig.thumbs[i]], rot=chains.map(ch=>ch.map(g=>[g.rotation.y,g.rotation.z]));
+    M.gc[i]={key,out,apply(){ chains.forEach((ch,a)=>ch.forEach((g,b)=>{ g.rotation.y=rot[a][b][0]; g.rotation.z=rot[a][b][1]; })); }}; M.contact[i]=out; } }
+// ---------- grasping: fingers close on the weapon until they touch it ----------
+// The weapon's own parts are the colliders: each mesh's box in its own frame (so a new model brings its own). A finger
+// closes joint by joint from the knuckle out: with the joints beyond it straight, a joint turns until its segments
+// first touch a part (found by stepping, then bisecting), and stays there; then the next joint closes. A joint that
+// meets nothing stops at the curl the hold asked for. The thumb closes the same way.
+const _p=V(), _c=V();
+function proxies(w){ if(!w.prox){ w.prox=[]; w.g.traverse(o=>{ if(o.isMesh&&!o.userData.ink){ o.geometry.computeBoundingBox(); const bb=o.geometry.boundingBox;
+      w.prox.push({o, c:bb.getCenter(V()), h:bb.getSize(V()).multiplyScalar(.5), inv:new THREE.Matrix4(), wc:V(), rad:bb.getSize(V()).length()*.5}); } }); }
+  for(const P of w.prox){ P.inv.copy(P.o.matrixWorld).invert(); P.wc.copy(P.c).applyMatrix4(P.o.matrixWorld); } return w.prox; }
+// the point where a line from p0 against dir (toward the hand) leaves the parts: the surface the palm rests on
+function surfaceAlong(list,p0,dir){ const at=t=>partDist(list,_c.copy(p0).addScaledVector(dir,-t)), st=.004;
+  let lo, hi;   // lo: inside or at the part, hi: outside
+  if(at(0)<0){ lo=0; hi=st; while(at(hi)<0&&hi<.12){ lo=hi; hi+=st; } }
+  else { hi=0; lo=-st; while(at(lo)>=0&&lo>-.08){ hi=lo; lo-=st; } if(at(lo)>=0) return p0.clone(); }
+  for(let n=0;n<6;n++){ const m=(lo+hi)/2; if(at(m)<0) lo=m; else hi=m; }
+  return p0.clone().addScaledVector(dir,-hi); }
+// signed distance from a world point to the nearest part (negative inside)
+function partDist(list,pw){ let best=1e9; for(const P of list){ _p.copy(pw).applyMatrix4(P.inv).sub(P.c);
+    const qx=Math.abs(_p.x)-P.h.x, qy=Math.abs(_p.y)-P.h.y, qz=Math.abs(_p.z)-P.h.z;
+    const d=Math.hypot(Math.max(qx,0),Math.max(qy,0),Math.max(qz,0))+Math.min(Math.max(qx,qy,qz),0); if(d<best) best=d; } return best; }
+// how deep segments k.. of a chain sink into the parts (0 when clear)
+function chainHit(chain,k,list){ let worst=0; for(let j=k;j<chain.length;j++){ const g=chain[j], S=g.userData.seg;
+    for(const t of [.3,.65,1]){ _c.set(0,-S.len*t,0); g.localToWorld(_c); const pen=S.r*.92-partDist(list,_c); if(pen>worst) worst=pen; } } return worst; }
+function graspContact(fig,M,i){ const hand=fig.hand[i], c=i?-1:1, out={touch:0,chains:0,pen:0,gap:0};
+  hand.updateMatrixWorld(true); const hp=hand.getWorldPosition(V());
+  const list=proxies(M.w).filter(P=>P.wc.distanceTo(hp)<P.rad+.16); if(!list.length) return out;
+  for(const chain of [...fig.fingers[i],fig.thumbs[i]]){ if(!chain||!chain.length) continue; out.chains++;
+    const want=chain.map(g=>Math.abs(g.rotation.z)); let touched=false;
+    // the thumb root can also swing round (about its own y) to clear the grip: take the first swing that frees it
+    if(chain===fig.thumbs[i]){ const T0=chain[0], y0=T0.rotation.y, side=i?1:-1; chain[1].rotation.z=0;
+      for(const dy of [0,.35,.7,1.05,-.35]){ T0.rotation.y=y0+side*-dy; let free=false;
+        for(let n=0;n<=8&&!free;n++){ T0.rotation.z=c*(-.9+(want[0]+1.0)*n/8); T0.updateMatrixWorld(true); if(chainHit(chain,0,list)<=0) free=true; }
+        if(free) break; }
+      T0.rotation.z=c*want[0]; }
+    for(let k=0;k<chain.length;k++){ const g=chain[k], lim=want[k]*1.35+.12, set=a=>{ g.rotation.z=c*a; g.updateMatrixWorld(true); };
+      for(let j=k+1;j<chain.length;j++) chain[j].rotation.z=0;
+      // scan from open (a little back for fingers, well back for the thumb) to past the asked curl: the first free
+      // angle starts the search, the first touch after it ends it; with nothing free, keep the least sunk angle
+      const open=chain===fig.thumbs[i]?-.9:-.25, N=12; let lo=null, hi=-1, best=want[k], bp=1e9;
+      for(let n=0;n<=N;n++){ const a=open+(lim-open)*n/N; set(a); const pen=chainHit(chain,k,list);
+        if(pen<=0){ if(lo===null||hi<0) lo=a; } else { if(pen<bp){ bp=pen; best=a; } if(lo!==null){ hi=a; break; } } }
+      if(lo===null){ set(best); continue; }
+      if(hi<0){ set(Math.max(lo,Math.min(want[k],lim))); continue; }
+      for(let n=0;n<5;n++){ const m=(lo+hi)/2; set(m); if(chainHit(chain,k,list)>0) hi=m; else lo=m; }
+      set(lo); touched=true; }
+    if(touched) out.touch++;
+    const tip=chain[chain.length-1], S=tip.userData.seg; _c.set(0,-S.len,0); tip.localToWorld(_c); const d=partDist(list,_c)-S.r;
+    out.pen=Math.max(out.pen,chainHit(chain,0,list)); if(touched) out.gap=Math.max(out.gap,Math.max(0,d)); }
+  return out; }
 function smoothHands(fig,M,want,dt){ if(!M.hc) M.hc=want.map(w=>Object.assign({index:w.curl},w)); const k=Math.min(1,dt*14);
   for(let i=0;i<2;i++){ const h=M.hc[i], w=want[i], wi=w.index===undefined?w.curl:w.index; h.curl+=(w.curl-h.curl)*k; h.index+=(wi-h.index)*k; h.thumb+=(w.thumb-h.thumb)*k; h.spread+=(w.spread-h.spread)*k; setHand(fig,i,h); } }
 function weapon(fig,M,s,def,actName,dt){ const w=M.w; M.grip=[null,null];
@@ -407,6 +469,10 @@ function weapon(fig,M,s,def,actName,dt){ const w=M.w; M.grip=[null,null];
   if(!w.pos){ w.pos=H.p.clone(); w.q.copy(H.q); } else { w.pos.lerp(H.p,k); w.q.slerp(H.q,k); }
   if(M.inHand){ w.pos.copy(H.p); w.q.copy(H.q); }
   w.g.position.copy(w.pos); w.g.quaternion.copy(w.q); w.g.updateMatrixWorld(true);
+  // carried in the hand: slide the weapon along the palm's normal until its grip rests on the palm
+  if(M.inHand&&fig.fingers){ const h=fig.hand[0], palm=V(1,0,0).applyQuaternion(h.getWorldQuaternion(Q())), pc=h.localToWorld(V(0,-.05,0)), g0=w.g.localToWorld(spec.grip[0].p.clone());
+    const sfc=surfaceAlong(proxies(w),g0,palm), want=pc.clone().addScaledVector(palm,.0118*(fig.handK||1)), d=palm.dot(want.sub(sfc));
+    const shift=toLocal(fig,w.g.getWorldPosition(V()).addScaledVector(palm,d)); w.pos.copy(shift); w.g.position.copy(shift); w.g.updateMatrixWorld(true); }
   // cycles: bolt after a rifle shot, the reloads; the hands follow their timelines, the moving parts follow the hands
   let tgt=[null,null], magOn=false;
   if(M.wc){ const tl=TL[M.wc.type]; M.wc.t+=dt; const tt=M.wc.t;
@@ -424,7 +490,9 @@ function weapon(fig,M,s,def,actName,dt){ const w=M.w; M.grip=[null,null];
     const g=spec.grip[i], wq=w.g.getWorldQuaternion(Q()), axisW=g.axis.clone().applyQuaternion(wq), palmW=g.palm&&g.palm.clone().applyQuaternion(wq);
     let gp=w.g.localToWorld(g.p.clone());
     if(tgt[i]){ const [a,b,e]=tgt[i]; const pa=a?resolve(a):gp.clone(), pb=b?resolve(b):gp.clone(); gp=pa.lerp(pb,e); }
-    const wrist=gp.clone().sub(axisW.clone().multiplyScalar(.075));
+    // seat the palm on the grip's surface: from the grip point, find where the part ends on the palm's side
+    if(palmW&&!(tgt[i]&&(tgt[i][0]||tgt[i][1]))){ gp=surfaceAlong(proxies(w),gp,palmW).addScaledVector(palmW,-.0118*(fig.handK||1)); }
+    const wrist=gp.clone().sub(axisW.clone().multiplyScalar(palmW?.055:.075));
     const hw=tgt[i]?Math.max(M.handW[i],1):M.handW[i];
     const busyHand=tgt[i]&&(tgt[i][0]||tgt[i][1]);
     if(hw>.01) solveArm(fig,M,i,wrist,axisW,clamp(hw,0,1),busyHand?null:palmW); else fig.hand[i].quaternion.slerp(_q.identity(),Math.min(1,dt*8));
@@ -618,5 +686,5 @@ function reset(fig){ const M=fig.motion; if(!M) return; M.lx=fig.root.position.x
 const busy=fig=>!!(fig.motion&&(fig.motion.clip||fig.motion.rag));
 
 const reduce=typeof matchMedia==='function'&&matchMedia('(prefers-reduced-motion: reduce)').matches;
-return {update, kick, reset, arm, traverse, busy, setHand, traits, seedOf, ACTS, KEYS, BOUND, WEAPONS, reduce, _limb:limb, _fk:fk};
+return {grasp:true, _grasp:{proxies,partDist,chainHit}, update, kick, reset, arm, traverse, busy, setHand, traits, seedOf, ACTS, KEYS, BOUND, WEAPONS, reduce, _limb:limb, _fk:fk};
 })();
