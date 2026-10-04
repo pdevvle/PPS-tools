@@ -69,27 +69,40 @@ First draft in `tools/settlement/` (`settlement.js`, `test.js`, `harness.js`). I
   | survival | 50% | 75% |
 
   Water is cut less because the desert kills fast.
-- **Priority tiers** for rationing:
-  - **Tier 0**: children under 13, the sick (a condition of severity 0.3 or more) and the pregnant. Never cut, served first.
-  - **Tier 1**: guards, scavengers and builders.
-  - **Tier 2**: everyone else.
+- **Priority tiers** for rationing (served in order):
+  - **Tier 0**: children under 13.
+  - **Tier 1**: the sick, wounded and pregnant (any condition but dehydration or malnutrition at severity 0.3 or more).
+  - **Tier 2**: working roles (guard, scavenger, builder, medic).
+  - **Tier 3**: everyone else.
 
-  When a tier cannot be served in full it shares what is left in proportion, and the tiers below get nothing.
+  Tiers 0 and 1 are never cut by the level.
+  - **Sharing within a tier** (`rules.share`) when it cannot be served in full:
+    - **ordered**: people are served whole, one after another, by `rules.order` and then by id. This is the default for water, because an equal water cut dehydrates everyone within about two days (people side).
+    - **equal**: everyone is cut in proportion. This is the default for food.
   - `ration()` adds a `cooked` field (the share of kcal that came as meals) beside `water` and `food`, for people's mood.
   - `allowance()` gives what the rules allow. A shortfall is measured against that, not against appetite.
-- **Production**: recipes at amenities, once a day per amenity unit. They are offered as tasks in the contract's shape, with urgency 1 − days of supply / target.
+- **Production**: recipes at amenities, once a day per amenity unit. They are offered as tasks in the contract's shape, with urgency 1 − days of supply / target. Under 7 days of water (half the target), recipes that use water (gardens) aren't offered, so people drink first; the shared harness found gardens otherwise drink the tanks dry in a drought. Recipes that use water are not offered under 7 days of water.
 
   | Recipe | Amenity | In | Out |
   | --- | --- | --- | --- |
-  | water | well | — | 60 L |
+  | water | well | — | 150 L |
   | garden | garden plot | 25 L water | 8 kg produce |
   | tools | workshop | 3 scrap | hand tools |
   | cook | kitchen | up to 5,600 kcal of produce or flour, plus 3 units of the cheapest fuel | 700-kcal meals, 90% of the kcal |
   | medicine | infirmary | clothing and spirits | 6 bandages |
 
   Skill s scales the yield by 0.7 + 0.15s, from 0.5 to 1.5.
+- **Care**: `offerCare()` offers a `nurse`/`medic` task for each condition of someone at base treated below 0.5, one a day per patient and kind, with urgency 1.5 × severity.
+  - **Supplies**, tried in order:
+    - wound: bandage (+0.3), else med kit (+0.4);
+    - infection: antibiotics (+0.5), else med kit (+0.2);
+    - illness: painkillers (+0.2), else med kit (+0.2);
+    - heatstroke: 3 L of water (+0.3);
+    - chronic: painkillers (+0.2).
+  - **Quality** = 0.25 + 0.1 × medic skill + the supply's bonus + 0.1 at an infirmary, at most 1.
+  - **Result**: `work()` returns `treat:{patient, kind, quality, by}` for the integration to pass to `People.treat`.
 - **Needs and targets**:
-  - **Daily use per head**: 2,000 kcal, 6 L water, 0.02 med kits, 0.03 scrap, 0.5 L fuel, 0.02 gear, 0.03 lumber and 0.02 goods.
+  - **Daily use per head**: 2,250 kcal and 13 L water (people.md's adult in early summer), 0.02 med kits, 0.03 scrap, 0.5 L fuel, 0.02 gear, 0.03 lumber and 0.02 goods.
   - **Comfortable supply**: food 30 days, water 14, everything else 60.
 - **Barter value** = base × condition × scarcity.
   - Scarcity is √(target days / days on hand), from 0.35 to 3, taken at the middle of the change. Each extra unit is worth less, and the same item is worth more to whoever is short of it.
@@ -117,7 +130,9 @@ First draft in `tools/settlement/` (`settlement.js`, `test.js`, `harness.js`). I
     - rationing 0 / −4 / −10;
     - curfew 0 / −1 / −4;
     - runs +1 / 0 / −2.
-  - **Rule changes**: `decision:<rule>` is ±3 for 72 h, for anyone whose |support| ≥ 0.2.
+  - **Rule changes**: the old `rule:<rule>` is removed through `removeMood(p, key)` and the new one set at once. `decision:<rule>` is ±3 for 72 h, for anyone whose |support| ≥ 0.2.
+  - **Expiry**: no settlement modifier uses `until: null`. `clearMoods()` removes them all from someone who leaves or is exiled.
+  - **Hook time**: the `addMood` hook takes hours. `People.addMood` takes an `until` minute, so the integration wraps it as `(p, k, v, h) => People.addMood(p, k, v, minute + h*60)`.
 - **Legitimacy** (0..100) moves 15% a day towards 50 + 30 × average stance + 20 × average opinion of the leader / 100 − 30 × shortfall. With no leader the target is 25.
   - **Stance**: each survivor's is weighted rationing ½, curfew ¼ and runs ¼, with opposition counted double.
   - **Rule changes**: changing a rule moves legitimacy by 5 × the average support.
