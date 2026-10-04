@@ -91,7 +91,7 @@ function litter(out,K,x0,z0,w,d,n){
 }
 function products(out,K,x0,x1,y,z0,z1,h){ // a row of goods on a shelf
   let x=x0+.02;
-  while(x<x1-.08){ const w=(x1-x0>2?.14:.06)+K.r()*.14; if(x+w>x1) break; if(K.r()>K.gone){ const hh=h*(.45+K.r()*.5); out.push(B(x,y,z0+(z1-z0-.0)*K.r()*.15,w-.01,hh,(z1-z0)*.8,pick(K.r,PAL.product),K.r()<K.mess*.3?{rz:Math.PI/2*(K.r()<.5?1:-1)*.9}:undefined)); } x+=w; }
+  while(x<x1-.08){ const w=(x1-x0>2?.2:.12)+K.r()*.16; if(x+w>x1) break; if(K.r()>K.gone){ const hh=h*(.45+K.r()*.5); out.push(B(x,y,z0+(z1-z0-.0)*K.r()*.15,w-.01,hh,(z1-z0)*.8,pick(K.r,PAL.product),K.r()<K.mess*.3?{rz:Math.PI/2*(K.r()<.5?1:-1)*.9}:undefined)); } x+=w+.04; }
 }
 function cabinetBox(out,K,x0,x1,h,z1,col){ // carcass with toe kick
   out.push(B(x0,0,.02,x1-x0,.1,z1-.08,'#3a3330'));
