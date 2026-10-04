@@ -13,8 +13,8 @@ slices = json.loads(subprocess.check_output(['node', '-e',
     os.path.join(HERE, 'interiors-slice.js')]))
 rd = lambda *p: open(os.path.join(*p)).read()
 page = rd(HERE, 'demo.src.html')
-for key, val in [('/*FIGUREKIT*/', rd(TOOLS, 'stream', 'figure-kit.js')),
-                 ('/*INTERIORS_GEN*/', slices['gen']), ('/*INTERIORS_RENDER*/', slices['render']),
+for key, val in [('/*FIGUREKIT*/', rd(TOOLS, 'stream', 'figure-kit.js')), ('/*MOTION*/', rd(TOOLS, 'motion', 'motion.js')),
+                 ('/*INTERIORS_GEN*/', slices['gen']), ('/*INTERIORS_RENDER*/', slices['render']), ('/*INTERIORS_PHYS*/', slices['phys']),
                  ('/*RULES*/', rd(HERE, 'rules.js')), ('/*WORLD*/', rd(HERE, 'space.js')),
                  ('/*DEMO*/', rd(HERE, 'demo-script.js'))]:
     assert key in page, key

@@ -2,7 +2,7 @@
 
 Fighting inside procedurally generated buildings (task 7 in `briefs/combat-tasks.md`), with free placement: units stand at any point, not on a grid. Nothing here edits the interiors code. The interiors topic owns `tools/interiors/`, so this folder only reads it.
 
-- `interiors-slice.js` cuts the generator and its renderer out of `tools/interiors/interiors.src.html` by marker comments, and inlines `kit.js` and `sites.json`. If the interiors page moves a marker, the build and the tests stop with a message.
+- `interiors-slice.js` cuts the generator, its renderer and its physics (grenades scattering props, overturning) out of `tools/interiors/interiors.src.html` by marker comments, and inlines `kit.js` and `sites.json`. If the interiors page moves a marker, the build and the tests stop with a message.
 - `space.js` turns a generated building into free space for a fight. The frame is the building's own, plus 12 m of yard all round.
   - **Geometry**: walls, doors, windows and counters (the generator's cell edges) become line segments. Furniture becomes boxes, and yard walls become thick segments.
   - **What each piece does**:
@@ -62,6 +62,32 @@ Fighting inside procedurally generated buildings (task 7 in `briefs/combat-tasks
   - **End**: the summary counts kills, escapes, the squad's wounds and dead, hits and the daylight spent.
 
   The interiors renderer draws the building, including its cutaway walls.
+
+## What came from the earlier iterations
+
+The original game (`index.html`) and the outdoor demo (`tools/zoom/combat.js`) were reviewed. These features are carried over:
+
+| Feature | From | Here |
+|---|---|---|
+| Real-time exploring that folds into turns; time slows at contact, then engage or hold back | outdoor demo | explore phase, `contactCheck` |
+| Patrols while unaware | original game | one raider walks a loop between rooms |
+| Enemy types: Lancer (fast melee), Warden (armour), Officer (defence) | original game | Brute (machete, +3 m reach per action, defence 10), Enforcer (armour 1, 8 HP), boss (defence 5) |
+| Armour soaks damage; explosives shred it | original game | `roll`, `blastHits` |
+| Ranger's blade; Sharpshooter's pistol | original game | Slash (run in and strike, +10, no cover); Revolver (no reload) |
+| Objective, way out, reinforcements | original game (hack relay, evac, reinforcements 2 turns later) | take the generator's stash, reach the green ring; two raiders from the road 3 raider turns after the shooting starts |
+| Hit badges, FLANK tags, odds with damage range | original game | badges over raiders (hit %, FLANKED, FLANK from the hovered spot, armour pips) |
+| First-person overwatch | original game | "Aim overwatch": the watcher's eye, the mover at 1/7 speed, sway by aim, a head hit is a crit, cover stops the bullet, 5.5 s (6.5 s scoped) before the roll decides |
+| Ranks, XP, nicknames, memorial | original game | XP for kills and a win; +1 HP and +3 aim a rank; the dead go to the memorial and a rookie takes their place (kept in this browser) |
+| Camera: focus on blasts, looking around pauses the follow | original game | `camHold` |
+
+The demo also uses work from the other sessions:
+- the interiors physics: pipe bombs scatter props, and soldiers can overturn tables and shelves for cover;
+- the motion module: weapons in hand, recoil, hit reactions, reloads, a ragdoll when someone goes down, and getting back up after first aid.
+
+Not ported:
+- hacking: there is no relay in these buildings;
+- the 12-turn timer: daylight and reinforcements carry the pressure instead;
+- height bonus: interiors are level, but outdoors needs it when this joins the streamed ground.
 
 Build with `python3 tools/combat/build.py [artifact-fragment.html]`. It writes `mockups/combat-interior.html`. Published as https://claude.ai/artifact/Xm7C2fNtxDRpa57hQ2CYcW
 

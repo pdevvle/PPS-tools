@@ -3,14 +3,17 @@
 const fs=require('fs'), path=require('path');
 const DIR=path.join(__dirname,'..','interiors');
 const GEN_START='<script>\n', REND='// ================================================================= rendering', REND_END='function resize(';
+const PHYS='// ================================================================= physics', PHYS_END='// ================================================================= plan canvas';
 function read(){
   const src=fs.readFileSync(path.join(DIR,'interiors.src.html'),'utf8');
   const kit=fs.readFileSync(path.join(DIR,'kit.js'),'utf8');
   const sites=fs.readFileSync(path.join(DIR,'sites.json'),'utf8');
   const s0=src.indexOf('<script>\n',src.indexOf('three.min.js')), r0=src.indexOf(REND), r1=src.indexOf(REND_END,r0);
-  if(s0<0||r0<0||r1<0) throw new Error('interiors.src.html markers moved: update tools/combat/interiors-slice.js');
+  const p0=src.indexOf(PHYS), p1=src.indexOf(PHYS_END,p0);
+  if(s0<0||r0<0||r1<0||p0<0||p1<0) throw new Error('interiors.src.html markers moved: update tools/combat/interiors-slice.js');
   const fill=t=>t.replace('/*SITES*/[]',sites).replace('/*KIT*/',kit);
-  return { gen:fill(src.slice(s0+GEN_START.length,r0)), render:src.slice(r0,r1) };
+  // physics: grenades scattering props and overturned furniture (the renderer's build() calls its applyMoves)
+  return { gen:fill(src.slice(s0+GEN_START.length,r0)), render:src.slice(r0,r1), phys:src.slice(p0,p1) };
 }
 // Node: run the generator in a sandbox and hand back what combat needs
 function loadGenerator(){

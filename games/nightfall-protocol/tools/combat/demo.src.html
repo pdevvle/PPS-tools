@@ -28,6 +28,16 @@ button.pri{background:var(--gold);color:#211b10;border-color:var(--gold)}
 .pop{position:absolute;left:0;top:0;font:700 15px var(--mono);color:#fff;text-shadow:0 1px 3px #000;pointer-events:none;transform:translate(-50%,-100%);z-index:2}
 .pop.miss{color:#d9d4c8}.pop.crit{color:#ffcf5a}.pop.info{color:#9fd3e6;font-size:13px}
 .hint{color:var(--muted);font:12px var(--mono);padding:5px}
+.badges{position:absolute;inset:0;pointer-events:none;z-index:2}.badge{position:absolute;transform:translate(-50%,-100%);font:600 12px var(--mono);background:rgba(24,24,26,.82);border:1px solid #6e1a10;color:#f1eee8;padding:1px 5px;border-radius:3px;white-space:nowrap}
+.badge.flank{border-color:var(--gold);color:#f3d38a}.badge .arm{color:#9fd3e6}.badge.evac{border-color:#3fae7f;color:#9fd3a8}.badge.loot{border-color:var(--gold);color:#f3d38a}
+#stage.fp .bar,#stage.fp .hud,#stage.fp .log,#stage.fp .banner,#stage.fp .badges,#stage.fp .hover,#stage.fp .pop{display:none}
+.fps{position:absolute;inset:0;z-index:4;cursor:none}.fps-vig{position:absolute;inset:0;background:radial-gradient(circle at 50% 50%,transparent 38%,rgba(0,0,0,.55) 75%);pointer-events:none}
+.fps-x{position:absolute;width:44px;height:44px;transform:translate(-50%,-50%);pointer-events:none}.fps-x i{position:absolute;background:#f3d38a;box-shadow:0 0 3px #000}
+.fps-x i:nth-child(1){left:21px;top:0;width:2px;height:14px}.fps-x i:nth-child(2){left:21px;bottom:0;width:2px;height:14px}.fps-x i:nth-child(3){top:21px;left:0;height:2px;width:14px}.fps-x i:nth-child(4){top:21px;right:0;height:2px;width:14px}.fps-x b{position:absolute;left:20px;top:20px;width:4px;height:4px;border-radius:50%;background:#ff5a3a}
+.fps-top{position:absolute;left:50%;top:14px;transform:translateX(-50%);background:var(--panel);border:1px solid var(--gold);border-radius:5px;padding:5px 12px;font:12px var(--mono);text-align:center;min-width:240px}.fps-top b{display:block;font:600 14px var(--body)}
+.fps-bar{display:block;height:4px;background:#3a3b3f;margin-top:4px}.fps-bar s{display:block;height:100%;background:var(--gold)}
+.fps-help{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);margin:0;background:var(--panel);padding:4px 10px;border-radius:4px;font:12px var(--mono);color:var(--muted)}
+.banner button{background:#2d2f33;border:1px solid var(--line);color:var(--text);font:600 13px var(--body);padding:5px 10px;margin:6px 3px 0;cursor:pointer;border-radius:3px}.banner button.pri{background:var(--gold);color:#211b10;border-color:var(--gold)}
 @media (max-width:760px){ .bar{left:8px;right:8px;transform:none;max-width:none;bottom:6px} .unit{min-width:0;padding:3px 6px;font-size:11px} .banner{top:auto;bottom:150px;max-width:calc(100% - 16px)} .hud{max-width:55%} .log{display:none} .hover{top:auto;bottom:120px;right:8px;max-width:60%} }
 </style>
 <div class="app">
@@ -39,6 +49,8 @@ button.pri{background:var(--gold);color:#211b10;border-color:var(--gold)}
   <button type="button" id="restartBtn">Restart</button>
   <button type="button" id="sightBtn" aria-pressed="true" title="Show what is seen: the raiders' eyes while you are concealed, your selected soldier's sight in a fight">Sight</button>
   <button type="button" id="wallsBtn" title="Cutaway: walls facing the camera drop to knee height">Walls: cutaway</button>
+  <button type="button" id="fpsBtn" aria-pressed="false" title="When one of your soldiers takes an overwatch shot, aim it yourself in first person">Aim overwatch</button>
+  <button type="button" id="rosterBtn" title="Start a fresh squad: ranks and the memorial are kept in this browser">New squad</button>
 </header>
 <div id="stage">
   <canvas id="view"></canvas>
@@ -46,14 +58,24 @@ button.pri{background:var(--gold);color:#211b10;border-color:var(--gold)}
   <div class="hover" id="hover"></div>
   <div class="log" id="log" aria-live="polite"></div>
   <div class="banner" id="banner" hidden></div>
+  <div class="badges" id="badges" aria-hidden="true"></div>
+  <div class="fps" id="fps" hidden><div class="fps-vig"></div><div class="fps-x" id="fpsX"><i></i><i></i><i></i><i></i><b></b></div><div class="fps-top"><b id="fpsWho"></b><span id="fpsInfo"></span><i class="fps-bar"><s id="fpsBar"></s></i></div><p class="fps-help">Overwatch: aim with the mouse, click to fire · Esc lets the roll decide</p></div>
   <div class="bar" id="bar"><div class="units" id="units"></div><div class="acts" id="acts"></div></div>
 </div>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
 <script>/*FIGUREKIT*/</script>
+<script>/*MOTION*/</script>
 <script>
 /*INTERIORS_GEN*/
 /*INTERIORS_RENDER*/
+// Page globals the interiors physics code expects (its own page defines these in its panel); the combat page points
+// them at the current fight. G: the generated building. REC: its change record. refresh(): redraw after a change.
+let G=null, REC=null, dirty=false;
+const hudHover={get textContent(){ return ''; }, set textContent(v){ if(window.__combatNote) window.__combatNote(v); }};
+function refresh(){ if(window.__combatRefresh) window.__combatRefresh(); }
+/*INTERIORS_PHYS*/
 </script>
 <script>/*RULES*/</script>
 <script>/*WORLD*/</script>

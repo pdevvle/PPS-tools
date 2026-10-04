@@ -341,7 +341,9 @@ Also done:
 - **Task 5, in the fight**: going down, bleeding out and first aid. The result record back to the map is still to do.
 - **7e**: doorway overwatch, wounded raiders falling back, and morale that sends raiders running for an exit.
 
-Still to do: holdouts (7f), loot (7g), and joining the streamed world (step 3).
+After reviewing the original game and the outdoor demo, the features they had are folded in; see the table in `tools/combat/README.md`. Loot (7g) has started: the stash objective uses the generator's stash contents.
+
+Still to do: holdouts (7f), the result record back to the map (task 5), and joining the streamed world (step 3).
 
 ### 7h. Order of work for 7
 

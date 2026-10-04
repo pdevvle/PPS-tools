@@ -42,12 +42,13 @@ function fromGenerated(G,opt={}){
     if(it.spec.h<.3) lows.push(box); else obs.push({id:obs.length,kind:'item',box,it,h:it.spec.h}); }
   const roads=(G.site.roads||[]).map(r=>({w:r.w,pts:r.pts.map(p=>M.toL(p[0],p[1]))}));
   // ---------- what each obstacle does, from its current state ----------
-  const doorSt=opt.doors||{};
-  const doorState=e=>doorSt[e.key]!==undefined?doorSt[e.key]:(e.door.state==='broken'?'broken':e.door.state==='barricaded'?'barricaded':e.door.open?'open':'closed');
+  // door states: the change record's doors, keyed by floor like the interiors renderer reads them ('0:v5,12')
+  const doorSt=opt.doors||{}, LV=(G.level||0)+':';
+  const doorState=e=>doorSt[LV+e.key]!==undefined?doorSt[LV+e.key]:(e.door.state==='broken'?'broken':e.door.state==='barricaded'?'barricaded':e.door.open?'open':'closed');
   // solid: keeps bodies R away. cross: a body may pass through it (at extra effective metres).
   function props(o){
-    if(o.kind==='item'){ if(o.destroyed) return {solid:false,sight:true,shot:true,cover:0,cross:true,extra:1};   // blown apart: rubble
-      const cv=COV[o.it.spec.cover]||0, tall=cv===2&&o.h>=EYE; return {solid:true,sight:!tall,shot:!tall,cover:cv,cross:false}; }
+    if(o.kind==='item'){ if(o.destroyed||o.flat) return {solid:false,sight:true,shot:true,cover:0,cross:true,extra:1};   // blown apart or lying flat: clutter
+      const cv=COV[o.cover||o.it.spec.cover]||0, tall=cv===2&&o.h>=EYE; return {solid:true,sight:!tall,shot:!tall,cover:cv,cross:false}; }
     if(o.kind==='yard'){ const tall=o.h>=EYE; return {solid:true,sight:!tall,shot:!tall,cover:o.h>=1.2?2:1,cross:false}; }
     const e=o.e;
     switch(e.type){
@@ -64,6 +65,7 @@ function fromGenerated(G,opt={}){
   // ---------- spatial hash ----------
   const BW=Math.ceil((X1-X0)/BUCKET), BH=Math.ceil((Z1-Z0)/BUCKET), buckets=Array.from({length:BW*BH},()=>[]);
   const bboxOf=o=>o.box?o.box:{x0:Math.min(o.seg[0],o.seg[2]),z0:Math.min(o.seg[1],o.seg[3]),x1:Math.max(o.seg[0],o.seg[2]),z1:Math.max(o.seg[1],o.seg[3])};
+  const fileObs=(o,add)=>{ const b=grow(bboxOf(o),R+(o.t||0)+.05); for(let j=Math.max(0,Math.floor((b.z0-Z0)/BUCKET));j<=Math.min(BH-1,Math.floor((b.z1-Z0)/BUCKET));j++) for(let i=Math.max(0,Math.floor((b.x0-X0)/BUCKET));i<=Math.min(BW-1,Math.floor((b.x1-X0)/BUCKET));i++){ const L=buckets[j*BW+i], k=L.indexOf(o); if(add&&k<0) L.push(o); if(!add&&k>=0) L.splice(k,1); } };
   for(const o of obs){ const b=grow(bboxOf(o),R+(o.t||0)+.05); for(let j=Math.max(0,Math.floor((b.z0-Z0)/BUCKET));j<=Math.min(BH-1,Math.floor((b.z1-Z0)/BUCKET));j++) for(let i=Math.max(0,Math.floor((b.x0-X0)/BUCKET));i<=Math.min(BW-1,Math.floor((b.x1-X0)/BUCKET));i++) buckets[j*BW+i].push(o); }
   let stamp=1; const seen=new Uint32Array(obs.length+1);
   // every obstacle near the segment p→q (buckets along it, each obstacle once)
@@ -189,7 +191,7 @@ function fromGenerated(G,opt={}){
       const role=e.type==='window'?'window':(O.extDoors.find(x=>x.edges.includes(e))||{}).role||'side';
       out.push({o,e,key:e.key,kind:e.type==='window'?'window':e.type==='gdoor'?'garage':'door',role,out:[mx+n[0]*d,mz+n[1]*d],in:[mx-n[0]*d,mz-n[1]*d],dir:e.dir}); }
     return out; }
-  function setDoor(key,state){ const d=O.extDoors.find(x=>x.edges.some(e=>e.key===key)); const keys=d?d.edges.map(e=>e.key):[key]; for(const k of keys) doorSt[k]=state; }
+  function setDoor(key,state){ const d=O.extDoors.find(x=>x.edges.some(e=>e.key===key)); const keys=d?d.edges.map(e=>e.key):[key]; for(const k of keys) doorSt[LV+k]=state; }
   function setWindow(key,state){ const e=O.edges.get(key); if(e&&e.win) e.win.state=state; }
   const cellCentre=c=>[M.u0+(c%M.W)+.5,M.v0+((c/M.W)|0)+.5];
   const people=(G.D.people||[]).map(p=>({p:cellCentre(p.c),side:p.side,boss:!!p.boss}));
@@ -208,6 +210,17 @@ function fromGenerated(G,opt={}){
   function destroyItem(o){ if(o.kind!=='item'||o.destroyed) return; o.destroyed=true; lows.push(o.box); const b=grow(o.box,1.6);
     for(let j=Math.max(0,Math.floor((b.z0-Z0)/NS));j<=Math.min(NH-1,Math.floor((b.z1-Z0)/NS));j++) for(let i=Math.max(0,Math.floor((b.x0-X0)/NS));i<=Math.min(NW-1,Math.floor((b.x1-X0)/NS));i++){
       const n=j*NW+i, x=nx(n), z=nz(n); free[n]=clearAt(x,z)?1:0; speed[n]=free[n]?speedAt(x,z):0; links[n]=undefined; } }
+  function refreshField(box){ const b=grow(box,1.6);
+    for(let j=Math.max(0,Math.floor((b.z0-Z0)/NS));j<=Math.min(NH-1,Math.floor((b.z1-Z0)/NS));j++) for(let i=Math.max(0,Math.floor((b.x0-X0)/NS));i<=Math.min(NW-1,Math.floor((b.x1-X0)/NS));i++){
+      const n=j*NW+i, x=nx(n), z=nz(n); free[n]=clearAt(x,z)?1:0; speed[n]=free[n]?speedAt(x,z):0; links[n]=undefined; } }
+  // Follow the interiors physics: props a grenade scattered or someone overturned sit where the change record says,
+  // with the cover it says (rec.moved['level:id'] = {cells, cover, box:[x0,y0,z0,x1,y1,z1]}). A prop that no longer
+  // blocks any cell lies flat: no cover, walkable.
+  function syncMoves(rec){ const moved=(rec&&rec.moved)||{}; let n=0;
+    for(const o of obs){ if(o.kind!=='item') continue; const mv=moved[LV+o.it.id]; if(!mv||o.mv===mv) continue;
+      const old=o.box; fileObs(o,false); o.mv=mv; const b=mv.box; o.box={x0:b[0]+.04,z0:b[2]+.04,x1:b[3]-.04,z1:b[5]-.04}; o.h=b[4]-FY; o.cover=mv.cover; o.flat=!mv.cells||!mv.cells.length;
+      if(o.flat) lows.push(o.box); fileObs(o,true); refreshField(old); refreshField(o.box); n++; }
+    return n; }
   // what a blast at c reaches within r: furniture, doors and windows the blast can see (walls and closed doors shelter)
   function blastReach(c,r){ const items=[], openings=[], cand=[];
     near(c[0]-r,c[1]-r,c[0]+r,c[1]+r,o=>{ cand.push(o); });   // gather first: sight() searches the hash too, so it can't run inside near()
@@ -218,7 +231,7 @@ function fromGenerated(G,opt={}){
     return {items,openings}; }
   // doors between rooms, for watching doorways
   const innerDoors=()=>obs.filter(o=>o.kind==='edge'&&!o.ext&&/door/.test(o.e.type));
-  return {G,R,EYE,FY,destroyItem,blastReach,innerDoors,X0,Z0,X1,Z1,obs,props,doorSt,doorState,sight,castRay,coverFrom,clearAt,walk,speedAt,field,costTo,pathTo,snap,nearestCover,coverSpots,leans,entries,setDoor,setWindow,people,posted,frontApproach,
+  return {G,R,EYE,FY,LV,destroyItem,blastReach,innerDoors,syncMoves,X0,Z0,X1,Z1,obs,props,doorSt,doorState,sight,castRay,coverFrom,clearAt,walk,speedAt,field,costTo,pathTo,snap,nearestCover,coverSpots,leans,entries,setDoor,setWindow,people,posted,frontApproach,
     insideAt, floorY:(x,z)=>insideAt(x,z)?FY:0, NS, NW, NH, nodeX:nx, nodeZ:nz, nodeAt, free};
 }
 return {fromGenerated,R,EYE,DIRS,segSeg,segBox,ptSeg};

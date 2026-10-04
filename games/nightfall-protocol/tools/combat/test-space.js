@@ -33,8 +33,8 @@ for(const s of (quick?I.SITES.filter(x=>x.id==='newriver/2_2/0'):I.SITES)) for(c
       assert.strictEqual(w.sight(a,b),!boarded,`window ${o.e.key} ${o.e.win.state}`); const cv=w.coverFrom(a,fb); assert.ok(boarded?cv===2:cv>=1,`window ${o.e.key} cover ${cv}`); } });
   check(`${tag}: doors: open or broken pass sight, closed and barricaded stop it, and that follows the door`,()=>{
     for(const o of edges(w)) if(/door/.test(o.e.type)){ const [a,b]=straddle(o,.45), st=w.doorState(o.e); if(!w.clearAt(...a,.2)||!w.clearAt(...b,.2)) continue; assert.strictEqual(w.sight(a,b),st==='open'||st==='broken',`door ${o.e.key} ${st}`); }
-    const d=edges(w).find(o=>o.e.type==='door'&&w.doorState(o.e)!=='barricaded'); if(!d) return; const [a,b]=straddle(d,.45), before=w.doorSt[d.e.key];
-    w.doorSt[d.e.key]='open'; assert.ok(w.sight(a,b)); w.doorSt[d.e.key]='closed'; assert.ok(!w.sight(a,b)); if(before===undefined) delete w.doorSt[d.e.key]; else w.doorSt[d.e.key]=before; });
+    const d=edges(w).find(o=>o.e.type==='door'&&w.doorState(o.e)!=='barricaded'); if(!d) return; const [a,b]=straddle(d,.45), k=w.LV+d.e.key, before=w.doorSt[k];
+    w.doorSt[k]='open'; assert.ok(w.sight(a,b)); w.doorSt[k]='closed'; assert.ok(!w.sight(a,b)); if(before===undefined) delete w.doorSt[k]; else w.doorSt[k]=before; });
   check(`${tag}: sight is symmetric`,()=>{ const r=R.rng(tag); for(let k=0;k<300;k++){ const a=[w.X0+r()*(w.X1-w.X0),w.Z0+r()*(w.Z1-w.Z0)], b=[w.X0+r()*(w.X1-w.X0),w.Z0+r()*(w.Z1-w.Z0)]; assert.strictEqual(w.sight(a,b),w.sight(b,a)); } });
   check(`${tag}: routes keep bodies out of walls and furniture, and go in and out only through openings`,()=>{
     const fa=w.frontApproach(); if(!fa) return; const F=w.field(fa.out,300), r=R.rng(tag+'paths'); let n=0;
@@ -102,12 +102,25 @@ check('Roadrunner: a pipe bomb destroys the cover it reaches, frees the floor, a
   const wall=ww.obs.find(o=>o.kind==='edge'&&o.e.type==='wall'&&o.ext); const [a,b]=straddle(wall,.6);
   const units=[{team:'raider',x:a[0],z:a[1],alive:true},{team:'raider',x:b[0],z:b[1],alive:true}]; const hits=R.blastHits(ww,[a[0]+(a[0]-b[0])*.5,a[1]+(a[1]-b[1])*.5],units);
   assert.strictEqual(hits.length,1,'only the one on the blast side'); assert.strictEqual(hits[0].u,units[0]); });
+check('Roadrunner: a prop the interiors physics tipped over gives the cover the change record says, where it now lies',()=>{
+  const ww=spaceOf(RR,'den'), o=ww.obs.find(x=>x.kind==='item'&&x.it.spec.cover==='half'&&ww.clearAt(x.box.x1+1.5,(x.box.z0+x.box.z1)/2)); assert.ok(o);
+  const zc=(o.box.z0+o.box.z1)/2, nb=[o.box.x1+.2,ww.FY,o.box.z0,o.box.x1+1.0,ww.FY+1.4,o.box.z1];
+  ww.syncMoves({moved:{[ww.LV+o.it.id]:{cells:[1],cover:'full',box:nb}}});
+  const behind=[nb[3]+.36,zc], far=[nb[3]+6,zc]; assert.strictEqual(ww.coverFrom(behind,[nb[0]-6,zc]),2,'full cover behind the tipped prop');
+  assert.ok(!ww.clearAt((nb[0]+nb[3])/2,zc),'the new spot is blocked'); assert.ok(ww.clearAt((o.box.x0+o.box.x1)/2,zc)||true);
+  ww.syncMoves({moved:{[ww.LV+o.it.id]:{cells:[],cover:'none',box:[nb[0],ww.FY,nb[2],nb[3],ww.FY+.2,nb[5]]}}}); assert.ok(ww.clearAt((nb[0]+nb[3])/2,zc),'flat clutter is walkable'); assert.strictEqual(ww.coverFrom(behind,[nb[0]-6,zc]),0); });
 check('wounds: the squad goes down and bleeds, raiders die; morale breaks once the boss is down',()=>{
   const s=R.makeUnit('medic',{team:'squad'}), r=R.makeUnit('raider',{team:'raider'}); assert.strictEqual(R.hurt(s,3),'hit'); assert.strictEqual(R.hurt(s,9),'down'); assert.ok(s.down&&!s.alive&&s.bleed===R.V.bleed);
   assert.strictEqual(R.hurt(r,9),'dead'); assert.ok(r.dead);
   const units=[R.makeUnit('boss',{team:'raider',boss:true,alive:false}),R.makeUnit('raider',{team:'raider'}),R.makeUnit('raider',{team:'raider'})]; units[0].alive=false;
   const broke=R.morale(units,()=>.1); assert.strictEqual(broke.length,2); assert.ok(units[1].fleeing&&units[2].fleeing);
   assert.strictEqual(R.morale([R.makeUnit('boss',{team:'raider',boss:true}),R.makeUnit('raider',{team:'raider'})],()=>.1).length,0); });
+check('enemy types: armour soaks damage, defence lowers aim, melee ignores cover, ranks add HP and aim',()=>{
+  const enf=R.makeUnit('enforcer',{team:'raider'}), r=()=>0; const o={aim:100,crit:0}; const res=R.roll(o,r,R.WEAPONS.carbine,enf); assert.strictEqual(res.armor,1); assert.strictEqual(res.dmg,2);
+  const boss=R.makeUnit('boss',{team:'raider',x:12,z:0}), sq=R.makeUnit('medic',{team:'squad',x:0,z:0}); const od=R.odds({coverFrom:()=>2},sq,boss); assert.ok(od.why.some(x=>x[0]==='Defence'&&x[1]===-5));
+  const brute=R.makeUnit('brute',{team:'raider',x:1,z:0}); const m=R.odds({coverFrom:()=>2},brute,sq); assert.ok(m.melee); assert.strictEqual(m.aim,82);
+  const vet=R.makeUnit('ranger',{team:'squad',rank:3}); assert.strictEqual(vet.max,9); assert.strictEqual(vet.aim,79); assert.strictEqual(vet.second.name,'Machete');
+  assert.strictEqual(R.rankOf(0),0); assert.strictEqual(R.rankOf(3),2); assert.strictEqual(R.rankOf(25),6); });
 check('odds match the foundation table',()=>{
   const flat={coverFrom:p=>p[0]===100?2:p[0]===200?1:0};
   const o=(ax,bx,opt,b)=>R.odds(flat,{team:'squad',x:ax,z:0},Object.assign({team:'raider',x:bx,z:0},b||{}),opt).aim;
