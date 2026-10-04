@@ -35,4 +35,9 @@ Multi-storey buildings: `site.levels` gives the count. Cores are 3 × 6 m switch
 
 `fetch_osm.py` caches buildings outside the baked sectors from the OSM API into `osm_extra.json`. Overpass was unreachable from the build container. 42015 North Venture Drive, the office block across the wash west of the Safeway strip, comes from there. OSM tags it `building=house` with no level count, so the mockup builds it as three storeys of offices.
 
+Physics: a "Click does" control switches clicks between searching, throwing a grenade and overturning furniture.
+- A grenade (4.5 m) runs cannon.js (cdnjs, 0.6.2) on the props in range, with walls, untouched furniture and the floor as static colliders. Heavy fittings in `STATIC_PROPS` (kit.js) stay put. Each chair is its own piece, so dining sets come apart. The blast breaks windows within reach and blows nearby doors.
+- Overturning is scripted, not simulated. Props in `FLIP_PROPS` tip onto the edge away from the camera. A table becomes a low wall giving half cover; tall things fall flat. The chairs stay where they were.
+- Either way the outcome goes into the change record as a pose per piece, the cells the prop now blocks and the cover it gives (`moved`), plus scorch marks (`blasts`) and broken windows (`windows`). Reloads redraw from the record, so physics never has to replay the same way twice.
+
 Rebuild after editing: `python3 tools/interiors/build.py`.
