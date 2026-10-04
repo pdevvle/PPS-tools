@@ -812,8 +812,8 @@ const POOL_EXTRA={
 
 // Room recipes: [item, mode, count, options]
 const FURN={
-  living:[['sofa','wall',1,{avoidWin:1,clear:1}],['tvstand','wall',1],['armchair','wall',[1,2]],['coffee','free',1,{nearItem:'sofa'}],['bookcase','wall',[0,1]],['cactus','wall',[0,1],{corner:1}]],
-  kitchen:[['fridge','wall',1,{corner:1}],['stove','wall',1,{nearRun:1}],['sinkc','wall',1,{window:1,nearRun:1}],['dw','wall',1,{nearItem:'sinkc'}],['counter','run',[3,7]],['island','free',[0,1],{minCells:16,center:1}]],
+  living:[['sofa','wall',1,{avoidWin:1,clear:1}],['tvstand','wall',1],['armchair','wall',[0,1]],['coffee','free',1,{nearItem:'sofa'}],['bookcase','wall',[0,1]],['cactus','wall',[0,1],{corner:1}]],
+  kitchen:[['fridge','wall',1,{corner:1}],['stove','wall',1,{nearRun:1}],['sinkc','wall',1,{window:1,nearRun:1}],['dw','wall',1,{nearItem:'sinkc'}],['counter','run',[2,5]],['island','free',[0,1],{minCells:16,center:1}]],
   dining:[['dtable','free',1,{center:1,ring:1}],['hutch','wall',[0,1]]],
   master:[['bed2','wall',1,{avoidWin:1,clear:1,centerWall:1}],['nightstand','wall',2,{nearItem:'bed2'}],['dresser','wall',1],['wardrobe','wall',1]],
   bed:[['bed1|bed2','wall',1,{avoidWin:1,clear:1}],['nightstand','wall',1,{nearItem:'bed'}],['dresser','wall',[0,1]],['wardrobe','wall',1]],
@@ -822,34 +822,34 @@ const FURN={
   laundry:[['washer','wall',1],['dryer','wall',1,{nearItem:'washer'}],['lshelf','wall',1]],
   den:[['desk','wall',1],['bookcase','wall',1],['armchair','wall',1],['filing','wall',[0,1]]],
   garage:[['car','car',0],['workbench','wall',1],['gshelf','wall',[1,2]],['heater','wall',1,{corner:1}]],
-  rdining:[['pos','nearDoor',1,{clear:1}],['booth','wall',12,{window:1}],['cactus','wall',[2,4],{corner:1}],['table4','tables',0]],
-  rkitchen:[['range','wall',1,{per:60}],['grill','wall',1,{nearItem:'range'}],['charbroil','wall',1,{nearItem:'grill'}],['fryer','wall',[1,2],{nearItem:'grill'}],['dsink','wall',1,{per:80}],['reachin','wall',1,{per:40}],['rshelf','wall',1,{per:30}],['prep','free',1,{center:1,per:30,ring:1}]],
-  walkin:[['rshelf','wall',1,{per:5}]],
+  rdining:[['pos','nearDoor',1,{clear:1}],['booth','wall',6,{window:1}],['cactus','wall',[1,2],{corner:1}],['table4','tables',0]],
+  rkitchen:[['range','wall',1,{per:60}],['grill','wall',1,{nearItem:'range'}],['charbroil','wall',1,{nearItem:'grill'}],['fryer','wall',[1,2],{nearItem:'grill'}],['dsink','wall',1,{per:80}],['reachin','wall',1,{per:70}],['rshelf','wall',1,{per:50}],['prep','free',1,{center:1,per:60,ring:1}]],
+  walkin:[['rshelf','wall',1,{per:8}]],
   restroom:[['toilet','wall',[1,2]],['vanity','wall',1]],
   office:[['desk','wall',1],['safe','wall',1],['filing','wall',[0,1]]],
-  storage:[['rshelf','wall',1,{per:6}],['crate','free',[0,2]]],
-  sales:[['checkout','nearDoor',1,{clear:1}],['cooler','wall',8,{farDoor:1}],['wallshelf','wall',6],['cactus','wall',[0,1],{corner:1}],['shelf','aisles',0]],
-  stock:[['rshelf','wall',1,{per:8}],['crate','free',[1,3]]],
+  storage:[['rshelf','wall',1,{per:10}],['crate','free',[0,1]]],
+  sales:[['checkout','nearDoor',1,{clear:1}],['cooler','wall',4,{farDoor:1}],['wallshelf','wall',3],['cactus','wall',[0,1],{corner:1}],['shelf','aisles',0]],
+  stock:[['rshelf','wall',1,{per:14}],['crate','free',[0,2]]],
   dispensary:[['pcounter','counterEdge',0],['rshelf','wall',[2,4]],['desk','wall',1]],
   hall:[],
-  ffdining:[['ffcounter','wall',1,{nearRoom:'ffkitchen'}],['soda','wall',1,{nearItem:'ffcounter'}],['trashbin','wall',[1,2]],['booth','wall',8,{window:1}],['cactus','wall',[0,1],{corner:1}],['table4','tables',0]],
+  ffdining:[['ffcounter','wall',1,{nearRoom:'ffkitchen'}],['soda','wall',1,{nearItem:'ffcounter'}],['trashbin','wall',[1,2]],['booth','wall',4,{window:1}],['cactus','wall',[0,1],{corner:1}],['table4','tables',0]],
   ffkitchen:r=>r.what==='ice_cream'?[['dipcase','wall',[1,2],{nearRoom:'ffdining'}],['shake','wall',1],['reachin','wall',[1,2]],['rshelf','wall',1,{per:10}],['dsink','wall',1]]
     :[['warmer','wall',1,{nearRoom:'ffdining'}],['fryer','wall',[2,3]],['grill','wall',1],['shake','wall',[0,1]],['reachin','wall',[1,2]],['rshelf','wall',1,{per:15}],['dsink','wall',1],['prep','free',1,{center:1,ring:1}]],
-  cafe:[['cafecounter','wall',1,{farDoor:1}],['pastry','wall',1,{nearItem:'cafecounter'}],['armchair','wall',[2,4]],['bookcase','wall',[0,1]],['cactus','wall',[1,2],{corner:1}],['table4','tables',0]],
+  cafe:[['cafecounter','wall',1,{farDoor:1}],['pastry','wall',1,{nearItem:'cafecounter'}],['armchair','wall',[1,2]],['cactus','wall',[0,1],{corner:1}],['table4','tables',0]],
   cafeback:[['rshelf','wall',1,{per:6}],['reachin','wall',1],['dsink','wall',1]],
-  lobby:[['atm','wall',1,{nearDoor:1}],['chairs3','wall',[1,2]],['desk','wall',[1,2]],['cactus','wall',[1,2],{corner:1}],['checkstand','free',[1,2],{center:1,ring:1}]],
+  lobby:[['atm','wall',1,{nearDoor:1}],['chairs3','wall',1],['desk','wall',1],['cactus','wall',[0,1],{corner:1}],['checkstand','free',1,{center:1,ring:1}]],
   teller:[['tellerwin','counterEdge',0],['filing','wall',[1,2]],['desk','wall',[0,1]]],
   vault:[['depositbox','wall',1,{per:2.5}],['safe','wall',[1,2]]],
-  reception:[['receptiondesk','nearDoor',1,{clear:1}],['chairs3','wall',[1,2]],['cactus','wall',[1,2],{corner:1}]],
-  openoffice:[['printer','wall',[1,2]],['filing','wall',[1,3]],['watercooler','wall',1],['cactus','wall',[1,2],{corner:1}],['cubicle','tables',0,{alt:'none'}]],
+  reception:[['receptiondesk','nearDoor',1,{clear:1}],['chairs3','wall',1],['cactus','wall',[0,1],{corner:1}]],
+  openoffice:[['printer','wall',1],['filing','wall',[0,2]],['watercooler','wall',[0,1]],['cactus','wall',[0,1],{corner:1}],['cubicle','tables',0,{alt:'none'}]],
   conference:[['conftable','free',1,{center:1}],['dresser','wall',[0,1]]],
   breakroom:[['fridge','wall',1,{corner:1}],['sinkc','wall',1,{nearRun:1}],['counter','run',[2,3]],['vending','wall',[1,2]],['table4','tables',0]],
   server:[['serverrack','wall',1,{per:2}]],
   exam:r=>[[r.what==='dentist'?'dentchair':'examtable','free',1,{center:1}],['counter','run',[2,3]],['sinkc','wall',1,{nearRun:1}],['filing','wall',[0,1]]],
   waiting:r=>r.unitType==='carrepair'?[['receptiondesk','nearDoor',1,{clear:1}],['chairs3','wall',[1,2]],['vending','wall',[0,1]],['watercooler','wall',[0,1]]]
-    :[['receptiondesk','nearDoor',1,{clear:1}],['chairs3','wall',[2,4]],['watercooler','wall',[0,1]],['cactus','wall',[1,2],{corner:1}]],
-  bay:[['liftcar','car',0],['toolchest','wall',[1,2]],['tires','wall',[1,2]],['drums','wall',[1,2]],['gshelf','wall',[0,1]]],
-  salon:[['station','wall',8,{avoidWin:1}],['washsink','wall',[1,3],{farDoor:1}],['receptiondesk','nearDoor',1,{clear:1}],['chairs3','wall',[0,1]],['wallshelf','wall',[0,1]]],
+    :[['receptiondesk','nearDoor',1,{clear:1}],['chairs3','wall',[1,2]],['watercooler','wall',[0,1]],['cactus','wall',[0,1],{corner:1}]],
+  bay:[['liftcar','car',0],['toolchest','wall',1],['tires','wall',[0,1]],['drums','wall',[0,1]]],
+  salon:[['station','wall',5,{avoidWin:1}],['washsink','wall',[1,2],{farDoor:1}],['receptiondesk','nearDoor',1,{clear:1}],['chairs3','wall',[0,1]],['wallshelf','wall',[0,1]]],
   forecourt:[['pump','tables',0,{alt:'none',pitch:5}]],
   stair:[], elev:[],
 };
@@ -857,18 +857,18 @@ const FURN={
 {
   const salesBase=FURN.sales, rdBase=FURN.rdining, rkBase=FURN.rkitchen;
   FURN.sales=r=>{
-    if(r.unitType==='hardware') return [['checkout','nearDoor',2,{clear:1}],['keycut','wall',1],['paintcounter','wall',1],['tallshelf','wall',1,{per:30}],['hshelf','aisles',0]];
-    if(r.unitType==='supermarket') return [['checkout','nearDoor',1,{clear:1,per:500}],['carts','nearDoor',[1,2]],['mcase','wall',1,{farDoor:1,per:110}],['produce','free',1,{per:700,ring:1,center:1}],['shelf','aisles',0]];
+    if(r.unitType==='hardware') return [['checkout','nearDoor',2,{clear:1}],['keycut','wall',1],['paintcounter','wall',1],['tallshelf','wall',1,{per:60}],['hshelf','aisles',0]];
+    if(r.unitType==='supermarket') return [['checkout','nearDoor',1,{clear:1,per:500}],['carts','nearDoor',[1,2]],['mcase','wall',1,{farDoor:1,per:150}],['produce','free',1,{per:1400,ring:1,center:1}],['shelf','aisles',0]];
     if(r.unitType==='boutique'){
       if(r.what==='jewelry') return [['checkout','nearDoor',1,{clear:1}],['safe','wall',1],['showcase','tables',0,{alt:'none'}]];
       if(r.what==='dry_cleaning') return [['checkout','nearDoor',1,{clear:1}],['garmentrack','aisles',0,{seg:6}]];
       if(r.what==='post_office') return [['checkout','nearDoor',1,{clear:1}],['pobox','wall',[2,4]],['wallshelf','wall',[1,3]]];
-      return [['checkout','nearDoor',1,{clear:1}],['wallshelf','wall',6],['tallshelf','wall',[0,2]],['cactus','wall',[0,1],{corner:1}],['shelf','aisles',0]];
+      return [['checkout','nearDoor',1,{clear:1}],['wallshelf','wall',3],['tallshelf','wall',[0,1]],['cactus','wall',[0,1],{corner:1}],['shelf','aisles',0]];
     }
     return salesBase;
   };
   const lobbyBase=FURN.lobby;
-  FURN.lobby=r=>r.unitType==='office'?[['receptiondesk','nearDoor',1,{clear:1}],['chairs3','wall',[2,4]],['cactus','wall',[2,4],{corner:1}],['coffee','free',[1,2],{center:1}],['watercooler','wall',[0,1]]]:lobbyBase;
+  FURN.lobby=r=>r.unitType==='office'?[['receptiondesk','nearDoor',1,{clear:1}],['chairs3','wall',[1,2]],['cactus','wall',[1,2],{corner:1}],['coffee','free',[0,1],{center:1}]]:lobbyBase;
   FURN.rdining=r=>r.cuisine==='bar'?[['barcounter','wall',[1,2],{clear:1}]].concat(rdBase):rdBase;
   FURN.rkitchen=r=>r.cuisine==='pizza'?[['pizzaoven','wall',[1,2]]].concat(rkBase):r.cuisine==='asian'?[['wok','wall',[1,2]]].concat(rkBase.slice(1)):rkBase;
 }
@@ -982,7 +982,7 @@ function furnish(M,P,O,rng,typeKey,progCars){
       else if(mode==='run'){ for(let n=0;n<cnt;n++){ const cands=wallCands(room,key,{nearRun:1}); let done=false; for(const cd of cands.slice(0,40)){ const it=tryPlace(room,key,cd.cells,cd.f,opts,cd.s); if(it){ it.wallBack=cd.wallBack; done=true; break; } } if(!done) break; } }
       else if(mode==='tables'){
         // a staggered lattice; a noise field swaps in the smaller alternative
-        const pi=opts.pitch||(IT[key].w+1), pj=opts.pitch||(IT[key].d+1), alt=opts.alt===undefined?'table2':opts.alt;
+        const pi=opts.pitch||(IT[key].w+2), pj=opts.pitch||(IT[key].d+2), alt=opts.alt===undefined?'table2':opts.alt;
         const nzf=noise2('tables'+rng()), ox=rint(rng,0,pi-1), oy=rint(rng,0,pj-1), o={ring:1};
         const md=(x,m)=>((x%m)+m)%m;
         for(const c of room.cells){ const i=c%W, j=(c/W)|0; if(md(j-oy,pj)!==0) continue; const sh=Math.floor(nzf(Math.floor((j-oy)/pj)*.9,1.3)*pi); if(md(i-ox-sh,pi)!==0) continue;
@@ -1014,7 +1014,7 @@ function furnish(M,P,O,rng,typeKey,progCars){
         const alongU=(bb[1]-bb[0])>=(bb[3]-bb[2]);
         const c0=alongU?bb[2]:bb[0], c1=alongU?bb[3]:bb[1], a0=alongU?bb[0]:bb[2], a1=alongU?bb[1]:bb[3];
         // a frame of 2 m clear inside the perimeter fittings, then shelf rows 1 m wide with 2 m aisles
-        for(let cr=c0+3;cr<=c1-3;cr+=3){
+        for(let cr=c0+3;cr<=c1-3;cr+=4){
           let seg=[];
           const flush=()=>{ if(seg.length>=2){ const it=tryPlace(room,key,seg,alongU?3:0,{},0); if(it) it.wl=seg.length; } seg=[]; };
           for(let a=a0+3;a<=a1-3;a++){
@@ -1063,7 +1063,7 @@ function decay(M,P,O,Fn,rng,history){
     for(const w of O.windows) if(rng()<(history==='den'?.5:.3)) w.win.state='broken'; else if(history==='den'&&rng()<.3) w.win.state='boarded';
     for(const it of containers) if(rng()<(history==='den'?.55:.8)) it.searched=true;
     for(const e of O.doors) if(!e.ext&&e.door){ if(rng()<.7) e.door.open=true; if(rng()<.12) e.door.state='broken'; }
-    for(const r of rooms){ const fc=freeCells(r); const n=Math.round(fc.length*(history==='den'?.08:.06)); for(let k=0;k<n&&fc.length;k++){ const c=fc.splice(Math.floor(rng()*fc.length),1)[0]; addItem(r,'debris',c); } }
+    for(const r of rooms){ const fc=freeCells(r); const n=Math.round(fc.length*(history==='den'?.03:.02)); for(let k=0;k<n&&fc.length;k++){ const c=fc.splice(Math.floor(rng()*fc.length),1)[0]; addItem(r,'debris',c); } }
   }
   if(history==='holdout'){
     for(const w of O.windows) w.win.state='boarded';
@@ -1210,7 +1210,7 @@ function generate(site,typeKey,seedStr,history){
   }
   const wallH=Math.max(...units0.map(u=>TYPES[u.typeKey].wallH));
   const label=(units0.length>1?'Strip of '+units0.length+' tenants':TYPES[units0[0].typeKey].label)+(levels>1?' · '+levels+' storeys':'');
-  const mess={untouched:.35,looted:.75,holdout:.3,den:.9}[history], gone={untouched:.3,looted:.7,holdout:.5,den:.6}[history];
+  const mess={untouched:.15,looted:.5,holdout:.15,den:.6}[history], gone={untouched:.3,looted:.65,holdout:.45,den:.55}[history];
   const G={site,typeKey:units0.length>1?'strip':units0[0].typeKey,seedStr,history,M,sense,A,floors,levels,cores,
     L:{units:floors.reduce((a,f)=>a+f.L.units,0),base:floors.reduce((a,f)=>a+f.L.base,0)},
     ms:performance.now()-t0,mess,gone,wallH,FH:wallH+.45,label,noise:noise2(seedStr+'|noise')};
@@ -1261,7 +1261,7 @@ function lookOf(G,it,opened){
   const r=rngOf(G.fseed+'|look|'+it.id), st=G.style[it.room]||G.style[Object.keys(G.style)[0]];
   const mess=clamp(G.mess+(G.noise(it.i*.3,it.j*.3)-.5)*.4,0,1);
   const K={w:it.wl||it.spec.w,d:it.spec.d,r,st,it,ci:it.i,cj:it.j,nz:G.noise,mess,gone:G.gone,open:opened,wallBack:!!it.wallBack,j:(c,a)=>jit(c,r,a==null?.06:a)};
-  K.down=k=>r()<mess*.32*(k||1);
+  K.down=k=>r()<mess*.25*(k||1);
   K.doorState=()=>{ const x=r(); if(x<mess*.12) return 3; if(x<mess*.3) return 2; if(opened||x<mess*.6) return 1; return 0; };
   K.drawerState=()=>{ const x=r(); if(x<mess*.15+(opened?.2:0)) return 2; if(opened||x<mess*.45) return 1; return 0; };
   return K;
@@ -1271,7 +1271,7 @@ function patio(K){
   const P=[B(-2.2,0,0,4.6,.08,3.2,'#b8b0a2')];
   const G=[], gx=1.1, gz=1.5;
   G.push(B(gx,.0,gz,.06,.75,.06,BLACK),B(gx+.94,0,gz,.06,.75,.06,BLACK),B(gx,0,gz+.5,.06,.75,.06,BLACK),B(gx+.94,0,gz+.5,.06,.75,.06,BLACK));
-  G.push(B(gx,.3,gz,1,.04,.56,'#3a3a3a'),B(gx+.05,.42,gz+.08,.3,.36,.3,'#e8e4da'),B(gx+.05,.42,gz+.08,.3,.36,.3,'#e8e4da',{ry:Math.PI/4}));
+  G.push(B(gx,.3,gz,1,.04,.56,'#3a3a3a'),C(gx+.05,.42,gz+.08,.3,.36,.3,'#e8e4da'));
   G.push(B(gx,.75,gz,1,.28,.56,'#2b2c2e'),B(gx-.35,.9,gz+.05,.35,.03,.45,STEELD),B(gx+1,.9,gz+.05,.35,.03,.45,STEELD));
   for(let k=0;k<3;k++) G.push(B(gx+.2+k*.25,.85,gz+.56,.06,.06,.03,CHROME));
   const lidOpen=K.r()<.5; G.push(B(gx,1.03,gz,1,.22,.56,K.j('#2b2c2e',.05),lidOpen?{tilt:-1.3,pv:[gx+.5,gz,1.03]}:undefined));
@@ -1305,6 +1305,16 @@ class Batch{
     const v=UNIT.map(p=>_cv.set(p[0],p[1],p[2]).applyMatrix4(M).toArray());
     const F=[[0,3,2,1],[4,5,6,7],[0,1,5,4],[2,3,7,6],[1,2,6,5],[0,4,7,3]], ord=flip?[0,2,1,0,3,2]:[0,1,2,0,2,3];
     for(const f of F) for(const k of ord){ const p=v[f[k]]; this.p.push(p[0],p[1],p[2]); this.c.push(r,g,b); }
+  }
+  // unit cylinder (diameter 1, length 1, centred) through M; 18 sides keeps the ink off the side facets
+  cyl(M,col,axis,n){
+    n=n||18; const cc=new THREE.Color(col), r=cc.r,g=cc.g,b=cc.b, flip=M.determinant()<0;
+    const map=axis==='x'?(x,y,z)=>[y,-x,z]:axis==='z'?(x,y,z)=>[x,-z,y]:(x,y,z)=>[x,y,z];
+    const P=(x,y,z)=>{ const q=map(x,y,z); return _cv.set(q[0],q[1],q[2]).applyMatrix4(M).toArray(); };
+    const ring=[]; for(let k=0;k<n;k++){ const a=k/n*Math.PI*2; ring.push([Math.cos(a)*.5,Math.sin(a)*.5]); }
+    const bot=ring.map(([x,z])=>P(x,-.5,z)), top=ring.map(([x,z])=>P(x,.5,z)), cb=P(0,-.5,0), ct=P(0,.5,0);
+    const tri=(p,q,s2)=>{ for(const v of flip?[p,s2,q]:[p,q,s2]){ this.p.push(v[0],v[1],v[2]); this.c.push(r,g,b); } };
+    for(let k=0;k<n;k++){ const k1=(k+1)%n; tri(bot[k],top[k],bot[k1]); tri(bot[k1],top[k],top[k1]); tri(ct,top[k1],top[k]); tri(cb,bot[k],bot[k1]); }
   }
   quad(a,b,c,d,col){ const cc=new THREE.Color(col); for(const p of [a,b,c,a,c,d]){ this.p.push(p[0],p[1],p[2]); this.c.push(cc.r,cc.g,cc.b); } }
   mesh(mat,ink){
@@ -1484,7 +1494,7 @@ function build(G,rec){
   // furniture: the kit builds each item's boxes in its own frame; L maps that frame into the building
   const fur=new Batch(), furG=new Batch(), occAt=Fn.occ;
   const itemL=(i,j,f,y)=>{ const F=DIRS[f], Tt=DIRS[(f+1)%4]; const bx=cx(i)+.5-.5*F[0]-.5*Tt[0], bz=cz(j)+.5-.5*F[1]-.5*Tt[1]; return new THREE.Matrix4().set(Tt[0],0,F[0],bx, 0,1,0,y, Tt[1],0,F[1],bz, 0,0,0,1); };
-  const emit=(parts,L,into)=>{ for(const pt of parts){ partMatrix(pt,L,_pm); if(pt[6]==='glass') furG.cube(_pm,'#9cc8d6'); else (into||fur).cube(_pm,pt[6]); } };
+  const emit=(parts,L,into)=>{ for(const pt of parts){ partMatrix(pt,L,_pm); const bt=pt[6]==='glass'?furG:(into||fur), col=pt[6]==='glass'?'#9cc8d6':pt[6]; if(pt[7]&&pt[7].shape==='cyl') bt.cyl(_pm,col,pt[7].axis); else bt.cube(_pm,col); } };
   const decorB={};
   for(const it of Fn.items){
     const opened=it.searched||rec.taken.includes(G.level+':'+it.id);
@@ -1499,12 +1509,12 @@ function build(G,rec){
   // wall decor and floor clutter
   for(const r of P.rooms){
     const q=rngOf(G.fseed+'|decor|'+r.id), st=G.style[r.id]; let list=DECOR_BY[r.kind]; if(typeof list==='function') list=list(st);
-    const dens=r.kind==='rdining'?.38:r.kind==='sales'?.1:.13;
+    const dens=r.kind==='rdining'?.18:r.kind==='sales'?.05:.06;
     const K={r:q,st,mess:G.mess,gone:G.gone,j:(c,a)=>jit(c,q,a==null?.06:a)};
     if(list) for(const c of r.cells){ const i=c%W,j=(c/W)|0;
       for(let d=0;d<4;d++){ const e=O.edges.get(edgeKey(i,j,d)); if(!e||e.type!=='wall') continue; if(occAt[c]>=0&&Fn.items[occAt[c]].spec.h>1.25) continue; if(q()>dens) continue;
         const bk=e.ext?'e'+e.dir:'int'; emit(DECOR[pick(q,list)](K),itemL(i,j,(d+2)%4,FY),decorB[bk]=decorB[bk]||new Batch()); } }
-    const n=Math.round(r.cells.length*G.mess*.1);
+    const n=Math.round(r.cells.length*G.mess*.025);
     for(let k=0;k<n;k++){ const c=r.cells[Math.floor(q()*r.cells.length)]; if(occAt[c]>=0) continue; const L2=[]; litter(L2,K,.05,.05,.9,.9,1+Math.floor(q()*3)); emit(L2,itemL(c%W,(c/W)|0,0,FY)); }
   }
   // outside: a patio behind a house, pots and benches in front of a shop
@@ -1524,8 +1534,8 @@ function build(G,rec){
   mk.visible=view.marks; fg.add(mk);
   // people
   for(const p of D.people){ const i=p.c%W,j=(p.c/W)|0; const g=new THREE.Group(); const col=PEOPLE[p.side];
-    const body=new THREE.Mesh(new THREE.CylinderGeometry(.22,.26,1.25,8),new THREE.MeshLambertMaterial({color:p.side==='raider'?0x8a5a48:0x8f97a8})); body.position.y=.63;
-    const head=new THREE.Mesh(new THREE.SphereGeometry(.17,10,8),new THREE.MeshLambertMaterial({color:0xc9a07c})); head.position.y=1.42;
+    const body=new THREE.Mesh(new THREE.CylinderGeometry(.22,.26,1.25,18),new THREE.MeshLambertMaterial({color:p.side==='raider'?0x8a5a48:0x8f97a8})); body.position.y=.63;
+    const head=new THREE.Mesh(new THREE.SphereGeometry(.17,16,12),new THREE.MeshLambertMaterial({color:0xc9a07c})); head.position.y=1.42;
     const ring=new THREE.Mesh(new THREE.RingGeometry(.34,.44,20),new THREE.MeshBasicMaterial({color:col,side:THREE.DoubleSide})); ring.rotation.x=-Math.PI/2; ring.position.y=.03;
     g.add(body,head,ring); if(p.boss) g.scale.setScalar(1.12); g.position.set(cx(i)+.5,FY,cz(j)+.5); fg.add(g); }
   // outside door → 2 m movement cell

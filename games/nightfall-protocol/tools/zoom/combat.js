@@ -53,10 +53,10 @@ const CB=(()=>{
     aim=Math.max(5,Math.min(95,Math.round(aim))); return {aim,crit:cv===0?40:10,cover:cv,flanked:cv===0,d}; }
   // ---------- figures and their states ----------
   function makeRaider(i,x,z){ const fem=i===1, f=FigureKit.figure(fem,FigureKit.genFace(4000+i*13,fem)); f.j=Object.assign({},FigureKit.POSES.stand); f.root.traverse(o=>{ if(o.isMesh) o.castShadow=true; });
-    f.ink=FigureKit.inkUp(f.root,{persp:true,width:.0016,color:INKS.raider}); armed(f); scene.add(f.root);
+    f.ink=FigureKit.inkUp(f.root,{persp:true,width:.0016,color:INKS.raider}); armed(f,i===2?'pistol':'rifle'); scene.add(f.root);
     const c=cellOf(x,z); return {team:'raider',fig:f,name:RAIDERS[i]||'Raider',hp:i===2?6:4,max:i===2?6:4,ap:0,alive:true,x,z,cell:c,face:Math.random()*TAU,unaware:true,look:Math.random()*TAU,lookT:0}; }
-  const gunG=new THREE.BoxGeometry(.055,.62,.08); gunG.translate(0,-.3,.02);
-  function armed(f){ if(f.gun) return; const g=new THREE.Mesh(gunG,mat('#2b2a28')); g.position.set(0,-.24,0); g.castShadow=true; f.el[0].add(g); f.gun=g; }
+  // weapons and the hands on them come from the motion module: bolt-action rifles, a pistol for the raider boss
+  function armed(f,kind='rifle'){ if(f.gun) return; f.gun=Motion.arm(f,kind,{ink:{persp:true,width:.0016}}); }
   function ink(u){ if(!u.fig.ink) return; const k=!u.alive?'dead':u.team==='raider'?'raider':u.ow?'overwatch':u.hp<=u.max/2?'wounded':C.sel===u?'selected':'calm'; u.fig.ink.color.setHex(INKS[k]); }
   C.concealedInk=()=>{ figs.forEach((f,i)=>{ if(f.ink) f.ink.color.setHex(i===0?INKS.selected:INKS.concealed); armed(f); }); };
   // ---------- the camp ----------
@@ -77,7 +77,7 @@ const CB=(()=>{
   function moveUnit(u,cells){ return new Promise(res=>{ u.route=cells.map(c=>({x:cx(c),z:cz(c),c})); u.rk=1; u.done=res; }); }
   async function shoot(a,b,opt={}){ const o=odds(a,b,opt); a.face=Math.atan2(b.x-a.x,b.z-a.z); a.aiming=true; await wait(380);
     const hit=Math.random()*100<o.aim, crit=hit&&Math.random()*100<o.crit, dmg=hit?(3+Math.floor(Math.random()*3)+(crit?2:0)):0;
-    tracer(a,b,hit); if(hit) Motion.kick(b.fig,'hit'); Motion.kick(a.fig,'recoil');
+    tracer(a,b,hit); if(hit) Motion.kick(b.fig,'hit',1,{from:{x:a.x,z:a.z}}); Motion.kick(a.fig,'recoil');
     pop(b.x,heightAt(b.x,b.z)+2.3,b.z,hit?(crit?`CRIT −${dmg}`:`−${dmg}`):'Miss',hit?(crit?'crit':''):'miss');
     if(hit){ b.hp-=dmg; if(b.hp<=0){ b.hp=0; b.alive=false; b.ow=false; } } b.unaware=false; ink(b);
     await wait(450); a.aiming=false; drawBar(); return hit; }
