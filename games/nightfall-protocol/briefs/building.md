@@ -26,6 +26,7 @@ Also `data/base/ranch_site.json` and `mockups/base.html`.
   - **Placing**: all fourteen buildables can be placed on the 2 m grid. You can also repair the old well or take an outbuilding apart.
   - **People**: six `People` survivors choose the work with `People.score`, fetch materials, walk the real ground and build. They refill canteens from the base's water and rest indoors in the heat. At night they sleep on cots, in the bunkhouse or in the house, with two on watch.
   - **Grid**: finished things write kind and cover into the grid, and paths go round them. Gates shut at night.
+  - **Construction and layout**: sites are marked out with stakes and string, then go through materials on site, groundwork, framing, walls and roof. Builders work and carriers bring materials. The build card shows the cost against the stores, the time, the footprint and the grid effect. Sites carry stage labels, and a construction queue has priority and cancel. **▶ Watch a build** walks through a bunkhouse from choosing it to done.
   - **Tests**: the rules are tested in Node (`test.js`) and the page in Chromium (`page-test.js`).
 
 What exists to build on:

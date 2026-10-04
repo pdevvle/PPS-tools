@@ -1,5 +1,5 @@
 // Browser check for the base prototype: loads, places things with the mouse and through the rules, runs a day and a night,
-// founds the base at the other base point and in open ground.
+// founds the base at the other base point and in open ground, and plays the build walkthrough.
 //   ./build.sh   then   THREE=<path to three r128 three.min.js> node page-test.js [shots-dir]
 // Software rendering is slow; this checks behaviour, not frame rate.
 const {chromium}=require(process.env.PW||'playwright'), assert=require('assert'), path=require('path');
@@ -48,10 +48,19 @@ const PAGE='file://'+path.resolve(__dirname,'../../mockups/base.html'), THREE=pr
   const m5=await page.evaluate(()=>{ const {R,st}=window.__ranch; R.place('wall',R.cellOf(400,180),0); R.advance(120); const a=st.area; return {area:a, claimed:Object.keys(st.claimed).length, clock:R.fmt(st.minutes), onBase:st.people.every(p=>p.x>a[0]&&p.x<a[2]&&p.z>a[1]&&p.z<a[3])}; });
   assert(Math.abs((m5.area[0]+m5.area[2])/2-400)<4&&m5.claimed===0&&m5.onBase,'founded in open ground with the tool: '+JSON.stringify(m5));
   await page.waitForTimeout(1200); await shot('6-open-ground');
+  // the walkthrough: founds the ranch at dawn, chooses the bunkhouse, lays it out, then the site goes through its stages
+  await page.click('#demo');
+  for(let i=0;i<200;i++){ const ph=await page.evaluate(()=>{ const d=window.__ranch.demo; if(d&&d.phase!=='build') d.t+=.15; return d&&d.phase; }); if(ph==='build') break; await page.waitForTimeout(40); }
+  const m6=await page.evaluate(()=>{ const r=window.__ranch, t=r.demo.site, seen=new Set(); r.ui.speed=0;
+    for(let k=0;k<400&&t.state!=='done';k++){ r.R.advance(5); seen.add(r.stageOf(t)); } seen.add(r.stageOf(t));
+    return {type:t.type, stages:[...seen], card:document.getElementById('card').hidden, queue:document.querySelectorAll('#queue li').length}; });
+  assert(m6.type==='bunkhouse'&&['Groundwork','Framing','Walls','Roof','Done'].every(k=>m6.stages.includes(k)),'the walkthrough builds a bunkhouse through every stage: '+JSON.stringify(m6));
+  assert(m6.card,'the build card is hidden once the layout is placed');
+  await page.waitForTimeout(1200); await shot('7-walkthrough-done');
   const pnl=await page.evaluate(()=>({people:document.querySelectorAll('.person').length, water:document.getElementById('wl').textContent, log:document.querySelectorAll('#log li').length}));
   assert.equal(pnl.people,6); assert(/ L$/.test(pnl.water));
   if(errors.length) console.log('ERRORS',[...new Set(errors)].slice(0,5));
   assert.deepEqual(errors,[],'no page errors');
-  console.log('ok',JSON.stringify({placed,m1,m3,m4,m5}));
+  console.log('ok',JSON.stringify({placed,m1,m3,m4,m5,m6}));
   await browser.close();
 })().catch(e=>{ console.error(e); process.exit(1); });

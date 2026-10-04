@@ -134,7 +134,7 @@ function canPlace(type,c,rot=0){ const T=CATALOG[type]; if(!T) return {ok:false,
     if(T.on===undefined&&k===NK.wash&&(T.kind!==undefined||T.beds)) return {ok:false,why:'Not in the wash: it floods'}; }
   return {ok:true,cells}; }
 function addThing(type,c,rot,state='site'){ const T=CATALOG[type], cells=footprint(type,c,rot), id='t'+st.seq++;
-  const t={id, type, cell:c, rot, cells, state, progress:0, delivered:Object.keys(T.cost).length===0, pool:0, pumped:0, tended:-1, shut:false};
+  const t={id, type, cell:c, rot, cells, state, progress:0, priority:0, delivered:Object.keys(T.cost).length===0, pool:0, pumped:0, tended:-1, shut:false};
   for(const q of cells) st.grid.occ[q]=st.seq-1; st.things.push(t); return t; }
 function place(type,c,rot=0){ return canPlace(type,c,rot).ok?addThing(type,c,rot):null; }
 // a straight line in one of eight directions, as dragged
@@ -145,6 +145,11 @@ function placeLine(type,a,b){ const out=[]; for(const c of lineCells(a,b)) if(ca
 function cancel(id){ const t=st.things.find(q=>q.id===id); if(!t||t.state!=='site') return false; if(t.type==='pump'){ t.state='broken'; t.progress=0; return true; }
   if(t.delivered) for(const [k,n] of Object.entries(CATALOG[t.type].cost)) st.stock[k]=(st.stock[k]||0)+n;   // materials go back to the store
   for(const q of t.cells) st.grid.occ[q]=0; st.things=st.things.filter(q=>q!==t); for(const p of st.people) if(p.task&&p.task.thing===t) leave(p); return true; }
+// a site moved to the front of the queue: its build task scores higher for everyone
+function setPriority(id,on){ const t=st.things.find(q=>q.id===id); if(!t||t.state!=='site') return false; t.priority=on?1:0; return true; }
+// who is working a site now, and how long it has left at their pace (hours of world time; null when nobody is on it)
+function siteInfo(t){ const need=CATALOG[t.type].hours*60, at=st.people.filter(p=>p.task&&p.task.thing===t&&p.task.kind==='build'), working=at.filter(p=>{ const s=p.task.steps[p.task.step]; return s&&s.do==='build'; });
+  const rate=working.reduce((a,p)=>a+workRate(p,'build'),0); return {fraction:Math.min(1,t.progress/need), coming:at.length, working:working.length, hoursLeft:rate>0?(need-t.progress)/rate/60:null}; }
 function orderRepair(){ const t=st.things.find(q=>q.type==='pump'&&q.state==='broken'); if(!t) return null; t.state='site'; t.delivered=false; note('Ordered: a hand pump on the old well.'); return t; }
 function orderTear(key){ const b=st.claimed[key]; if(!b||b.torn||b.order||b.role!=='outbuilding') return false; b.order={progress:0}; note('Ordered: take an outbuilding apart for materials.'); return true; }
 
@@ -189,7 +194,7 @@ function offers(p){ const m=st.minutes, out=[], add=(task,steps)=>out.push({task
       add({id:'sleep-'+s.cell,kind:'sleep',where:where(s.cell),hours:8,urgency:1,bed:s.bed,spot:s},[{go:s.cell},{do:'sleep',bed:s.bed,inside:s.inside}]); } }
   else {
     for(const t of st.things){ if(t.state!=='site'||busyOn(t,t.type==='bunkhouse'?3:t.type==='watch'?2:1)||!costOK(t)||t.blockedUntil>m) continue;
-      add({id:'build-'+t.id,kind:'build',skill:'build',where:where(t.cells[0]),hours:CATALOG[t.type].hours,urgency:t.type==='pump'||t.type==='tank'?.8:.6,outdoor:true,heavy:true,thing:t},
+      add({id:'build-'+t.id,kind:'build',skill:'build',where:where(t.cells[0]),hours:CATALOG[t.type].hours,urgency:(t.type==='pump'||t.type==='tank'?.8:.6)+(t.priority?.5:0),outdoor:true,heavy:true,thing:t},
         [...(t.delivered?[]:[{go:st.places.store},{do:'take',min:4}]),{go:accessOf(t),carry:!t.delivered},{do:'build',act:'work'}]); }
     for(const b of Object.values(st.claimed)) if(b.order&&!st.people.some(q=>q.task&&q.task.claimed===b)){ const c=nearestPassable(b.cells[0]);
       add({id:'tear-'+b.key,kind:'build',skill:'build',where:where(c),hours:TEAR.hours,urgency:.5,outdoor:true,heavy:true,claimed:b},[{go:c},{do:'tear',act:'work'}]); }
@@ -264,7 +269,7 @@ function advance(dt){ const STEP=.5; while(dt>1e-9){ const d=Math.min(STEP,dt); 
 function dailyUse(){ let s=0; for(let m=0;m<1440;m+=10){ const sleep=night(m), h=heatAt(m)*(midday(m)?.4:1); s+=(sleep?P.RATES.WATER_SLEEP:P.RATES.WATER_AWAKE)*(1+P.RATES.WATER_HEAT*h)/6; } return s*st.people.filter(p=>p.rec.alive&&p.rec.at!=='gone').length; }
 
 return {VERSION, NK, COVER, CATALOG, TEAR, START_STOCK, BARRELS, CANTEEN, BASE, People:P,
-  create, use, advance, canFound, areaAt, place, placeLine, lineCells, canPlace, footprint, cancel, orderRepair, orderTear, rainfall, offers,
+  create, use, advance, canFound, areaAt, setPriority, siteInfo, workRate:(p,s)=>workRate(p,s), place, placeLine, lineCells, canPlace, footprint, cancel, orderRepair, orderTear, rainfall, offers,
   cellOf, cellXZ, cellIJ, idOf, passable, speedOf, findPath, nearestPassable, accessOf, waterCap, inflow, dailyUse, heightAt:(x,z)=>heightAt(st.site,x,z), siteOf,
   hourOf, heatAt, fmt, night, midday, get state(){ return st; } };
 })();

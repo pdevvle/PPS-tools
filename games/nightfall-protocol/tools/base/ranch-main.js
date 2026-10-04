@@ -6,7 +6,8 @@ const $=id=>document.getElementById(id);
 const stage=$('stage'), labelsEl=$('labels'), tipEl=$('tip'), loadingEl=$('loading');
 if(!window.THREE){ loadingEl.textContent='The 3D view needs three.js, which could not load. Check your connection and reload.'; return; }
 let renderer; try{ renderer=new THREE.WebGLRenderer({antialias:true,alpha:true}); }catch(e){ loadingEl.textContent='This browser could not start WebGL.'; return; }
-renderer.setPixelRatio(Math.min(2,window.devicePixelRatio||1)); renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap; renderer.setClearColor(0,0); stage.prepend(renderer.domElement);
+renderer.setPixelRatio(Math.min(2,window.devicePixelRatio||1)); renderer.localClippingEnabled=true;   // sites rise from the ground with a clipping plane
+ renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap; renderer.setClearColor(0,0); stage.prepend(renderer.domElement);
 const scene=new THREE.Scene(); scene.fog=new THREE.Fog(0xe2d8c2,420,1100);
 const cam=new THREE.PerspectiveCamera(38,1,.5,4000);
 const hemi=new THREE.HemisphereLight(0xfff6e6,0x8a7a62,.34), sun=new THREE.DirectionalLight(0xfff1da,.8); sun.castShadow=true; sun.shadow.mapSize.set(2048,2048);
@@ -162,18 +163,71 @@ function wallSpans(t,g){ if(t.type==='gate') return; const [i,j]=R.cellIJ(t.cell
 const wallAt=c=>st.things.some(q=>q.cells.includes(c)&&q.state==='done'&&wallTypes.has(q.type));
 const thingView=new Map();
 function centreOf(t,rot=t.rot){ const xs=t.cells.map(c=>R.cellXZ(c)), x=xs.reduce((s,p)=>s+p[0],0)/xs.length, z=xs.reduce((s,p)=>s+p[1],0)/xs.length; return [x,z]; }
-function buildView(t){ const v=thingView.get(t.id); if(v) dispose(v.g);
-  const g=new THREE.Group(), [x,z]=centreOf(t), y=Math.min(...t.cells.map(c=>H(...R.cellXZ(c))));
-  if(t.state==='site'){ const stake=mat('#e0a526'); for(const c of t.cells){ const [cx,cz]=R.cellXZ(c); box(g,stake,cx-x-.9,.4,cz-z-.9,.06,.8,.06); } const m=model(t.type,t); m.traverse(o=>{ if(o.isMesh){ o.material=siteMat; o.castShadow=false; o.userData.noInk=true; } }); g.add(m); }
+// ---------- construction, as it happens ----------
+// A site goes through stages by its share of the work: marked out (stakes and string) → materials on site (a pile by the
+// footprint) → groundwork (a pad) → framing (scaffold, the thing rising from the ground) → walls → roof or finishing → done.
+// The rising part is the finished model cut by a clipping plane; the rest of it shows as a faint blueprint.
+const ROOFED=new Set(['bunkhouse','ramada','catcher','watch','tank']);
+function stageOf(t){ if(t.state==='broken') return 'Broken'; if(t.state==='done') return 'Done'; const f=t.progress/(R.CATALOG[t.type].hours*60);
+  if(!t.delivered) return 'Marked out'; if(t.type==='seep') return f>0?'Digging':'Marked out'; if(t.type==='pump') return f>0?'Repairing':'Parts on site';
+  if(f<=0) return 'Materials on site'; if(f<.2) return 'Groundwork'; if(f<.5) return 'Framing'; if(f<.8) return wallTypes.has(t.type)?'Building up':'Walls'; return ROOFED.has(t.type)?'Roof':'Finishing'; }
+const blueMat=new THREE.MeshBasicMaterial({color:0xe0a526,transparent:true,opacity:.09,depthWrite:false});
+const FRAMED=new Set(['bunkhouse']);   // a timber frame goes up before the walls
+const stringMat=new THREE.LineBasicMaterial({color:0xe0a526}), padMat=mat('#b9ab92'), plankM=mat('#b08a5a'), crateM=mat('#6a5a44'), toolM=mat('#5d6a6e'), scafM=mat('#a07a4c');
+function sizeOf(t){ const T=R.CATALOG[t.type]; return [T.w*2,T.d*2]; }
+function buildView(t){ const v=thingView.get(t.id); if(v){ dispose(v.g); for(const m of v.mats||[]) m.dispose(); }
+  const g=new THREE.Group(), [x,z]=centreOf(t), y=Math.min(...t.cells.map(c=>H(...R.cellXZ(c)))), view={g,state:t.state,shut:t.shut,mats:[]};
+  if(t.state==='site'||t.state==='broken'&&false){ const [w,d]=sizeOf(t), hw=w/2-.05, hd=d/2-.05;
+    // marked out: a stake at each corner and string between them, the cleared ground under them
+    for(const [sx,sz] of [[-1,-1],[1,-1],[1,1],[-1,1]]) box(g,mat('#e0a526'),sx*hw,.35,sz*hd,.07,.7,.07);
+    { const lg=new THREE.BufferGeometry(), q=[]; for(const [a1,b1,a2,b2] of [[-hw,-hd,hw,-hd],[hw,-hd,hw,hd],[hw,hd,-hw,hd],[-hw,hd,-hw,-hd]]) q.push(a1,.45,b1,a2,.45,b2); lg.setAttribute('position',new THREE.Float32BufferAttribute(q,3)); g.add(new THREE.LineSegments(lg,stringMat)); }
+    const ground=new THREE.Mesh(new THREE.PlaneGeometry(w,d),new THREE.MeshBasicMaterial({color:0x8a6f50,transparent:true,opacity:0,depthWrite:false})); ground.rotation.x=-Math.PI/2; ground.position.y=.06; g.add(ground); view.ground=ground; view.mats.push(ground.material);
+    // groundwork: a pad under anything with walls
+    const T=R.CATALOG[t.type]; if(T.kind!==undefined&&!wallTypes.has(t.type)){ const pad=box(g,padMat,0,.06,0,w-.3,.12,d-.3); pad.scale.y=.01; view.pad=pad; }
+    // the pile: one piece per unit of cost, laid beside the footprint, used up as the work goes on
+    const pile=new THREE.Group(), units=[]; for(const [k,n] of Object.entries(T.cost)) for(let i=0;i<Math.min(n,12);i++) units.push(k);
+    units.forEach((k,i)=>{ const row=i%4, lay=Math.floor(i/4), mm=k==='shelter'?plankM:k==='goods'?crateM:toolM; const me=k==='shelter'?box(pile,mm,0,.1+lay*.18,(row-1.5)*.32,1.8,.14,.28):box(pile,mm,(row-1.5)*.5,.22+lay*.42,0,.42,.4,.42); me.userData.n=i; });
+    pile.position.set(hw+1.1,0,0); pile.visible=false; g.add(pile); view.pile=pile; view.units=units.length;
+    // the finished model, cut at the working height; above it the blueprint
+    const real=model(t.type,t), blue=model(t.type,t), plane=new THREE.Plane(new THREE.Vector3(0,-1,0),y);
+    real.traverse(o=>{ if(o.isMesh){ o.material=o.material.clone(); o.material.clippingPlanes=[plane]; o.material.clipShadows=true; view.mats.push(o.material); } });
+    blue.traverse(o=>{ if(o.isMesh){ o.material=blueMat; o.castShadow=false; o.userData.noInk=true; } });
+    g.add(real,blue); const bb=new THREE.Box3().setFromObject(real); view.top=Math.max(.4,bb.max.y); view.plane=plane; view.real=real;
+    // a timber frame: studs every metre or so round the walls and a top plate, standing up during framing
+    if(FRAMED.has(t.type)){ const fr=new THREE.Group(), fx=bb.max.x-.05, fz=bb.max.z-.05, fh=2.6; const stud=(x,z)=>{ const me=box(fr,plankM,x,fh/2,z,.1,fh,.1); me.userData.stud=true; };
+      for(let x=-fx;x<=fx+.01;x+=fx/4){ stud(x,-fz); stud(x,fz); } for(let z=-fz+fz/3;z<fz-.01;z+=fz/3){ stud(-fx,z); stud(fx,z); }
+      const plate=new THREE.Group(); box(plate,plankM,0,fh,-fz,fx*2+.1,.12,.12); box(plate,plankM,0,fh,fz,fx*2+.1,.12,.12); box(plate,plankM,-fx,fh,0,.12,.12,fz*2); box(plate,plankM,fx,fh,0,.12,.12,fz*2); fr.add(plate);
+      fr.visible=false; g.add(fr); view.frame=fr; view.plate=plate; }
+    // scaffold round anything tall, while it goes up
+    if(view.top>2.2){ const sc=new THREE.Group(), H2=view.top+.6, ex=Math.max(hw,bb.max.x)+.35, ez=Math.max(hd,bb.max.z)+.35; for(const [sx,sz] of [[-1,-1],[1,-1],[1,1],[-1,1]]) box(sc,scafM,sx*ex,H2/2,sz*ez,.1,H2,.1);
+      for(let hy=1.2;hy<H2;hy+=1.4){ box(sc,scafM,0,hy,-ez,ex*2,.08,.08); box(sc,scafM,0,hy,ez,ex*2,.08,.08); box(sc,scafM,-ex,hy,0,.08,.08,ez*2); box(sc,scafM,ex,hy,0,.08,.08,ez*2); }
+      sc.visible=false; g.add(sc); view.scaffold=sc; }
+    inkOn(pile); }
   else { const m=model(t.type,t); g.add(m); if(t.state==='done'&&wallTypes.has(t.type)) wallSpans(t,m); inkOn(g); }
-  g.position.set(x,y,z); g.rotation.y=t.rot%2?Math.PI/2:0; scene.add(g); thingView.set(t.id,{g,state:t.state}); }
+  g.position.set(x,y,z); g.rotation.y=t.rot%2?Math.PI/2:0; scene.add(g); view.y=y; thingView.set(t.id,view); return view; }
+// every frame: the stage of each site drives what shows
+const puffs=[];
+function updateSites(dt){ for(const t of st.things){ const v=thingView.get(t.id); if(!v) continue;
+    if(v.pop>0){ v.pop=Math.max(0,v.pop-dt); const k=v.pop/.6; v.g.scale.set(1+.1*k*Math.sin(k*9),1+.18*k*Math.sin(k*9),1+.1*k*Math.sin(k*9)); }
+    if(t.state!=='site'||!v.plane) continue;
+    const f=Math.min(1,t.progress/(R.CATALOG[t.type].hours*60)), rise=Math.max(0,Math.min(1,(f-.2)/.8));
+    v.ground.material.opacity=t.delivered?.35:.12;
+    if(v.pad) v.pad.scale.y=Math.max(.01,Math.min(1,f/.2));
+    v.pile.visible=t.delivered; const left=Math.ceil(v.units*(1-f)); v.pile.children.forEach(c=>{ if(c.userData.n!==undefined) c.visible=c.userData.n<left; });
+    const up=v.frame?Math.max(0,Math.min(1,(f-.45)/.55)):rise;   // framed things raise their walls only once the frame stands
+    v.plane.constant=v.y+(f<.2&&v.pad?0:Math.max(.02,up*(v.top+.05)));   // world height the model is cut at (the plane faces down)
+    if(v.frame){ const k=Math.max(0,Math.min(1,(f-.2)/.25)); v.frame.visible=f>=.2; v.frame.children.forEach(c=>{ if(c.userData.stud){ c.scale.y=Math.max(.02,k); c.position.y=1.3*Math.max(.02,k); } }); v.plate.visible=k>=1; }
+    if(v.scaffold) v.scaffold.visible=f>=.15&&f<.97; } }
+function finishPuff(t){ const [x,z]=centreOf(t), [w,d]=sizeOf(t), ring=new THREE.Mesh(new THREE.RingGeometry(.6,1,28),new THREE.MeshBasicMaterial({color:0xe8dcc2,transparent:true,opacity:.8,depthWrite:false,side:THREE.DoubleSide}));
+  ring.rotation.x=-Math.PI/2; ring.position.set(x,H(x,z)+.15,z); ring.userData.r=Math.max(w,d)*.6; scene.add(ring); puffs.push({ring,t:0}); }
+function updatePuffs(dt){ for(let i=puffs.length-1;i>=0;i--){ const q=puffs[i]; q.t+=dt; const k=q.t/.9, r=q.ring.userData.r*(1+1.6*k); q.ring.scale.set(r,r,r); q.ring.material.opacity=.8*(1-k); if(k>=1){ dispose(q.ring); q.ring.material.dispose(); puffs.splice(i,1); } } }
 let viewKey='';
 function syncThings(){ const key=st.things.map(t=>t.id+t.state+(t.shut?'s':'')).join()+'|'+Object.values(st.claimed).map(b=>b.torn?1:0).join(); if(key===viewKey) return; viewKey=key;
   const live=new Set(st.things.map(t=>t.id)); for(const [id,v] of thingView) if(!live.has(id)){ dispose(v.g); thingView.delete(id); }
-  for(const t of st.things){ const v=thingView.get(t.id); if(!v||v.state!==t.state||v.shut!==t.shut||(wallTypes.has(t.type)&&t.state==='done')){ buildView(t); thingView.get(t.id).shut=t.shut; } }
+  for(const t of st.things){ const v=thingView.get(t.id), was=v&&v.state; if(!v||v.state!==t.state||v.shut!==t.shut||(wallTypes.has(t.type)&&t.state==='done')){ const nv=buildView(t); if(was==='site'&&t.state==='done'){ nv.pop=.6; finishPuff(t); } } }
   for(const b of Object.values(st.claimed)) if(b.torn&&bldMesh.has(b.pts)){ dispose(bldMesh.get(b.pts)); bldMesh.delete(b.pts); }
   paintGrid(); }
-function clearThings(){ for(const v of thingView.values()) dispose(v.g); thingView.clear(); viewKey=''; }
+function clearThings(){ for(const v of thingView.values()){ dispose(v.g); for(const m of v.mats||[]) m.dispose(); } thingView.clear(); viewKey=''; }
 
 // ---------- people ----------
 let figs=[];
@@ -182,7 +236,11 @@ function makeFigs(){ for(const f of figs){ dispose(f.root); dispose(f.lump); f.t
   f.root.traverse(o=>{ if(o.isMesh) o.castShadow=true; }); f.ink=FigureKit.inkUp(f.root,{persp:true,width:.0016,color:FigureKit.STATES.calm.c}); f.inkState='calm'; scene.add(f.root);
   f.root.position.set(p.x,H(p.x,p.z),p.z); f.yaw=0;
   const tag=document.createElement('div'); tag.className='tag'; tag.textContent=p.name; labelsEl.appendChild(tag); f.tag=tag;
-  const lump=new THREE.Group(); box(lump,mat('#7a8a9a'),0,.62,.1,.62,.22,1.6); box(lump,mat('#d8b890'),0,.64,-.82,.22,.2,.24); lump.visible=false; inkOn(lump); scene.add(lump); f.lump=lump; return f; }); }
+  const lump=new THREE.Group(); box(lump,mat('#7a8a9a'),0,.62,.1,.62,.22,1.6); box(lump,mat('#d8b890'),0,.64,-.82,.22,.2,.24); lump.visible=false; inkOn(lump); scene.add(lump); f.lump=lump;
+  // what a person carries in both arms: a bundle of planks for a build, jerrycans of water from the seep
+  const planks=new THREE.Group(); for(let k=0;k<3;k++) box(planks,plankM,0,k*.07,0,.5,.06,1.6); planks.position.set(0,1.02,.34); planks.rotation.x=-.1;
+  const cans=new THREE.Group(); for(const sx of [-.16,.16]) box(cans,mat('#3f5a6e'),sx,0,0,.26,.36,.14); cans.position.set(0,1.0,.3);
+  for(const q of [planks,cans]){ q.visible=false; inkOn(q); f.root.add(q); } f.planks=planks; f.cans=cans; return f; }); }
 makeFigs();
 function setInk(f,state){ if(f.inkState===state) return; f.inkState=state; if(f.ink) f.ink.color.setHex(FigureKit.STATES[state].c); }
 const TASKTEXT={drink:'Filling a canteen',build:'Building',sleep:'Asleep',guard:'On watch',rest:'Resting in shade',idle:'Idle',haul:'Hauling water',grow:'Tending the garden'};
@@ -207,8 +265,21 @@ const ray=new THREE.Raycaster(), ndc=new THREE.Vector2();
 function groundAt(ev){ const r=renderer.domElement.getBoundingClientRect(); ndc.set((ev.clientX-r.left)/r.width*2-1,-(ev.clientY-r.top)/r.height*2+1); ray.setFromCamera(ndc,cam); const hit=ray.intersectObject(terrain.mesh)[0]; return hit?hit.point:null; }
 function tip(text,bad){ if(!text){ tipEl.hidden=true; return; } tipEl.hidden=false; tipEl.textContent=text; tipEl.classList.toggle('bad',!!bad); }
 const costText=T=>Object.entries(T.cost).map(([k,n])=>`${n} ${({shelter:'materials',tools:'parts',water:'L water'})[k]||k}`).join(', ')||'no materials';
+// the build card: what a thing costs against the stores, how long it takes, its footprint, what it does to the grid and what it gives
+const cardEl=$('card'), UNIT1={shelter:'materials',goods:'goods',tools:'parts',water:'L water'};
+function givesOf(T){ return [T.beds?`${T.beds} bed${T.beds>1?'s':''}`:'',T.shade?'shade':'',T.water?`stores ${T.water.toLocaleString()} L`:'',T.catchL?`${T.catchL} L per mm of rain into the tanks`:'',T.seepL?`${T.seepL} L a day`:'',T.pumpL?`${T.pumpL} L a day of pumping`:'',T.tendL?`a garden plot (${T.tendL} L a day)`:'',T.site?`a ${T.site} site for settlement`:'',T.guards?`${T.guards} on watch at night, spots at ${T.spot} m`:'',T.drag?'blocks the way':''].filter(Boolean).join(' · '); }
+const gridOf=T=>`${T.gate?'wall when shut':T.kind===R.NK.wall?'wall':T.kind===R.NK.building?'building':'passable'+(T.speed?` (walking ×${T.speed})`:'')}${T.cover?` · ${T.cover===2?'full':'half'} cover`:''}`;
+function showCard(type,status,bad,count=1){ if(!type){ cardEl.hidden=true; return; } const T=R.CATALOG[type], live=st.people.filter(p=>p.rec.alive&&p.rec.at!=='gone'), best=live.reduce((a,p)=>(p.rec.skills.build||0)>(a?a.rec.skills.build||0:-1)?p:a,null);
+  const chips=Object.entries(T.cost).map(([k,n])=>{ const need=n*count, have=Math.floor(st.stock[k]||0); return `<span class="chip${have<need?' short':''}">${need} ${UNIT1[k]||k}<small>${have} in store</small></span>`; }).join('')||'<span class="chip">no materials</span>';
+  const pace=best?R.workRate(best,'build')/(R.midday(st.minutes)?.5:1):1;
+  cardEl.innerHTML=`<b>${T.label}${count>1?` × ${count}`:''}</b>${T.inferred?'<em>stats inferred</em>':''}<div class="chips">${chips}</div>
+    <dl><dt>Work</dt><dd>${T.hours*count} h at Build 1${best?` · about ${(T.hours*count/pace).toFixed(1)} h for ${best.name} (Build ${(best.rec.skills.build||0).toFixed(1)})`:''}</dd>
+    <dt>Size</dt><dd>${T.w} × ${T.d} cells (${T.w*2} × ${T.d*2} m)${T.w!==T.d?' · R rotates':''}${T.drag?' · drag for a line':''}</dd>
+    <dt>Grid</dt><dd>${gridOf(T)}</dd>${givesOf(T)?`<dt>Gives</dt><dd>${givesOf(T)}</dd>`:''}</dl>
+    <div class="status${bad?' bad':''}">${status}</div>`; cardEl.hidden=false; }
 function setTool(t){ tool=t; drag=null; clearGhost(); document.querySelectorAll('[data-tool]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.tool===t)));
-  stage.style.cursor=t?'crosshair':'grab'; tip(t&&R.CATALOG[t]?`${R.CATALOG[t].label}: ${costText(R.CATALOG[t])}, ${R.CATALOG[t].hours} h of work at Build 1.${R.CATALOG[t].drag?' Drag to draw a line.':''}${R.CATALOG[t].w!==R.CATALOG[t].d?' R rotates.':''}`:t==='tear'?'Click a small outbuilding on the base to take it apart for materials.':t==='cancel'?'Click a planned thing to cancel it.':t==='found'?'Click anywhere on the ground to found the base there (a 140 m square). The old base is left behind.':''); }
+  if(R.CATALOG[t]){ tip(''); showCard(t,'Move over the base to lay it out.'); } else showCard(null);
+  stage.style.cursor=t?'crosshair':'grab'; if(!R.CATALOG[t]) tip(t==='tear'?'Click a small outbuilding on the base to take it apart for materials.':t==='cancel'?'Click a planned thing to cancel it.':t==='found'?'Click anywhere on the ground to found the base there (a 140 m square). The old base is left behind.':''); }
 function clearGhost(){ if(ghost){ dispose(ghost); ghost=null; } ghostKey=''; }
 function showGhost(type,cells,okAll){ const key=type+cells.join(',')+okAll+rot; if(key===ghostKey) return; clearGhost(); ghostKey=key; ghost=new THREE.Group();
   const T=R.CATALOG[type], groups=T.drag?cells.map(c=>[c]):[cells];
@@ -218,18 +289,22 @@ function showGhost(type,cells,okAll){ const key=type+cells.join(',')+okAll+rot; 
   scene.add(ghost); }
 // the corner cell for a footprint centred under the pointer
 function cornerAt(type,p){ const T=R.CATALOG[type], w=rot%2?T.d:T.w, d=rot%2?T.w:T.d; return R.cellOf(p.x-(w-1),p.z-(d-1)); }
-function hover(ev){ const p=groundAt(ev); if(!p) return; const T=R.CATALOG[tool];
+function hover(ev){ const p=groundAt(ev); if(p) hoverAt(p); }
+function hoverAt(p){ const T=R.CATALOG[tool];
   if(tool==='found'){ const ok=R.canFound(RANCH_SITE,p.x,p.z), a=R.areaAt(RANCH_SITE,p.x,p.z), key='found'+a.join()+ok; if(key!==ghostKey){ clearGhost(); ghostKey=key; ghost=new THREE.Group(); const pts=[];
       for(const [ax,az,bx,bz] of [[a[0],a[1],a[2],a[1]],[a[2],a[1],a[2],a[3]],[a[2],a[3],a[0],a[3]],[a[0],a[3],a[0],a[1]]]) for(let t=0;t<1;t+=.025){ const x=ax+(bx-ax)*t, z=az+(bz-az)*t, x2=ax+(bx-ax)*(t+.025), z2=az+(bz-az)*(t+.025); pts.push(x,H(x,z)+.4,z,x2,H(x2,z2)+.4,z2); }
       const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(pts,3)); ghost.add(new THREE.LineSegments(g,new THREE.LineBasicMaterial({color:ok?0x3fae7f:0xc23b2e}))); scene.add(ghost); }
     tip(ok?'Found the base here: a 140 m square.':'The base has to fit on the cut ground.',!ok); return; }
-  if(T){ if(T.drag&&drag){ const cells=R.lineCells(drag.a,R.cellOf(p.x,p.z)), good=cells.filter(c=>R.canPlace(tool,c).ok); showGhost(tool,good.length?good:cells,good.length>0); tip(`${good.length} × ${T.label.toLowerCase()}: ${good.length*(T.cost.shelter||0)} materials${T.cost.tools?`, ${good.length*T.cost.tools} parts`:''}`,!good.length); return; }
-    const c=cornerAt(tool,p), chk=R.canPlace(tool,c,rot), cells=R.footprint(tool,c,rot)||[]; showGhost(tool,cells,chk.ok); if(!chk.ok) tip(chk.why,true); else tip(`${T.label}: ${costText(T)}, ${T.hours} h of work.`); } }
-function click(ev){ const p=groundAt(ev); if(!p) return; const c=R.cellOf(p.x,p.z), T=R.CATALOG[tool];
-  if(T&&!T.drag){ const t=R.place(tool,cornerAt(tool,p),rot); if(t){ ui.dirty=true; R.state.log.unshift({t:st.minutes,msg:`Ordered: ${T.label.toLowerCase()}.`}); } return; }
+  if(T){ if(T.drag&&drag){ const cells=R.lineCells(drag.a,R.cellOf(p.x,p.z)), good=cells.filter(c=>R.canPlace(tool,c).ok); showGhost(tool,good.length?good:cells,good.length>0); showCard(tool,good.length?`Release to lay out ${good.length}${good.length<cells.length?` (${cells.length-good.length} blocked)`:''}.`:'Nothing can go along this line.',!good.length,Math.max(1,good.length)); return; }
+    const c=cornerAt(tool,p), chk=R.canPlace(tool,c,rot), cells=R.footprint(tool,c,rot)||[]; showGhost(tool,cells,chk.ok); showCard(tool,chk.ok?(T.drag?'Click to lay out one, or drag for a line.':'Click to lay it out.'):chk.why,!chk.ok); } }
+function click(ev){ const p=groundAt(ev); if(p) clickAt(p,ev); }
+function clickAt(p,ev){ const c=R.cellOf(p.x,p.z), T=R.CATALOG[tool];
+  if(T&&!T.drag){ const t=R.place(tool,cornerAt(tool,p),rot); if(t){ ui.dirty=true; R.state.log.unshift({t:st.minutes,msg:`Laid out: ${T.label.toLowerCase()}.`}); } return t; }
+  if(T&&T.drag){ const t=R.place(tool,c,0); if(t){ ui.dirty=true; R.state.log.unshift({t:st.minutes,msg:`Laid out: ${T.label.toLowerCase()}.`}); } return t; }
   if(tool==='found'){ if(R.canFound(RANCH_SITE,p.x,p.z)){ found([p.x,p.z]); setTool(null); } return; }
   if(tool==='tear'){ for(const [k,b] of Object.entries(st.claimed)) if(b.role==='outbuilding'&&!b.torn&&b.cells.some(q=>{ const [x,z]=R.cellXZ(q); return Math.hypot(x-p.x,z-p.z)<3; })){ R.orderTear(k); setTool(null); ui.dirty=true; return; } tip('Only a small outbuilding on the base can be taken apart.',true); return; }
   if(tool==='cancel'){ const t=st.things.find(q=>q.state==='site'&&q.cells.includes(c)); if(t){ R.cancel(t.id); ui.dirty=true; } return; }
+  if(!ev) return;
   // no tool: pick a person by screen distance, else a thing, else a claimed building
   const r=renderer.domElement.getBoundingClientRect(); let best=-1,bd=26; figs.forEach((f,i)=>{ if(!f.root.visible) return; const v=f.root.position.clone(); v.y+=1; v.project(cam); const sx=(v.x+1)/2*r.width, sy=(1-v.y)/2*r.height, d=Math.hypot(sx-(ev.clientX-r.left),sy-(ev.clientY-r.top)); if(d<bd){ bd=d; best=i; } });
   if(best>=0){ selected={kind:'person',i:best}; ui.dirty=true; return; }
@@ -239,7 +314,7 @@ function click(ev){ const p=groundAt(ev); if(!p) return; const c=R.cellOf(p.x,p.
 // pointers: with no tool, drag turns the view; right or two-finger drag pans; wheel and pinch zoom. With a line tool, drag draws.
 const ptrs=new Map(); let gesture=null;
 renderer.domElement.addEventListener('contextmenu',e=>e.preventDefault());
-renderer.domElement.addEventListener('pointerdown',e=>{ renderer.domElement.setPointerCapture(e.pointerId); ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY,x0:e.clientX,y0:e.clientY,b:e.button});
+renderer.domElement.addEventListener('pointerdown',e=>{ if(demo) stopDemo(); renderer.domElement.setPointerCapture(e.pointerId); ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY,x0:e.clientX,y0:e.clientY,b:e.button});
   if(ptrs.size===2){ gesture={pinch:true}; drag=null; return; }
   const T=R.CATALOG[tool]; if(T&&T.drag&&e.button===0){ const p=groundAt(e); if(p) drag={a:R.cellOf(p.x,p.z)}; } });
 renderer.domElement.addEventListener('pointermove',e=>{ const q=ptrs.get(e.pointerId);
@@ -250,7 +325,7 @@ renderer.domElement.addEventListener('pointermove',e=>{ const q=ptrs.get(e.point
   if(q.b===2||e.shiftKey) panBy(dx,dy); else if(!tool||Math.hypot(e.clientX-q.x0,e.clientY-q.y0)>6){ view.yaw-=dx*.006; view.pitch+=dy*.005; } placeCam(); if(tool) hover(e); });
 function panBy(dx,dy){ const k=view.dist/600, s=Math.sin(view.yaw), c=Math.cos(view.yaw); view.tx+=(-dx*c-dy*s)*k; view.tz+=(dx*s-dy*c)*k; }
 renderer.domElement.addEventListener('pointerup',e=>{ const q=ptrs.get(e.pointerId); ptrs.delete(e.pointerId); if(ptrs.size===0) gesture=null; if(!q) return;
-  if(drag&&e.button===0){ const p=groundAt(e); if(p){ const placed=R.placeLine(tool,drag.a,R.cellOf(p.x,p.z)); if(placed.length) R.state.log.unshift({t:st.minutes,msg:`Ordered: ${placed.length} × ${R.CATALOG[tool].label.toLowerCase()}.`}); ui.dirty=true; } drag=null; clearGhost(); hover(e); return; }
+  if(drag&&e.button===0){ const p=groundAt(e); if(p){ const placed=R.placeLine(tool,drag.a,R.cellOf(p.x,p.z)); if(placed.length) R.state.log.unshift({t:st.minutes,msg:`Laid out: ${placed.length} × ${R.CATALOG[tool].label.toLowerCase()}.`}); ui.dirty=true; } drag=null; clearGhost(); hover(e); return; }
   if(q.b===0&&Math.hypot(e.clientX-q.x0,e.clientY-q.y0)<6) click(e); });
 renderer.domElement.addEventListener('pointerleave',()=>{ if(!drag) clearGhost(); });
 renderer.domElement.addEventListener('wheel',e=>{ e.preventDefault(); view.dist*=Math.exp(e.deltaY*.0012); placeCam(); },{passive:false});
@@ -259,11 +334,14 @@ addEventListener('keydown',e=>{ if(e.target.tagName==='INPUT') return; if(e.key=
 
 // ---------- panels ----------
 const ui={speed:.25, dirty:true};
-{ const bar=$('build'); for(const [k,T] of Object.entries(R.CATALOG)){ if(T.repair) continue; const b=document.createElement('button'); b.type='button'; b.dataset.tool=k; b.textContent=T.label; b.title=`${costText(T)} · ${T.hours} h at Build 1${T.inferred?' · stats inferred':''}`; bar.appendChild(b); }
+const GROUPS=[['Defence',['wall','gate','barricade','watch']],['Shelter',['bed','bunkhouse','ramada']],['Water',['tank','catcher','seep']],['Work',['garden','kitchen','workbench']]];
+{ const bar=$('build'); for(const [name,keys] of GROUPS){ const g=document.createElement('div'); g.className='grp'; g.innerHTML=`<span class="lbl">${name}</span>`; bar.appendChild(g);
+    for(const k of keys){ const T=R.CATALOG[k], b=document.createElement('button'); b.type='button'; b.dataset.tool=k; b.textContent=T.label; b.title=`${costText(T)} · ${T.hours} h at Build 1${T.inferred?' · stats inferred':''}`; g.appendChild(b); } }
+  $('demo').addEventListener('click',()=>startDemo());
   const pre=$('presets'); for(const pr of RANCH_SITE.presets){ const b=document.createElement('button'); b.type='button'; b.textContent=pr.label; b.title=pr.note; b.addEventListener('click',()=>found(pr.centre)); pre.appendChild(b); }
   document.querySelectorAll('[data-tool]').forEach(b=>b.addEventListener('click',()=>setTool(tool===b.dataset.tool?null:b.dataset.tool)));
   $('repair').addEventListener('click',()=>{ if(!R.orderRepair()) R.state.log.unshift({t:st.minutes,msg:'There is no broken well on this base.'}); ui.dirty=true; });
-  $('speed').querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{ ui.speed=+b.dataset.s; $('speed').querySelectorAll('button').forEach(q=>q.setAttribute('aria-pressed',String(q===b))); }));
+  $('speed').querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{ stopDemo(); ui.speed=+b.dataset.s; $('speed').querySelectorAll('button').forEach(q=>q.setAttribute('aria-pressed',String(q===b))); }));
   $('grid').addEventListener('change',e=>{ gridMesh.visible=e.target.checked; });
   $('area').addEventListener('change',e=>{ areaLine.visible=e.target.checked; }); }
 const peopleEl=$('people'); let rows=[];
@@ -271,8 +349,25 @@ function makeRows(){ peopleEl.innerHTML=''; rows=st.people.map((p,i)=>{ const b=
   b.addEventListener('click',()=>{ selected={kind:'person',i}; view.tx=st.people[i].x; view.tz=st.people[i].z; placeCam(); ui.dirty=true; }); peopleEl.appendChild(b); return b; }); }
 makeRows();
 // found a base somewhere else: the ground stays, everything on it starts over
-function found(centre){ const speed=ui.speed, minute=st.minutes; st=R.create(RANCH_SITE,{centre,minute});   // the clock carries on clearThings(); buildBuildings(); drawArea(); makeFigs(); makeRows(); selected=null;
+function found(centre,at){ const speed=ui.speed, minute=at!==undefined?at:st.minutes; st=R.create(RANCH_SITE,{centre,minute});   // the clock carries on
+  clearThings(); buildBuildings(); drawArea(); makeFigs(); makeRows(); selected=null;
   view.tx=(st.area[0]+st.area[2])/2; view.tz=(st.area[1]+st.area[3])/2; placeCam(); paintGrid(); ui.speed=speed; ui.dirty=true; }
+// the construction queue: every open site with its stage, progress and who is on it; ▲ moves it to the front, × cancels.
+// Lines of walls or barricades are one row per kind.
+const queueEl=$('queue');
+queueEl.addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; const ids=b.dataset.ids.split(',');
+  if(b.dataset.a==='up'){ const on=!st.things.find(t=>t.id===ids[0]).priority; for(const id of ids) R.setPriority(id,on); }
+  else if(b.dataset.a==='x'){ for(const id of ids) R.cancel(id); }
+  else { const t=st.things.find(q=>q.id===ids[0]); if(t){ selected={kind:'thing',id:t.id}; [view.tx,view.tz]=centreOf(t); placeCam(); } } ui.dirty=true; });
+function queue(){ const open=st.things.filter(t=>t.state==='site'), rowsQ=[], lines={};
+  for(const t of open){ if(R.CATALOG[t.type].drag){ (lines[t.type]=lines[t.type]||[]).push(t); continue; } rowsQ.push([t]); }
+  for(const ts of Object.values(lines)) rowsQ.push(ts);
+  rowsQ.sort((a,b)=>(b[0].priority-a[0].priority));
+  if(!rowsQ.length){ queueEl.innerHTML='<li class="empty">Nothing ordered. Pick a thing in the build bar and lay it out on the base.</li>'; return; }
+  queueEl.innerHTML=rowsQ.map(ts=>{ const t=ts[0], T=R.CATALOG[t.type], info=ts.map(q=>R.siteInfo(q)), f=info.reduce((a,i)=>a+i.fraction,0)/ts.length, who=info.reduce((a,i)=>a+i.working,0), coming=info.reduce((a,i)=>a+i.coming,0)-who;
+    const left=ts.length===1&&info[0].hoursLeft!=null?` · ~${info[0].hoursLeft.toFixed(1)} h left`:'', name=ts.length>1?`${T.label} × ${ts.length}`:T.label, stage=ts.length>1?`${ts.filter(q=>q.progress>0).length} begun`:stageOf(t), ids=ts.map(q=>q.id).join(',');
+    return `<li${t.priority?' class="hot"':''}><button type="button" class="qn" data-ids="${ids}">${name}<small>${stage}${who?` · ${who} at work`:coming?` · ${coming} on the way`:''}${left}</small></button>
+      <span class="meter"><i style="width:${(f*100).toFixed(0)}%"></i></span><button type="button" class="qb" data-a="up" data-ids="${ids}" aria-pressed="${!!t.priority}" title="Build this first">▲</button><button type="button" class="qb" data-a="x" data-ids="${ids}" title="Cancel and return the materials">×</button></li>`; }).join(''); }
 const UNITNAME={water:'L water',food:'rations',medicine:'med kits',tools:'parts',fuel:'L fuel',gear:'gear',shelter:'materials',goods:'goods'};
 const ROLE={house:['House','Shelter: rest and sleep indoors (on the floor until interiors furnish it). The water barrels, 400 L.'],store:['Store','Materials are fetched from its door.'],workshop:['Workshop','A production site for settlement (crafting).'],outbuilding:['Outbuilding','Can be taken apart for 6 materials.'],spare:['Spare building','Too big to take apart by hand; room for settlement to use.']};
 const P=R.People, TH=P.RATES.THIRST;
@@ -291,6 +386,7 @@ function panels(){ const cap=R.waterCap(), w=st.stock.water, use=R.dailyUse(), i
     sel=`<b>${T.label}</b>${T.inferred?' <span>(stats inferred)</span>':''}<br>${t.state==='broken'?'Broken: the electric pump died with the grid. A hand pump needs 3 goods.':t.state==='site'?`Planned · ${Math.round(t.progress/need*100)}% built · ${t.delivered?'materials on site':'materials in the store'}`:'Finished'}${gives?`<br>${gives}`:''}<br>Grid: ${T.gate?(t.shut?'wall (shut for the night)':'open'):T.kind===R.NK.wall?'wall':T.kind===R.NK.building?'building':'passable'}${T.cover?`, ${T.cover===2?'full':'half'} cover${T.gate?' when shut':''}`:''}${T.gate?'; the base\'s own people pass':''}${t.type==='seep'&&t.state==='done'?`<br>${t.pool.toFixed(0)} L waiting`:''}${t.type==='pump'&&t.state==='done'?`<br>${t.pumped.toFixed(0)} of ${T.pumpL} L pumped today`:''}`; } }
   if(selected&&selected.kind==='claimed'){ const b=st.claimed[selected.k], [nm,txt]=ROLE[b.role]; sel=`<b>${nm}</b><br>${b.order?'Being taken apart.':txt}`; }
   $('sel').innerHTML=sel;
+  queue();
   if(st.log[0]!==lastLog){ lastLog=st.log[0]; $('log').innerHTML=st.log.slice(0,30).map(l=>`<li><span>${R.fmt(l.t).replace('Day ','D')}</span>${l.msg}</li>`).join(''); } }
 
 // ---------- light through the day ----------
@@ -304,11 +400,52 @@ function light(){ const h=R.hourOf(st.minutes); let k=0; while(k<SKY.length-2&&S
   const bx=(st.area[0]+st.area[2])/2, bz=(st.area[1]+st.area[3])/2, az=Math.PI*(day?arc:.35); sun.position.set(bx+Math.cos(az)*160,H(bx,bz)+30+up*180,bz+60); sun.target.position.set(bx,H(bx,bz),bz);   // east at dawn, west at dusk; shadows follow the base   // east at dawn, west at dusk
   scene.fog.color.set(day?0xe2d8c2:0x2a2e3a); }
 
+// ---------- site labels: stage, progress and who is on it, above every open site (one per wall line: the one being worked) ----------
+const siteTagEls=new Map();
+function siteTags(r){ const live=new Set();
+  for(const t of st.things){ if(t.state!=='site') continue; const T=R.CATALOG[t.type], info=R.siteInfo(t); if(T.drag&&!info.coming) continue; live.add(t.id);
+    let el=siteTagEls.get(t.id); if(!el){ el=document.createElement('div'); el.className='tag site'; el.innerHTML='<b></b><span></span><i><u></u></i>'; labelsEl.appendChild(el); siteTagEls.set(t.id,el); }
+    const v=thingView.get(t.id), [x,z]=centreOf(t), y=(v?v.y:H(x,z))+(v?v.top:2)+1.2, q=new THREE.Vector3(x,y,z).project(cam);
+    if(q.z>1){ el.style.display='none'; continue; } el.style.display=''; el.style.left=((q.x+1)/2*r.width)+'px'; el.style.top=((1-q.y)/2*r.height)+'px';
+    el.children[0].textContent=T.label; el.children[1].textContent=`${stageOf(t)}${info.working?` · ${info.working} at work`:info.coming?' · on the way':''}`; el.children[2].firstChild.style.width=(info.fraction*100).toFixed(0)+'%'; el.classList.toggle('hot',!!t.priority); }
+  for(const [id,el] of siteTagEls) if(!live.has(id)){ el.remove(); siteTagEls.delete(id); } }
+
+// ---------- watch a build: the whole process on the ranch, played with the real rules ----------
+// Founds the ranch afresh at dawn, chooses the bunkhouse, moves its layout over blocked and open ground, lays it out, then follows
+// the site while people haul the materials and build it through every stage. Captions name each step. Any speed button stops it.
+let demo=null; const capEl=$('caption');
+const STEPS={choose:'1 · Choose. The build card shows the cost against the stores, the work at Build 1 and for your best builder, the footprint, what it does to the grid and what it gives.',
+  layout:'2 · Lay out. The plan follows the pointer. It turns red, and the card says why, over blocked ground. Click to stake it out.',
+  'Marked out':'3 · Staked out. Stakes and string mark the footprint, and it joins the construction queue. A builder fetches the materials from the store.',
+  'Materials on site':'4 · Materials on site. The pile by the stakes is used up as the work goes on.',
+  Groundwork:'5 · Groundwork. Builders level the ground and lay a pad.',
+  Framing:'6 · Framing. Scaffold goes up and the frame rises out of the ground. The faint plan above shows what is still to come.',
+  Walls:'7 · Walls. Up to three can build a bunkhouse at once. Each Build level is 15% faster, and outdoor work in the heat goes at half speed.',
+  Roof:'8 · Roof.',
+  Done:'Done. The bunkhouse writes building and full cover into the movement grid, so paths go round it and it gives cover in a fight. Its four beds and shade are ready tonight.'};
+function caption(t){ if(!t){ capEl.hidden=true; return; } capEl.hidden=false; capEl.textContent=t; }
+function startDemo(){ stopDemo(); setTool(null); const day=Math.floor(st.minutes/1440); found(RANCH_SITE.presets[0].centre,(R.hourOf(st.minutes)<6?day:day+1)*1440+6*60);
+  st.stock.shelter+=10; st.stock.goods+=4; st.log.unshift({t:st.minutes,msg:'Watch a build: the ranch founded afresh at dawn.'});
+  demo={t:0,phase:'choose',site:null,from:[713,20],to:[735,58]}; ui.speed=0; $('speed').querySelectorAll('button').forEach(q=>q.setAttribute('aria-pressed','false'));
+  Object.assign(view,{tx:726,tz:40,dist:58,pitch:.72,yaw:-.7}); placeCam(); caption(STEPS.choose); $('demo').setAttribute('aria-pressed','true'); }
+function stopDemo(){ if(!demo) return; demo=null; caption(''); $('demo').setAttribute('aria-pressed','false'); if(gridMesh.visible&&!$('grid').checked) gridMesh.visible=false; }
+function stepDemo(dt){ const d=demo; d.t+=dt;
+  if(d.phase==='choose'){ if(d.t>1.2&&tool!=='bunkhouse') setTool('bunkhouse'); if(d.t>4){ d.phase='layout'; d.t=0; caption(STEPS.layout); } return; }
+  if(d.phase==='layout'){ const k=Math.min(1,d.t/3.2), e=k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2, x=d.from[0]+(d.to[0]-d.from[0])*e, z=d.from[1]+(d.to[1]-d.from[1])*e;   // eased over the house, then out into the open
+    hoverAt({x,z}); if(d.t>4.4){ d.site=clickAt({x:d.to[0],z:d.to[1]}); setTool(null); if(!d.site){ stopDemo(); return; } d.phase='build'; d.t=0; ui.speed=1; } return; }
+  const t=d.site, info=R.siteInfo(t), stg=stageOf(t);
+  if(d.phase==='build'){ if(stg!==d.stage){ d.stage=stg; caption(STEPS[stg]||STEPS.Done); }
+    // time runs at 60× while the materials are carried, 360× while people build, and fast when nobody is on it (the midday heat, the walk)
+    ui.speed=!t.delivered?1:info.working?6:30; const [x,z]=centreOf(t);
+    if(t.delivered){ view.tx+=(x-view.tx)*Math.min(1,dt*1.5); view.tz+=(z-view.tz)*Math.min(1,dt*1.5); view.dist+=(32-view.dist)*Math.min(1,dt); view.yaw+=dt*.12; placeCam(); }
+    if(t.state==='done'){ d.phase='done'; d.t=0; caption(STEPS.Done); ui.speed=.25; gridMesh.visible=true; } return; }
+  if(d.phase==='done'){ view.yaw+=dt*.08; placeCam(); if(d.t>7){ stopDemo(); $('speed').querySelector('[data-s="0.25"]').setAttribute('aria-pressed','true'); } } }
+
 // ---------- the frame ----------
 let last=performance.now(), tick=0, panelT=0;
 function frame(now){ const dt=Math.min(.1,(now-last)/1000); last=now; tick++;
   if(ui.speed>0) R.advance(ui.speed*dt);
-  syncThings();
+  syncThings(); updateSites(dt); updatePuffs(dt); if(demo) stepDemo(dt);
   const comp=Math.max(1,ui.speed*60), r=renderer.domElement.getBoundingClientRect();
   st.people.forEach((p,i)=>{ const f=figs[i], s0=p.task&&p.task.steps[p.task.step], sleeping=!!(s0&&s0.do==='sleep'), hidden=p.inside||p.rec.at==='gone', onBed=sleeping&&!p.inside;
     f.root.visible=!hidden&&!onBed; f.tag.style.display=f.root.visible?'':'none';
@@ -319,12 +456,14 @@ function frame(now){ const dt=Math.min(.1,(now-last)/1000); last=now; tick++;
     const act=!p.rec.alive?'dead':p.act==='work'?'work':p.act==='carry'?'carry':'idle', stg=P.thirstStage(p.rec);
     setInk(f,selected&&selected.kind==='person'&&selected.i===i?'selected':p.rec.brk&&p.rec.brk.until>st.minutes?'panicked':stg>=2||P.healthOf(p.rec)<.6?'wounded':p.task&&p.task.kind==='guard'?'overwatch':'calm');
     Motion.update(f,{act,ground:(x,z)=>H(x,z),compress:comp},dt);
+    f.planks.visible=p.act==='carry'&&!!p.task&&p.task.kind==='build'; f.cans.visible=p.act==='carry'&&!!p.task&&p.task.kind==='haul';
     const v=new THREE.Vector3(p.x,y+2.1,p.z).project(cam); if(v.z>1){ f.tag.style.display='none'; } else { f.tag.style.left=((v.x+1)/2*r.width)+'px'; f.tag.style.top=((1-v.y)/2*r.height)+'px'; }
     f.tag.classList.toggle('sel',!!selected&&selected.kind==='person'&&selected.i===i); f.tag.classList.toggle('thirst',stg>=1); });
+  siteTags(r);
   light();
   panelT+=dt; if(panelT>.25||ui.dirty){ panelT=0; ui.dirty=false; panels(); }
   renderer.render(scene,cam); requestAnimationFrame(frame); }
 loadingEl.remove(); light(); paintGrid(); panels(); requestAnimationFrame(frame);
-window.__ranch={R, get st(){ return st; }, get figs(){ return figs; }, found, view, placeCam, setTool, ui, get tool(){ return tool; }, frames:()=>tick, cellAt:(x,z)=>R.cellOf(x,z),
+window.__ranch={R, get st(){ return st; }, startDemo, get demo(){ return demo; }, stageOf, get figs(){ return figs; }, found, view, placeCam, setTool, ui, get tool(){ return tool; }, frames:()=>tick, cellAt:(x,z)=>R.cellOf(x,z),
   screen:(x,z)=>{ cam.updateMatrixWorld(); const v=new THREE.Vector3(x,H(x,z),z).project(cam), r=renderer.domElement.getBoundingClientRect(); return {x:r.left+(v.x+1)/2*r.width, y:r.top+(1-v.y)/2*r.height}; }};
 })();

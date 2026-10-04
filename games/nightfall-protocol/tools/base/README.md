@@ -29,6 +29,21 @@ Building's topic (`../../briefs/building.md`). `DESIGN.md` is the merged design.
   - **Repair well** orders the hand pump.
   - **Take apart** removes a small outbuilding for 6 shelter. Its cells become open ground.
   - **Cancel** returns a planned thing's materials.
+- **Construction, as it happens**: a site goes through these stages by its share of the work:
+  - **Marked out**: stakes at the corners, string between them, cleared ground.
+  - **Materials on site**: a pile by the footprint, one piece per unit of cost. It shrinks as the work goes on.
+  - **Groundwork**: a pad under anything with walls.
+  - **Framing**: scaffold round tall things, and the bunkhouse's timber studs and top plate.
+  - **Walls** (or **Building up**): the finished model rises out of the ground, cut by a clipping plane, with a faint plan of the rest above it.
+  - **Roof** (or **Finishing**), then **Done**, with a small settle and a ring of dust.
+
+  Builders dig with Motion's `work` act. People fetching materials carry a bundle of planks, and people hauling seep water carry jerrycans.
+- **Build UI**:
+  - The build bar is grouped into Defence, Shelter, Water and Work.
+  - Picking a thing opens its **build card**: the cost as chips against the stores (red when short), the work at Build 1 and for the best builder, the footprint, what it writes into the grid and what it gives. While laying out, the card says whether it can go there and why not, or how many sections a dragged line holds.
+  - Every open site carries a **label** with its stage, its progress and who is at work.
+  - The **Construction** queue lists every open site, with lines of walls grouped. **▲** moves a site to the front (its build task scores higher), and **×** cancels it and returns the materials.
+- **▶ Watch a build** plays the whole process with the real rules, with a caption for each step. It founds the ranch afresh at dawn, chooses the bunkhouse, moves the layout over the house (red) and out into the open (green), and lays it out. Then it follows the site while people fetch the materials and build it through every stage. Any speed button or a click on the ground stops it.
 - **Grid**: the **Movement grid** view shows kinds, half cover (blue) and gates (brown). Paths go round blocked cells, and people standing on a cell that turns solid step off it.
 - **People**: six `People` survivors, each with traits, skills, needs and mood.
   - Job choice is `People.score` over the tasks the base offers.

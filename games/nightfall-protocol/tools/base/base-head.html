@@ -40,6 +40,26 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .tag{position:absolute;transform:translate(-50%,-100%);font:11px var(--mono);color:#1d1814;background:rgba(244,238,224,.88);border-radius:3px;padding:1px 5px;white-space:nowrap}
 .tag.sel{background:var(--accent)}
 .tag.thirst{box-shadow:inset 0 -2px 0 var(--bad)}
+.tag.site{display:flex;flex-direction:column;gap:2px;min-width:118px;padding:3px 7px 4px;background:rgba(27,28,30,.86);color:var(--text);border:1px solid rgba(224,165,38,.6)}
+.tag.site b{font:500 12px var(--body)} .tag.site span{font:10px var(--mono);color:#cfcbc2}
+.tag.site i{display:block;height:4px;background:#141517;border-radius:2px;overflow:hidden} .tag.site u{display:block;height:100%;background:var(--accent)}
+.tag.site.hot{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.card{position:absolute;left:10px;top:10px;width:min(330px,calc(100% - 20px));background:rgba(27,28,30,.92);border:1px solid var(--line);border-radius:4px;padding:9px 11px;font:12px var(--mono);color:var(--text);pointer-events:none;display:flex;flex-direction:column;gap:6px}
+.card[hidden]{display:none}
+.card b{font:600 15px var(--body)} .card em{font:11px var(--mono);font-style:normal;color:var(--muted);margin-left:8px}
+.chips{display:flex;flex-wrap:wrap;gap:4px}
+.chip{display:inline-flex;flex-direction:column;background:#2d2f33;border:1px solid var(--line);border-radius:3px;padding:2px 7px;font:500 12px var(--body)}
+.chip small{font:10px var(--mono);color:var(--muted)} .chip.short{border-color:var(--bad)} .chip.short small{color:#e07a6e}
+.card dl{display:grid;grid-template-columns:auto 1fr;gap:2px 8px;margin:0} .card dt{color:var(--muted)} .card dd{margin:0}
+.card .status{border-top:1px solid var(--line);padding-top:5px;color:#9fd6b8} .card .status.bad{color:#e07a6e}
+.caption{position:absolute;left:50%;bottom:52px;transform:translateX(-50%);width:min(620px,calc(100% - 20px));background:rgba(27,28,30,.9);border-left:3px solid var(--accent);color:var(--text);font:14px/1.4 var(--body);padding:8px 12px;border-radius:3px;pointer-events:none}
+.queue{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px;max-height:220px;overflow:auto}
+.queue li{display:grid;grid-template-columns:1fr 54px auto auto;gap:6px;align-items:center}
+.queue li.hot .qn{color:var(--accent)} .queue .empty{display:block;font:12px var(--mono);color:var(--muted)}
+.queue .qn{background:none;border:0;padding:0;min-height:0;text-align:left;color:var(--text);font:500 13px var(--body);cursor:pointer;display:flex;flex-direction:column}
+.queue .qn small{font:11px var(--mono);color:var(--muted)}
+.queue .qb{min-height:24px;padding:0 7px;font:12px var(--mono)}
+.queue .meter>i{background:var(--accent)}
 .loading{position:absolute;inset:0;display:grid;place-items:center;font:13px var(--mono);color:#3b3934}
 .side{border-left:1px solid var(--line);display:flex;flex-direction:column;min-width:0}
 .side section{padding:10px 12px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:6px}
@@ -77,9 +97,10 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
   <div class="app">
     <div class="main">
       <div class="bar" role="toolbar" aria-label="Build">
-        <div class="grp" id="build"><span class="lbl">Build</span></div>
+        <div class="grp" id="build"></div>
         <div class="grp"><span class="lbl">Order</span><button type="button" id="repair">Repair well</button><button type="button" data-tool="tear">Take apart</button><button type="button" data-tool="cancel">Cancel</button></div>
         <div class="grp" id="presets"><span class="lbl">Base</span><button type="button" data-tool="found">Found here…</button></div>
+        <div class="grp"><button type="button" id="demo" aria-pressed="false">▶ Watch a build</button></div>
       </div>
       <div class="bar">
         <div class="grp"><span class="clock" id="clock">Day 1 05:00</span><span class="temp" id="phase"></span></div>
@@ -88,6 +109,8 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
       <div class="stage" id="stage">
         <div class="labels" id="labels"></div>
         <div class="tip" id="tip" hidden></div>
+        <div class="card" id="card" hidden></div>
+        <div class="caption" id="caption" hidden></div>
         <div class="loading" id="loading">Loading the ranch…</div>
         <div class="hint" id="hint">Drag to turn · right-drag or two fingers to pan · wheel or pinch to zoom · R rotates · Esc drops the tool</div>
         <div class="credit">© OpenStreetMap contributors, ODbL · Terrain Tiles on AWS</div>
@@ -100,6 +123,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
         <div class="temp" id="wdays"></div>
       </section>
       <section aria-labelledby="h-stock"><h2 id="h-stock">Stores</h2><dl class="stock" id="stock"></dl></section>
+      <section aria-labelledby="h-queue"><h2 id="h-queue">Construction</h2><ul class="queue" id="queue"></ul></section>
       <section aria-labelledby="h-people"><h2 id="h-people">People · water short</h2><div class="people" id="people"></div></section>
       <section aria-labelledby="h-sel"><h2 id="h-sel">Selected</h2><div class="sel" id="sel">Click a person or a thing.</div></section>
       <section aria-labelledby="h-view"><h2 id="h-view">View</h2>
