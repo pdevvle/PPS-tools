@@ -253,32 +253,34 @@ const ROOM={ // name, floor colour, min width (cells), pull toward front/drive
   living:{n:'Living room',floor:'#b48e62',minW:4,f:.9},
   kitchen:{n:'Kitchen',floor:'#c9bfae',minW:3,f:-.3},
   dining:{n:'Dining',floor:'#b48e62',minW:3,f:.1},
-  laundry:{n:'Laundry',floor:'#c9bfae',minW:2,f:-.4},
+  laundry:{n:'Laundry',floor:'#c9bfae',minW:3,f:-.4},
   den:{n:'Den',floor:'#a98a66',minW:3,f:.2},
   hall:{n:'Hall',floor:'#b48e62',minW:1},
   master:{n:'Main bedroom',floor:'#8f8577',minW:3},
   bed:{n:'Bedroom',floor:'#8f8577',minW:3},
-  bath:{n:'Bathroom',floor:'#d8d4c9',minW:2},
-  mbath:{n:'Main bath',floor:'#d8d4c9',minW:2},
+  bath:{n:'Bathroom',floor:'#d8d4c9',minW:3},
+  mbath:{n:'Main bath',floor:'#d8d4c9',minW:3},
   rdining:{n:'Dining room',floor:'#a4825c',minW:5,f:1.2},
   rkitchen:{n:'Kitchen',floor:'#bdb7aa',minW:3,f:-1},
-  walkin:{n:'Walk-in cooler',floor:'#a9adb0',minW:2,f:-1},
-  restroom:{n:'Restroom',floor:'#d8d4c9',minW:2,f:.9},
-  office:{n:'Office',floor:'#9c917f',minW:2,f:-.4},
-  storage:{n:'Dry storage',floor:'#a39d92',minW:2,f:-1},
+  walkin:{n:'Walk-in cooler',floor:'#a9adb0',minW:3,f:-1},
+  restroom:{n:'Restroom',floor:'#d8d4c9',minW:3,f:.9},
+  office:{n:'Office',floor:'#9c917f',minW:3,f:-.4},
+  storage:{n:'Dry storage',floor:'#a39d92',minW:3,f:-1},
   sales:{n:'Sales floor',floor:'#cbc4b4',minW:5,f:1.2},
-  stock:{n:'Stockroom',floor:'#a39d92',minW:2,f:-1},
+  stock:{n:'Stockroom',floor:'#a39d92',minW:3,f:-1},
   dispensary:{n:'Pharmacy counter',floor:'#c9c6bb',minW:3,f:.8},
   ffdining:{n:'Dining area',minW:4,f:1.2}, ffkitchen:{n:'Kitchen',minW:3,f:-1},
-  cafe:{n:'Café',minW:4,f:1.2}, cafeback:{n:'Back room',minW:2,f:-1},
-  lobby:{n:'Lobby',minW:4,f:1.2}, teller:{n:'Teller line',minW:2,f:.7}, vault:{n:'Vault',minW:2,f:-1},
+  cafe:{n:'Café',minW:4,f:1.2}, cafeback:{n:'Back room',minW:3,f:-1},
+  lobby:{n:'Lobby',minW:4,f:1.2}, teller:{n:'Teller line',minW:3,f:.7}, vault:{n:'Vault',minW:3,f:-1},
   reception:{n:'Reception',minW:3,f:1.2}, openoffice:{n:'Open office',minW:4,f:.3}, conference:{n:'Conference room',minW:3,f:.4},
-  breakroom:{n:'Break room',minW:3,f:-.5}, server:{n:'Server closet',minW:2,f:-1},
+  breakroom:{n:'Break room',minW:3,f:-.5}, server:{n:'Server closet',minW:3,f:-1},
   bay:{n:'Service bay',minW:4,f:1.2}, waiting:{n:'Waiting room',minW:3,f:1.2},
   salon:{n:'Salon',minW:4,f:1.2}, exam:{n:'Exam room',minW:3,f:-.2}, forecourt:{n:'Forecourt',minW:3},
   stair:{n:'Stairwell',minW:3}, elev:{n:'Elevator',minW:3},
 };
-function R(kind,area,extra){ return Object.assign({kind,area,name:ROOM[kind].n},extra||{}); }
+// Closets, baths and back rooms are drawn larger than real life so a squad can fight in them.
+const ROOMY=new Set(['bath','mbath','restroom','laundry','server','storage','walkin','office','stock','cafeback','vault','teller','exam','breakroom']);
+function R(kind,area,extra){ if(ROOMY.has(kind)&&area<40) area=Math.max(area*1.6,area+4); return Object.assign({kind,area,name:ROOM[kind].n},extra||{}); }
 
 // Big or multi-storey office floors: open offices and meeting rooms in the middle, private offices,
 // restrooms and break rooms along a hall; the ground floor adds a lobby and reception.
@@ -547,6 +549,7 @@ function planRooms(M,prog,rng,sense,ctx){
     let t0=1e9,t1=-1e9,x0=1e9,x1=-1e9; for(const c of cells){ t0=Math.min(t0,T(c)); t1=Math.max(t1,T(c)); x0=Math.min(x0,X(c)); x1=Math.max(x1,X(c)); }
     const D=t1-t0+1, cw=x1-x0+1;
     if(cw<5||D<4||list.length<3){ split(list,cells); return; }
+    const hw=cw>=6?2:1; // hall width in cells
     // x positions where the spine can start on the public side
     const ok=new Set();
     const byX={}; for(const c of cells){ const x=X(c); if(byX[x]===undefined||T(c)<T(byX[x])) byX[x]=c; }
@@ -557,19 +560,21 @@ function planRooms(M,prog,rng,sense,ctx){
     const endDepth=hasEnd?clamp(Math.round(endA/cw),3,6):0;
     const Ls=D-endDepth;
     let xs, target;
-    if(cw>=8){ target=x0+Math.round((cw-1)/2)+rint(rng,-1,1); }
-    else target=rng()<.5?x0:x1;
-    const cand=[...ok].filter(x=>cw>=8?(x>=x0+3&&x<=x1-3):(x===x0||x===x1));
+    const dbl=cw>=6+hw;
+    if(dbl){ target=x0+Math.round((cw-hw)/2)+rint(rng,-1,1); }
+    else target=rng()<.5?x0:x1-hw+1;
+    const cand=[...ok].filter(x=>dbl?(x>=x0+3&&x+hw-1<=x1-3):(x===x0||x===x1-hw+1));
     if(!cand.length){ split(list,cells); return; }
     xs=cand.reduce((a,b)=>Math.abs(a-target)<=Math.abs(b-target)?a:b);
     const hall=[], sideA=[], sideB=[], end=[];
     const spineSet=new Set();
-    for(let t=t0;t<t0+Ls;t++){ const c=cells.find(q=>T(q)===t&&X(q)===xs); if(c===undefined) break; spineSet.add(c); }
+    const byTX=new Map(cells.map(q=>[T(q)+'|'+X(q),q]));
+    for(let t=t0;t<t0+Ls;t++){ const row=[]; for(let x=xs;x<xs+hw;x++){ const c=byTX.get(t+'|'+x); if(c!==undefined) row.push(c); } if(!row.length||byTX.get(t+'|'+xs)===undefined) break; for(const c of row) spineSet.add(c); }
     for(const c of cells){
       const t=T(c), x=X(c);
       if(spineSet.has(c)) hall.push(c);
       else if(t>=t0+Ls) end.push(c);
-      else if(x<xs) sideA.push(c); else sideB.push(c);
+      else if(x<xs) sideA.push(c); else if(x>xs+hw-1) sideB.push(c); else end.push(c);
     }
     place(R('hall',hall.length),hall);
     const rest=list.filter(r=>!(hasEnd&&(r===master||r===mbath)));
@@ -621,6 +626,15 @@ function planRooms(M,prog,rng,sense,ctx){
       for(const c of r.cells) if(!keep.has(c)){ const i=c%W,j=(c/W)|0; for(const [di,dj] of DIRS){ const q=(j+dj)*W+i+di; if(roomOf[q]>=0&&roomOf[q]!==r.id&&rooms[roomOf[q]].unit===U&&!/stair|elev/.test(rooms[roomOf[q]].kind)){ roomOf[c]=roomOf[q]; rooms[roomOf[q]].cells.push(c); break; } } }
       r.cells=bestP;
     }
+  }
+  // slivers (under 6 m², or 1 m wide strips) join their neighbour; nobody fights in a 1 m closet
+  for(let pass=0;pass<2;pass++) for(const r of rooms.slice(startId)){
+    if(!r.cells.length||/stair|elev/.test(r.kind)) continue;
+    let i0=1e9,i1=-1e9,j0=1e9,j1=-1e9; for(const c of r.cells){ const i=c%W,j=(c/W)|0; i0=Math.min(i0,i); i1=Math.max(i1,i); j0=Math.min(j0,j); j1=Math.max(j1,j); }
+    if(!(r.cells.length<6||(Math.min(i1-i0,j1-j0)<1&&r.cells.length<15))) continue;
+    const cnt={}; for(const c of r.cells){ const i=c%W,j=(c/W)|0; for(const [di,dj] of DIRS){ const q=(j+dj)*W+i+di, o=roomOf[q]; if(o>=0&&o!==r.id&&rooms[o].unit===U&&!/stair|elev/.test(rooms[o].kind)) cnt[o]=(cnt[o]||0)+1; } }
+    const k=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a])[0]; if(k===undefined) continue;
+    for(const c of r.cells){ roomOf[c]=+k; rooms[+k].cells.push(c); } r.cells=[];
   }
   return {rooms,roomOf};
 }
@@ -1485,6 +1499,37 @@ Object.assign(DECOR_BY,{
 const STATIC_PROPS=new Set(['car','liftcar','pump','range','grill','charbroil','fryer','dsink','counter','sinkc','stove','island','checkout','ffcounter','cafecounter','barcounter','pos','tellerwin','depositbox','pcounter','receptiondesk','tallshelf','mcase','cooler','reachin','heater','serverrack','keycut','paintcounter','pizzaoven','wok','washsink','dw','washer','dryer','tub','toilet','vanity','shower','booth','safe','atm','soda','shake','warmer','dipcase','pobox','station','fridge','barricade']);
 const FLIP_PROPS=new Set(['dtable','table4','table2','conftable','coffee','desk','prep','checkstand','dresser','bookcase','filing','vending','wardrobe','sofa','armchair','hutch','tvstand','shelf','hshelf','wallshelf','rshelf','gshelf','crate','nightstand','chairs3','showcase','produce','cubicle']);
 
+// ---- more floor fixtures and wall pieces
+Object.assign(IT,{
+  floorlamp:{w:1,d:1,h:1.7,cover:'none',build(K){ const P=[C(.35,0,.35,.3,.03,.3,'#3a3330'),C(.48,.03,.48,.04,1.4,.04,pick(K.r,[CHROME,'#3a3330','#c9a24a'])),C(.3,1.35,.3,.4,.3,.4,pick(K.r,['#efe3c8','#e8d8b0','#d8c4a0']))];
+    return K.down(1.5)?withO(P,{roll:Math.PI/2,pv:[.5,.5],lift:.2}):P; }},
+  ficus:{w:1,d:1,h:1.9,cover:'half',build(K){ const pot=pick(K.r,[TERRA,'#e8e4da','#3a3d40','#2f6f73']); const dead=K.mess>.5&&K.r()<.6, g=dead?'#7a6a3a':K.j('#4f7a3a',.08);
+    const P=[C(.3,0,.3,.4,.4,.4,pot),C(.32,.38,.32,.36,.03,.36,'#4a3a2a'),C(.48,.4,.48,.04,.9,.04,'#5a4030')];
+    for(let k=0;k<(dead?3:7);k++){ const a=K.r()*6.28, r=.12+K.r()*.18, y=1.0+K.r()*.7; P.push(C(.5+Math.cos(a)*r-.17,y,.5+Math.sin(a)*r-.17,.34,.28,.34,K.j(g,.06))); }
+    if(dead) P.push(B(.2,.003,.7,.25,.01,.15,'#7a6a3a',{ry:K.r()*3}),B(.6,.003,.8,.2,.01,.12,'#6a5a30',{ry:K.r()*3}));
+    return P; }},
+});
+Object.assign(DECOR,{
+  mirrorR(K){ const broken=K.mess>.5&&K.r()<.4; return [C(.25,1.3,.12,.5,.5,.03,pick(K.r,['#c9a24a','#5a4030','#3a3330']),undefined,'z'),C(.29,1.34,.14,.42,.42,.01,broken?'#6c7a7e':'#bcd0d6',undefined,'z')]; },
+  blanket(K){ const cols=pick(K.r,PAL.rug), P=[B(.08,1.05,.12,.84,1.1,.015,cols[0])]; for(let k=0;k<5;k++) P.push(B(.12,1.12+k*.2,.135,.76,.07,.006,cols[1+k%3])); P.push(B(.04,2.15,.1,.92,.04,.04,'#5a4030')); return P; },
+  guitar(K){ const c=pick(K.r,['#c98b4a','#7a2e35','#2b2c2e']); return [C(.32,1.15,.12,.36,.36,.08,c,undefined,'z'),C(.36,1.42,.12,.28,.28,.08,c,undefined,'z'),B(.47,1.6,.14,.06,.55,.03,'#3a3330'),B(.45,2.12,.14,.1,.12,.03,'#3a3330'),C(.46,1.28,.2,.08,.08,.005,'#1e1e1e',undefined,'z')]; },
+  dreamcatcher(K){ const P=[C(.36,1.5,.12,.28,.28,.015,'#8a6a4a',undefined,'z'),C(.39,1.53,.13,.22,.22,.005,'#e8e0d0',undefined,'z')]; for(let k=0;k<3;k++) P.push(B(.42+k*.08,1.22,.13,.008,.28,.004,'#8a6a4a'),B(.4+k*.08,1.16,.13,.05,.1,.004,pick(K.r,['#e8e4da','#7a4a2c','#2f6f73']))); return P; },
+  sconce(K){ const lit=K.mess<.2&&K.r()<.4; return [B(.42,1.75,.12,.16,.2,.03,'#3a3330'),C(.4,1.85,.14,.2,.18,.16,lit?'#ffe0a0':'#e8d8b0')]; },
+  bulletin(K){ const P=[B(.1,1.2,.12,.8,.6,.025,'#5a4030'),B(.13,1.23,.14,.74,.54,.006,'#b8925a')]; for(let k=0;k<7;k++) P.push(B(.16+K.r()*.55,1.26+K.r()*.4,.147,.1+K.r()*.06,.12,.003,pick(K.r,['#efe9dc','#e8d64a','#f3a7b8','#9cc8e0','#efe9dc']),{rz:(K.r()-.5)*.3})); return P; },
+  map(K){ const P=[B(.1,1.25,.12,.8,.6,.025,'#5a4030'),B(.13,1.28,.14,.74,.54,.005,'#e8d8b0')]; for(let k=0;k<6;k++) P.push(B(.18+K.r()*.55,1.32+K.r()*.4,.146,.08+K.r()*.12,.06+K.r()*.1,.003,pick(K.r,['#c9a080','#a7b85a','#9cc8e0','#c98b62']))); P.push(B(.15,1.5,.147,.7,.01,.002,'#c23b2e',{rz:.3})); return P; },
+  calendar(K){ return [B(.36,1.4,.12,.28,.36,.015,'#efe9dc'),B(.36,1.64,.13,.28,.12,.005,pick(K.r,['#c98b62','#3f5f86','#7d8f62']))]; },
+  hooks(K){ const P=[B(.1,1.7,.12,.8,.08,.03,'#5a4030')]; for(let k=0;k<4;k++){ P.push(B(.18+k*.2,1.68,.15,.03,.06,.06,'#2b2c2e')); if(K.r()<.6){ const hat=K.r()<.5; P.push(hat?C(.08+k*.2,1.5,.15,.24,.06,.2,pick(K.r,['#8a6a4a','#c9a080','#2b2c2e'])):B(.12+k*.2,1.2,.16,.16,.46,.08,pick(K.r,PAL.fab))); if(hat) P.push(C(.13+k*.2,1.56,.18,.14,.1,.14,'#6a4a32')); } } return P; },
+  antlers(K){ const P=[B(.42,1.6,.12,.16,.22,.04,'#5a4030'),B(.44,1.62,.15,.12,.14,.08,'#e8e0d0')]; for(const s of [-1,1]){ P.push(B(.5+s*.05,1.78,.17,.36,.035,.035,'#d8c8a8',{rz:s*.6})); P.push(B(.5+s*.22,1.9,.17,.18,.03,.03,'#d8c8a8',{rz:s*1.2})); } return P; },
+  lights(K){ const P=[B(0,2.35,.18,1,.008,.008,'#2b2c2e')]; for(let k=0;k<4;k++) P.push(C(.1+k*.25,2.27+(k%2)*.03,.15,.05,.08,.05,K.mess<.3&&K.r()<.5?'#ffe0a0':pick(K.r,['#e8e0d0','#c23b2e','#e0b526','#2f6fa0']))); return P; },
+  plates2(K){ const P=[]; for(let k=0;k<3;k++) P.push(C(.08+k*.3,1.5+(k%2)*.12,.12,.24,.24,.02,pick(K.r,['#2f5f9a','#e8e4da','#c98b62','#e0b526']),undefined,'z'),C(.13+k*.3,1.55+(k%2)*.12,.13,.14,.14,.005,pick(K.r,['#e8e4da','#2f5f9a']),undefined,'z')); return P; },
+});
+for(const [k,add] of Object.entries({living:['blanket','mirrorR','guitar','dreamcatcher','sconce','antlers','map'],dining:['plates2','mirrorR','sconce'],kitchen:['calendar','plates2'],
+  master:['mirrorR','blanket','dreamcatcher','sconce'],bed:['mirrorR','blanket','dreamcatcher','guitar'],hall:['mirrorR','hooks','map','sconce'],den:['guitar','antlers','map','blanket'],
+  office:['bulletin','map','calendar'],openoffice:['bulletin','map','calendar'],breakroom:['bulletin','calendar'],waiting:['bulletin','map'],cafe:['lights','plates2','map','mirrorR'],
+  salon:['mirrorR','lights'],bay:['calendar','bulletin'],lobby:['map','sconce'],reception:['map','sconce'],ffdining:['lights'],garage:['calendar','hooks']}))
+  DECOR_BY[k]=(DECOR_BY[k]||[]).concat(add);
+{ const rd=DECOR_BY.rdining; DECOR_BY.rdining=st=>rd(st).concat(st.cuisine==='bar'?['antlers','lights','sconce']:st.cuisine==='mexican'?['plates2','lights']:st.cuisine==='asian'?['sconce']:['map','sconce','plates2']); }
+
 const SLOTS={
   media:{n:'TV stand',cap:1,t:10,cats:{goods:2,gear:.5}}, bookcase:{n:'Bookcase',cap:1,t:15,cats:{goods:1,medicine:.2}}, hutch:{n:'China cabinet',cap:1,t:15,cats:{goods:2}},
   cabinet:{n:'Cabinets',cap:2,t:15,cats:{food:3,goods:1,tools:.3}}, sink:{n:'Under the sink',cap:1,t:10,cats:{goods:3,tools:.5}}, fridge:{n:'Fridge',cap:3,t:10,cats:{food:3,water:1.5}},
@@ -1520,7 +1565,7 @@ const POOL_EXTRA={
 
 // Room recipes: [item, mode, count, options]
 const FURN={
-  living:[['sofa','wall',1,{avoidWin:1,clear:1}],['tvstand','wall',1],['armchair','wall',[0,1]],['coffee','free',1,{nearItem:'sofa'}],['bookcase','wall',[0,1]],['cactus','wall',[0,1],{corner:1}]],
+  living:[['sofa','wall',1,{avoidWin:1,clear:1}],['tvstand','wall',1],['armchair','wall',[0,1]],['coffee','free',1,{nearItem:'sofa'}],['bookcase','wall',[0,1]],['floorlamp','wall',[0,1],{corner:1}],['ficus','wall',[0,1],{corner:1}],['cactus','wall',[0,1],{corner:1}]],
   kitchen:[['fridge','wall',1,{corner:1}],['stove','wall',1,{nearRun:1}],['sinkc','wall',1,{window:1,nearRun:1}],['dw','wall',1,{nearItem:'sinkc'}],['counter','run',[2,5]],['island','free',[0,1],{minCells:16,center:1}]],
   dining:[['dtable','free',1,{center:1,ring:1}],['hutch','wall',[0,1]]],
   master:[['bed2','wall',1,{avoidWin:1,clear:1,centerWall:1}],['nightstand','wall',2,{nearItem:'bed2'}],['dresser','wall',1],['wardrobe','wall',1]],
@@ -1548,7 +1593,7 @@ const FURN={
   lobby:[['atm','wall',1,{nearDoor:1}],['chairs3','wall',1],['desk','wall',1],['cactus','wall',[0,1],{corner:1}],['checkstand','free',1,{center:1,ring:1}]],
   teller:[['tellerwin','counterEdge',0],['filing','wall',[1,2]],['desk','wall',[0,1]]],
   vault:[['depositbox','wall',1,{per:2.5}],['safe','wall',[1,2]]],
-  reception:[['receptiondesk','nearDoor',1,{clear:1}],['chairs3','wall',1],['cactus','wall',[0,1],{corner:1}]],
+  reception:[['receptiondesk','nearDoor',1,{clear:1}],['chairs3','wall',1],['ficus','wall',[0,1],{corner:1}],['cactus','wall',[0,1],{corner:1}]],
   openoffice:[['printer','wall',1],['filing','wall',[0,2]],['watercooler','wall',[0,1]],['cactus','wall',[0,1],{corner:1}],['cubicle','tables',0,{alt:'none'}]],
   conference:[['conftable','free',1,{center:1}],['dresser','wall',[0,1]]],
   breakroom:[['fridge','wall',1,{corner:1}],['sinkc','wall',1,{nearRun:1}],['counter','run',[2,3]],['vending','wall',[1,2]],['table4','tables',0]],
@@ -1843,12 +1888,37 @@ function stockLoot(site,unitsAll,P,Fn,rng,history){
 }
 
 // ---------------------------------------------------------------- looks: palettes per room, floors, mess (visual only)
-const FLOORS={wood:['#a87b50','#8a6440','#b98d5f','#7a5a3c','#9c7448'],tile:[['#d8d4c9','#a8a296'],['#e8e4da','#2b2c2e'],['#c9bfae','#b5653f'],['#dcd6c8','#8fa3a0'],['#e8dcc0','#c9953f']],
-  carpet:['#8f8577','#7a8a8c','#a08a76','#6f7a62','#b0a48c','#8a6f6a'],concrete:['#9a958c','#8f8a82','#a39d92'],saltillo:['#b5653f','#c4744a','#a85a38'],vinyl:[['#cbc4b4','#d9d2c3'],['#e8e4da','#b8bcbf']],quarry:[['#8f3f2c','#7a3424']]};
-const FLOOR_OF={living:['wood','carpet'],dining:['wood','tile'],kitchen:['tile'],bath:['tile'],mbath:['tile'],restroom:['tile'],laundry:['tile'],bed:['carpet','wood'],master:['carpet','wood'],den:['carpet'],hall:['wood'],
-  garage:['concrete'],rdining:['saltillo','wood'],rkitchen:['quarry'],walkin:['concrete'],office:['carpet'],storage:['concrete'],sales:['vinyl'],stock:['concrete'],dispensary:['vinyl'],
-  ffdining:['tile','vinyl'],ffkitchen:['quarry'],cafe:['wood','tile'],cafeback:['tile'],lobby:['tile','carpet'],teller:['carpet'],vault:['concrete'],reception:['carpet','wood'],openoffice:['carpet'],
-  conference:['carpet'],breakroom:['tile','vinyl'],server:['vinyl'],bay:['concrete'],waiting:['tile','vinyl'],salon:['wood','tile'],exam:['vinyl'],forecourt:['concrete'],stair:['concrete'],elev:['concrete']};
+const FLOORS={
+  wood:['#a87b50','#8a6440','#b98d5f','#7a5a3c','#9c7448','#c8a06a','#6a4a32','#b0a08c','#d8c4a0','#5a3a2a','#9a5a3a'],
+  parquet:['#a87b50','#c8a06a','#8a6440','#b98d5f','#6a4a32'],
+  tile:[['#d8d4c9','#a8a296'],['#e8e4da','#2b2c2e'],['#c9bfae','#b5653f'],['#dcd6c8','#8fa3a0'],['#e8dcc0','#c9953f'],['#f0ece2','#3f5f86'],['#e8e4da','#7d8f62'],['#d9a441','#7a4a2c'],['#e8d8c8','#c98b62'],['#b8c4c4','#e8ecec']],
+  carpet:['#8f8577','#7a8a8c','#a08a76','#6f7a62','#b0a48c','#8a6f6a','#c96a3a','#2f3f5f','#7a2e35','#d8cdb6','#5f6f73'],
+  carpettile:[['#6f7a82','#5f6a72'],['#8a7a6a','#7a6a5a'],['#4f5f6f','#3f4f5f'],['#6a6458','#7d766a']],
+  concrete:['#9a958c','#8f8a82','#a39d92'], polished:['#a9a49a','#b3ab9c','#9c9890','#b9a58c'],
+  saltillo:['#b5653f','#c4744a','#a85a38','#c98b62'],
+  vinyl:[['#cbc4b4','#d9d2c3'],['#e8e4da','#b8bcbf'],['#d8d2c4','#7a2e35'],['#e8e4da','#2f6f73'],['#e0d8c0','#c9953f']],
+  quarry:[['#8f3f2c','#7a3424'],['#9a5a3a','#7a4a2c']],
+  terrazzo:[['#e3ddd0','#8a8478'],['#d8cdbd','#b5543a'],['#cfd4d0','#3f5f86'],['#e8e0d0','#2f6f73']],
+  brick:[['#c9bfae','#a39d92'],['#d8d4c9','#9aa1a6'],['#b5653f','#a85a38'],['#e8e4da','#c9c4b8']],
+  slate:['#6a6e6a','#7a6a5a','#5a6460','#8a7a68']};
+const FLOOR_OF={living:['wood','carpet','parquet','slate','saltillo'],dining:['wood','tile','parquet','saltillo'],kitchen:['tile','vinyl','brick','slate','terrazzo'],bath:['tile','brick','terrazzo'],mbath:['tile','slate','brick'],
+  restroom:['tile','terrazzo','brick'],laundry:['tile','vinyl'],bed:['carpet','wood','parquet'],master:['carpet','wood','parquet'],den:['carpet','wood','parquet'],hall:['wood','tile','slate'],
+  garage:['concrete','polished'],rdining:['saltillo','wood','parquet','slate','terrazzo'],rkitchen:['quarry','brick'],walkin:['concrete'],office:['carpet','carpettile','wood'],storage:['concrete'],
+  sales:['vinyl','terrazzo','polished'],stock:['concrete'],dispensary:['vinyl','terrazzo'],ffdining:['tile','vinyl','terrazzo'],ffkitchen:['quarry','brick'],cafe:['wood','tile','parquet','polished','brick'],cafeback:['tile','vinyl'],
+  lobby:['tile','terrazzo','slate','polished'],teller:['carpet','carpettile'],vault:['concrete'],reception:['carpet','wood','terrazzo'],openoffice:['carpet','carpettile'],conference:['carpet','carpettile','wood'],
+  breakroom:['tile','vinyl','terrazzo'],server:['vinyl'],bay:['concrete','polished'],waiting:['tile','vinyl','carpettile','terrazzo'],salon:['wood','tile','polished','terrazzo'],exam:['vinyl','terrazzo'],
+  forecourt:['concrete'],stair:['concrete'],elev:['concrete']};
+// Wall finishes on the room side of each wall
+const WALL_OF={living:['paint','paint','wainscot','stripes','accent','panel'],dining:['wainscot','stripes','paint','accent','talavera'],bed:['paint','stripes','accent','wainscot'],master:['paint','stripes','accent','wainscot'],
+  den:['panel','paint','accent'],hall:['paint','wainscot','accent'],kitchen:['tilewain','paint','talavera','tilewain'],bath:['tilewain','tilefull','paint'],mbath:['tilewain','tilefull'],restroom:['tilefull','tilewain'],laundry:['paint','tilewain'],
+  rdining:['brick','panel','wainscot','talavera','accent'],ffdining:['tilewain','accent','paint'],cafe:['brick','panel','accent','stripes'],lobby:['wainscot','panel','accent'],reception:['accent','panel','paint'],
+  waiting:['wainscot','paint','accent'],salon:['accent','brick','stripes'],openoffice:['paint','accent'],conference:['panel','accent','paint'],office:['paint','panel','accent'],breakroom:['tilewain','paint'],exam:['tilewain','paint'],
+  sales:['paint','accent','paint'],rkitchen:['tilefull'],ffkitchen:['tilefull'],cafeback:['tilewain'],teller:['panel','paint']};
+const WALLPAPER=[['#e8dcc0','#d8c4a0'],['#d4e4e2','#b8d4cf'],['#ecd6c7','#d8b8a8'],['#e9e1d0','#c9953f'],['#d9e0cf','#b8c4b0'],['#f0e7d4','#7a2e35'],['#e3e0ea','#b8b0c8']];
+const WALLTILE=[['#e8e4da','#d8d4c9'],['#d4e4e2','#b8d4cf'],['#f0ece2','#3f5f86'],['#e8dcc0','#c9953f'],['#e8e4da','#2b2c2e'],['#d9e0cf','#7d8f62'],['#ecd6c7','#c98b62']];
+const ACCENT=['#2f6f73','#7a2e35','#c9953f','#3f5f86','#5f7d3f','#b5543a','#6b4f7a','#3a3d40'];
+const STUCCO=['#d9c7a6','#cfc3ae','#e3c9a8','#c98b62','#e8e2d4','#bfb79c','#d8b48a','#a8b0a0','#e0b48c'];
+const ROOFS=['#a8553d','#8a4a32','#6e5a4a','#7a7f80','#b0623f','#5f5a52'];
 function styleFor(seedStr,units,rooms){
   const blds=units.map((Un,k)=>{ const br=rngOf(seedStr+'|style'+(k?'|'+k:'')), chair=/restaurant|fastfood/.test(Un.typeKey)?pick(br,Un.typeKey==='fastfood'?['diner','diner','wood']:['wood','diner','wood']):'wood';
     return {vinyl:pick(br,PAL.vinyl),chair,chairCol:chair==='diner'?CHROME:pick(br,PAL.wood),what:Un.what||'',cuisine:Un.cuisine,unitType:Un.typeKey}; });
@@ -1856,7 +1926,10 @@ function styleFor(seedStr,units,rooms){
   for(const r of rooms){ const q=rngOf(seedStr+'|style|'+r.id), bld=blds[r.unit]||blds[0]; const pat=pick(q,FLOOR_OF[r.kind]||['wood']); const fl=pick(q,FLOORS[pat]);
     out[r.id]=Object.assign({wood:pick(q,PAL.wood),fab:pick(q,PAL.fab),fab2:pick(q,PAL.fab),cab:pick(q,PAL.cab),top:pick(q,PAL.top),splash:pick(q,['#d8cdb6','#b8d4cf','#e8e4da','#c98b62','#2f8f8a']),
       appl:pick(q,PAL.appl),paint:/rdining|sales|ffdining|cafe|lobby|salon|waiting|reception/.test(r.kind)?pick(q,PAL.adobe):/bath|restroom|kitchen|walkin|stock|storage|garage/.test(r.kind)?pick(q,['#e9e1d0','#f0e7d4','#d4e4e2','#e3dccd']):pick(q,PAL.paint),car:pick(q,PAL.car),
-      pat,fixture:pick(q,['#e8e4da','#c9d2d6','#d9c49a','#b8c4b0','#e3cfc2']),floor:Array.isArray(fl)?fl[0]:fl,floor2:Array.isArray(fl)?fl[1]:fl},bld); }
+      pat,fixture:pick(q,['#e8e4da','#c9d2d6','#d9c49a','#b8c4b0','#e3cfc2']),floor:Array.isArray(fl)?fl[0]:fl,floor2:Array.isArray(fl)?fl[1]:fl,
+      wall:pick(q,WALL_OF[r.kind]||['paint']),skirt:pick(q,['#5a4030','#e8e4da','#3a3330','#8a6a4a','#c9bfae']),wpaper:pick(q,WALLPAPER),wtile:pick(q,WALLTILE),
+      wcol:pick(q,['#8a6a4a','#e8e4da','#5a4030','#2f6f73','#7d8f62','#3f5f86','#c9bfae']),accent:pick(q,ACCENT),accentDir:Math.floor(q()*4),brick:pick(q,[['#9c4a32','#8a3f2a'],['#b0603f','#9c5236'],['#c9a080','#b8906c'],['#e8e2d4','#d8d2c4']])},bld);
+    if(out[r.id].wall==='paint'&&q()<.3) out[r.id].paint=pick(q,PAL.adobe); }
   return out;
 }
 
@@ -1919,7 +1992,8 @@ function generate(site,typeKey,seedStr,history){
   const wallH=Math.max(...units0.map(u=>TYPES[u.typeKey].wallH));
   const label=(units0.length>1?'Strip of '+units0.length+' tenants':TYPES[units0[0].typeKey].label)+(levels>1?' · '+levels+' storeys':'');
   const mess={untouched:.15,looted:.5,holdout:.15,den:.6}[history], gone={untouched:.3,looted:.65,holdout:.45,den:.55}[history];
-  const G={site,typeKey:units0.length>1?'strip':units0[0].typeKey,seedStr,history,M,sense,A,floors,levels,cores,
+  const xr=rngOf(seedStr+'|outside colours');
+  const G={site,typeKey:units0.length>1?'strip':units0[0].typeKey,seedStr,history,M,sense,A,floors,levels,cores,stucco:pick(xr,STUCCO),roofCol:pick(xr,ROOFS),
     L:{units:floors.reduce((a,f)=>a+f.L.units,0),base:floors.reduce((a,f)=>a+f.L.base,0)},
     ms:performance.now()-t0,mess,gone,wallH,FH:wallH+.45,label,noise:noise2(seedStr+'|noise')};
   setLevel(G,0);
@@ -2092,6 +2166,23 @@ function build(G,rec){
       } else if(st.pat==='wood'){
         for(let k=0;k<4;k++) fb.box(x0,0,z0+k*.25,x0+1,FY,z0+(k+1)*.25-.006,jit(st.floor,q,.05+n*.04));
         fb.box(x0,0,z0,x0+1,FY-.004,z0+1,'#4a3a2a');
+      } else if(st.pat==='parquet'){ // basket weave: plank direction alternates cell by cell
+        fb.box(x0,0,z0,x0+1,FY-.004,z0+1,'#4a3a2a');
+        for(let k=0;k<4;k++){ const col=jit(st.floor,q,.06+n*.03); if((i+j)%2) fb.box(x0+k*.25,0,z0,x0+(k+1)*.25-.006,FY,z0+1,col); else fb.box(x0,0,z0+k*.25,x0+1,FY,z0+(k+1)*.25-.006,col); }
+      } else if(st.pat==='terrazzo'){
+        fb.box(x0,0,z0,x0+1,FY,z0+1,jit(st.floor,q,.02)); if((i%3===0)) fb.box(x0,FY,z0,x0+.012,FY+.002,z0+1,'#c9a24a');
+        for(let k=0;k<5;k++){ const a=q()*.9, b2=q()*.9, w=.03+q()*.05; fb.box(x0+a,FY,z0+b2,x0+a+w,FY+.002,z0+b2+w*.8,k%2?st.floor2:jit(st.floor2,q,.2)); }
+      } else if(st.pat==='brick'){ // half-metre tiles laid in a running bond
+        fb.box(x0,0,z0,x0+1,FY-.008,z0+1,'#8a857c');
+        const off=(j%2)*.5; for(let b2=0;b2<2;b2++){ const zz=z0+b2*.5; const cuts=b2?[0,.25+off*0,.75,1]:[0,.5,1]; for(let k=0;k<cuts.length-1;k++) fb.box(x0+cuts[k]+.01,FY-.01,zz+.01,x0+cuts[k+1]-.01,FY,zz+.49,jit(q()<.5?st.floor:st.floor2,q,.03)); }
+      } else if(st.pat==='slate'){
+        fb.box(x0,0,z0,x0+1,FY-.008,z0+1,'#4a4a46');
+        const sp=.35+q()*.3; for(const [a0,a1] of [[0,sp],[sp,1]]) for(const [b0,b1] of [[0,.5],[.5,1]]) fb.box(x0+a0+.015,FY-.012+q()*.006,z0+b0+.015,x0+a1-.015,FY,z0+b1-.015,jit(st.floor,q,.09));
+      } else if(st.pat==='carpettile'){
+        for(let a=0;a<2;a++) for(let b2=0;b2<2;b2++) fb.box(x0+a*.5,0,z0+b2*.5,x0+a*.5+.5,FY,z0+b2*.5+.5,jit((a+b2)%2?st.floor:st.floor2,q,.015));
+      } else if(st.pat==='polished'){
+        fb.box(x0,0,z0,x0+1,FY,z0+1,jit(new THREE.Color(st.floor).multiplyScalar(.94+n*.12).getStyle(),q,.01));
+        if(i%4===0) fb.box(x0,FY,z0,x0+.015,FY+.002,z0+1,'#7a756c'); if(j%4===0) fb.box(x0,FY,z0,x0+1,FY+.002,z0+.015,'#7a756c');
       } else if(st.pat==='carpet'){
         fb.box(x0,0,z0,x0+1,FY,z0+1,jit(new THREE.Color(st.floor).multiplyScalar(.9+n*.2).getStyle(),q,.02));
       } else {
@@ -2113,7 +2204,7 @@ function build(G,rec){
   const groups={};
   function seg(bk,o,fixed,along,y0,y1,a0,a1,ext,col){ const k=bk+'|'+o+'|'+fixed+'|'+y0+'|'+y1+'|'+a0+'|'+col; (groups[k]=groups[k]||{bk,o,fixed,y0,y1,a0,a1,ext,col,al:[]}).al.push(along); }
   const glassBy={}, boardBy={};
-  const stucco=G.typeKey==='house'?'#d9c7a6':'#cfc3ae', inner='#e6dccb';
+  const stucco=G.stucco||'#cfc3ae', inner='#e6dccb';
   for(const e of O.edges.values()){
     const o=e.key[0], [p,q]=e.key.slice(1).split(',').map(Number);
     const fixed=o==='v'?p:q, along=o==='v'?q:p;
@@ -2157,6 +2248,31 @@ function build(G,rec){
     fg.add(full); fg.add(low);
     buckets[bk]={full,low};
   }
+  // wall finishes: skirting everywhere, then the room's own treatment (wainscot, tile, paper, brick, panels, an accent wall)
+  const wf={};
+  const addF=(bk,low,x0,y0,z0,x1,y1,z1,col)=>{ const id=bk+(low?'L':'F'); (wf[id]=wf[id]||new Batch()).box(Math.min(x0,x1),FY+y0,Math.min(z0,z1),Math.max(x0,x1),FY+y1,Math.max(z0,z1),col); };
+  for(const e of O.edges.values()){
+    if(e.type==='none'||e.type==='open'||e.type==='counter') continue;
+    const o=e.key[0], [p,q]=e.key.slice(1).split(',').map(Number), fixed=o==='v'?p:q, along=o==='v'?q:p;
+    let parts=[[0,WH]]; if(e.type==='window') parts=[[0,e.win.sill],[e.win.head,WH]]; else if(e.type==='door') parts=[[2.1,WH]]; else if(e.type==='gdoor') parts=[[2.3,WH]];
+    const sides=e.ext?[[e.a,(e.dir===0||e.dir===1)?-1:1,.12,(e.dir+2)%4]]:[[e.a,-1,.06,e.dir],[e.b,1,.06,(e.dir+2)%4]];
+    for(const [rid,sg,th,facing] of sides){ const st=G.style[rid]; if(!st||!st.wall||/stair|elev/.test((P.rooms.find(r=>r.id===rid)||{}).kind)) continue;
+      const bk=e.ext?'e'+e.dir:'int', wq=rngOf(G.fseed+'|wall|'+e.key+'|'+rid);
+      const box=(y0,y1,col,depth,a0,a1)=>{ for(const [pa,pb] of parts){ const ya=Math.max(y0,pa), yb=Math.min(y1,pb); if(yb-ya<.005) continue;
+        const f0=sg*th, f1=sg*(th+(depth||.012)), A0=along+(a0||0), A1=along+(a1==null?1:a1);
+        for(const low of [0,1]){ const yy=low?Math.min(yb,LOW):yb; if(yy-ya<.005) continue; if(o==='v') addF(bk,low,cx(fixed)+f0,ya,cz(A0),cx(fixed)+f1,yy,cz(A1),col); else addF(bk,low,cx(A0),ya,cz(fixed)+f0,cx(A1),yy,cz(fixed)+f1,col); } } };
+      const w=st.wall;
+      if(w==='wainscot'){ box(0,.9,st.wcol,.014); box(.88,.94,jit(st.wcol,wq,.08),.03); for(const a of [.25,.75]) box(.15,.75,jit(st.wcol,wq,.05),.02,a-.18,a+.18); }
+      else if(w==='tilewain'||w==='tilefull'){ const top=w==='tilefull'?WH:1.2, t=st.wtile; for(let y=0;y<top;y+=.15) box(y,Math.min(top,y+.15)-.006,jit(Math.round(y/.15)%5===4?t[1]:t[0],wq,.02),.012); if(w==='tilewain') box(top,top+.04,t[1],.02); }
+      else if(w==='talavera'){ for(let k=0;k<5;k++) box(1.0,1.2,k%2?'#2f5f9a':pick(wq,['#e0b526','#e8e4da','#c23b2e']),.012,k*.2+.005,k*.2+.195); box(.98,1.0,'#e8e4da',.016); box(1.2,1.22,'#e8e4da',.016); }
+      else if(w==='stripes'){ for(let k=0;k<4;k++) box(.1,WH,k%2?st.wpaper[1]:st.wpaper[0],.008,k*.25,k*.25+.25); }
+      else if(w==='brick'){ const bc=st.brick; let row=0; for(let y=0;y<WH;y+=.15,row++){ const off=row%2?.25:0; for(let a=-off;a<1;a+=.5) box(y+.012,Math.min(WH,y+.15),jit(wq()<.5?bc[0]:bc[1],wq,.05),.02,Math.max(0,a)+.006,Math.min(1,a+.5)-.006); } }
+      else if(w==='panel'){ for(let k=0;k<5;k++) box(.1,2.4,jit(st.wood,wq,.07),.016,k*.2+.004,k*.2+.196); box(2.4,2.46,jit(st.wood,wq,.05),.03); }
+      else if(w==='accent'&&facing===st.accentDir) box(.1,WH,st.accent,.008);
+      if(w!=='tilefull'&&w!=='tilewain') box(0,.1,st.skirt,.02);
+    }
+  }
+  for(const id in wf){ const bk=id.slice(0,-1); (id.endsWith('L')?buckets[bk].low:buckets[bk].full).add(wf[id].mesh(solidMat,false)); }
   // door leaves
   const leafMat=new THREE.MeshLambertMaterial({color:0x8a6a4a}), liftMat=new THREE.MeshLambertMaterial({color:0xa9adb0}), gMat=new THREE.MeshLambertMaterial({color:0xd8d2c4});
   for(const e of O.doors){
@@ -2269,14 +2385,14 @@ function build(G,rec){
   if(lk.p.length){ const m=lk.mesh(new THREE.MeshBasicMaterial({vertexColors:true,transparent:true,opacity:.55}),false); fg.add(m); }
   // roof (shell view)
   const rb=new Batch();
-  for(let j=0;j<H;j++){ let i=0; while(i<W){ if(mask[j*W+i]){ let k=i; while(k<W&&mask[j*W+k]) k++; rb.box(cx(i)-.3,FY+WH,cz(j)-(mask[(j-1)*W+i]?0:.3),cx(k)+.3,FY+WH+(G.typeKey==='canopy'?.7:.25),cz(j+1)+(mask[(j+1)*W+i]?0:.3),G.typeKey==='house'?'#a8553d':G.typeKey==='canopy'?'#e8e4da':'#b8b0a2'); i=k; } else i++; } }
+  for(let j=0;j<H;j++){ let i=0; while(i<W){ if(mask[j*W+i]){ let k=i; while(k<W&&mask[j*W+k]) k++; rb.box(cx(i)-.3,FY+WH,cz(j)-(mask[(j-1)*W+i]?0:.3),cx(k)+.3,FY+WH+(G.typeKey==='canopy'?.7:.25),cz(j+1)+(mask[(j+1)*W+i]?0:.3),G.typeKey==='house'?G.roofCol:G.typeKey==='canopy'?'#e8e4da':'#b8b0a2'); i=k; } else i++; } }
   const roof=rb.mesh(solidMat,false); roof.name='roof'; if(G.fk===G.levels-1) fg.add(roof);
   applyView();
 }
 // A storey seen from above the floor in view: slab, outside walls with their windows, and the stairs.
 function shellFloor(G,F,y){
   const {M}=G, {W,H,u0,v0,mask}=M, WH=G.wallH, g=new THREE.Group(); g.position.y=y;
-  const cx=i=>u0+i, cz=j=>v0+j, sb=new Batch(), wb=new Batch(), gl=new Batch(), stucco='#cfc3ae';
+  const cx=i=>u0+i, cz=j=>v0+j, sb=new Batch(), wb=new Batch(), gl=new Batch(), stucco=G.stucco||'#cfc3ae';
   const hole=new Set(F.k>0?F.P.rooms.filter(r=>r.kind==='stair').flatMap(r=>r.cells):[]);
   for(let j=0;j<H;j++){ let i=0; while(i<W){ const c=j*W+i; if(mask[c]&&!hole.has(c)){ let k=i; while(k<W&&mask[j*W+k]&&!hole.has(j*W+k)) k++; sb.box(cx(i),F.k?-.42:0,cz(j),cx(k),FY,cz(j+1),'#a8a399'); i=k; } else i++; } }
   const runs={};
