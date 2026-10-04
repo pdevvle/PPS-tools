@@ -27,6 +27,11 @@ if(Motion.busy(fig)) { /* a clip or ragdoll owns the root: read fig.root back in
 - A foot that bears weight is pinned to its spot in the world. Hip (three axes), knee and the new ankle are solved to reach it, with the knee pointing forward.
 - Walking swaps feet by the gait phase, which moves by the distance covered divided by the stride. Standing still, a foot steps when the stance wants it elsewhere or the body has turned 30° away from it. That gives turning on the spot, small shuffles and changes of stance, and no foot slides round tight bends.
 - Ankles keep each planted foot flat on its own ground (capped at 23° where a foot straddles a step). The heel lifts before toe-off and the toes come up through the swing.
+- **Hands.** FigureKit's hand is one mitten mesh and a thumb. The first time `Motion` sees a figure, it swaps each for a palm, four fingers of three joints each and a two-joint thumb. They are sized from the mitten, use the same skin and keep the ink outline.
+  - Joints: `fig.fingers[hand][finger][joint]` (index to little, base to tip) and `fig.thumbs[hand][joint]`. `Motion.setHand(fig, i, {curl, index, thumb, spread})` poses one hand directly.
+  - Fingers wrap round a weapon grip, with the index finger on the trigger and the palm turned to the grip.
+  - They pinch for a bolt, clip or magazine, hold a load or a tool, and make fists in panic.
+  - They go limp in a fall, grab rungs and edges when climbing, and lie flat when pushing up off the ground. Otherwise they keep a loose, slowly changing curl.
 - **Ankle joint.** FigureKit has no ankle. `Motion` slips a group between each knee and its foot meshes (`fig.an`) the first time it sees a figure. It also sets `fig.hand` (the wrist groups) and neck yaw on `fig.head`.
 
 ## Weapons
