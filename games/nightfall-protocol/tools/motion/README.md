@@ -26,6 +26,22 @@ if(Motion.busy(fig)) { /* a clip or ragdoll owns the root: read fig.root back in
 
 - A foot that bears weight is pinned to its spot in the world. Hip (three axes), knee and the new ankle are solved to reach it, with the knee pointing forward.
 - Walking swaps feet by the gait phase, which moves by the distance covered divided by the stride. Standing still, a foot steps when the stance wants it elsewhere or the body has turned 30° away from it. That gives turning on the spot, small shuffles and changes of stance, and no foot slides round tight bends.
+- **Pelvis.** The pelvis moves three ways while walking, all sized per person:
+  - it shifts over the standing leg (sway, 14–32 mm each way);
+  - it drops on the swinging side (tilt, 2.5–6.5°, about 30% more for women);
+  - it turns forward with the swinging leg (twist, 3–7.5°).
+
+  The chest turns against the twist and levels against the tilt, so shoulders and head stay steady. Knees, and so feet, point the way each foot landed, whatever the pelvis is doing. Standing, the pelvis rests on one hip (the favoured one, or away from a wound) and drifts. Measured at 1.4 m/s: sway 45 mm, tilt 9°, twist 11° peak to peak; shoulders tilt only 2°.
+- **Gait height.** Only feet bearing weight hold the pelvis down; a swinging foot bends its knee to fit and counts only as it lands. The back foot rolls onto the ball of the foot before push-off (the ankle pivots round the ball, so the ball stays put), and the front foot lands heel first (pivoting round the heel). The foot lands slightly under the body, and the stance leg is nearly straight (99.3% of its length). Measured pelvis bob over four people:
+
+| Gait | Pelvis bob | Knee at mid-stance |
+|---|---|---|
+| Walk at 1.4 m/s | 36 mm (was 74) | 15° (was 23°) |
+| Stroll at 0.8 m/s | 18 mm (was 48) | 15° (was 23°) |
+| Squad pace on the streaming page | 40 mm (was 80) | 15° (was 23°) |
+| Run at 3.4 m/s | 58 mm (was 82) | |
+
+  The contact point (heel while landing, ball while rolling off) stays within 1 mm/s on flat ground and slopes.
 - Ankles keep each planted foot flat on its own ground (capped at 23° where a foot straddles a step). The heel lifts before toe-off and the toes come up through the swing.
 - **Hands.** FigureKit's hand is one mitten mesh and a thumb. The first time `Motion` sees a figure, it swaps each for a palm, four fingers of three joints each and a two-joint thumb. They are sized from the mitten, use the same skin and keep the ink outline.
   - Joints: `fig.fingers[hand][finger][joint]` (index to little, base to tip) and `fig.thumbs[hand][joint]`. `Motion.setHand(fig, i, {curl, index, thumb, spread})` poses one hand directly.
@@ -43,6 +59,30 @@ if(Motion.busy(fig)) { /* a clip or ragdoll owns the root: read fig.root back in
   - Measured with all five digits touching in every hold (rifle aim, ready and low; pistol aim and carried): worst sink 0.5–3.7 mm against 14–30 mm with fixed curls, fingertips within 0–6 mm of the surface. The cost is about 0.1 ms per armed figure per frame.
 - **Rifle stance.** Rifle aim, ready and reload are bladed: the body turns about 45° to the right so the left hand reaches the fore-end, and the neck turns the head back to the target.
 - **Ankle joint.** FigureKit has no ankle. `Motion` slips a group between each knee and its foot meshes (`fig.an`) the first time it sees a figure. It also sets `fig.hand` (the wrist groups) and neck yaw on `fig.head`.
+
+## Variation
+
+Every animation draws from ranges, so nothing plays the same way twice:
+
+- **Per person:** traits from the seed.
+- **Per action:** the pose roll.
+- **Per stride:** stride length, foot lift, sway, tilt and twist follow smooth noise over the stride count. How much they vary is itself a trait (`vary`).
+- **Per clip:** vaults, climbs, drops and get-ups get a tempo (±12%) and nudged in-between keys. Hands on an edge and feet on the ground only move along the surface. Ladders roll their climbing speed, which rung the hands start on, the lean and the top-out.
+- **Weapons:** cycles (bolt, reloads) roll their tempo; hits and recoil roll their size and side.
+- **Steps:** turning steps roll their timing and lift.
+- **Dig:** each stroke is rolled afresh (see below).
+
+## Dig
+
+`work` digs with a D-handle spade (built when needed). Both hands are solved onto it with the same grasp-by-contact as weapons, and the weapon is slung. Each stroke is rolled:
+
+1. Drive the blade in (13–21 cm deep).
+2. On most strokes, step onto the tread with the right foot and push.
+3. Lever back.
+4. Lift, turn left and throw the soil (it flies and lands).
+5. Come back.
+
+Duration, spot, depth, lever, throw distance and height, and the blade flip all vary.
 
 ## Weapons
 
@@ -64,6 +104,17 @@ Each action picks a hold for each weapon:
 | carry, dig, swim, clips | slung on the back | holstered on the hip |
 
 The weapon is smoothed between holds. The arms are solved so the wrist sits behind each grip, and the wrist turns the hand along the grip. The aim line comes from the hold, not from the noise layers, so idle noise never moves the aim. Recoil kicks the weapon back and up (the pistol flips more). The bolt cycle and reloads are hand timelines, and the bolt or slide follows the hand.
+
+## Drawing and stowing
+
+Moving a weapon between the hands and its stowed place plays a transition instead of a glide. It starts whenever the hold changes between in-hand and stowed: an action that slings or holsters (carry, dig, swim), or `holster:true` in the state.
+
+- **Pistol, holster:** the support hand lets go. The pistol comes back to the body, muzzle down over the holster mouth, slides in, and the hand opens and drops.
+- **Pistol, draw:** the hand reaches to the holster and closes on the grip, lifts the pistol straight out, turns the muzzle forward at the chest, and pushes out as the support hand joins.
+- **Rifle, sling:** the support hand lets go. The rifle comes up vertical in front of the right shoulder, the hand slides up to the fore-end, swings it over the shoulder onto the back, and lets go.
+- **Rifle, unsling:** reach over the shoulder for the fore-end, swing it forward, the left hand catches the fore-end, the right slides down to the grip.
+
+The weapon's path is keyed on the moving body, so it can be done while walking. A hand not on the weapon hangs and swings until it takes hold. Each swap rolls its tempo (±15%) and a few centimetres of its path. About 45% of pistol swaps glance down at the holster.
 
 ## Falls and get-ups
 

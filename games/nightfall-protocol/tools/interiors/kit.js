@@ -695,3 +695,34 @@ Object.assign(DECOR_BY,{
 // How props behave when pushed: heavy fittings stay put in a blast; these can be overturned for cover.
 const STATIC_PROPS=new Set(['car','liftcar','pump','range','grill','charbroil','fryer','dsink','counter','sinkc','stove','island','checkout','ffcounter','cafecounter','barcounter','pos','tellerwin','depositbox','pcounter','receptiondesk','tallshelf','mcase','cooler','reachin','heater','serverrack','keycut','paintcounter','pizzaoven','wok','washsink','dw','washer','dryer','tub','toilet','vanity','shower','booth','safe','atm','soda','shake','warmer','dipcase','pobox','station','fridge','barricade']);
 const FLIP_PROPS=new Set(['dtable','table4','table2','conftable','coffee','desk','prep','checkstand','dresser','bookcase','filing','vending','wardrobe','sofa','armchair','hutch','tvstand','shelf','hshelf','wallshelf','rshelf','gshelf','crate','nightstand','chairs3','showcase','produce','cubicle']);
+
+// ---- more floor fixtures and wall pieces
+Object.assign(IT,{
+  floorlamp:{w:1,d:1,h:1.7,cover:'none',build(K){ const P=[C(.35,0,.35,.3,.03,.3,'#3a3330'),C(.48,.03,.48,.04,1.4,.04,pick(K.r,[CHROME,'#3a3330','#c9a24a'])),C(.3,1.35,.3,.4,.3,.4,pick(K.r,['#efe3c8','#e8d8b0','#d8c4a0']))];
+    return K.down(1.5)?withO(P,{roll:Math.PI/2,pv:[.5,.5],lift:.2}):P; }},
+  ficus:{w:1,d:1,h:1.9,cover:'half',build(K){ const pot=pick(K.r,[TERRA,'#e8e4da','#3a3d40','#2f6f73']); const dead=K.mess>.5&&K.r()<.6, g=dead?'#7a6a3a':K.j('#4f7a3a',.08);
+    const P=[C(.3,0,.3,.4,.4,.4,pot),C(.32,.38,.32,.36,.03,.36,'#4a3a2a'),C(.48,.4,.48,.04,.9,.04,'#5a4030')];
+    for(let k=0;k<(dead?3:7);k++){ const a=K.r()*6.28, r=.12+K.r()*.18, y=1.0+K.r()*.7; P.push(C(.5+Math.cos(a)*r-.17,y,.5+Math.sin(a)*r-.17,.34,.28,.34,K.j(g,.06))); }
+    if(dead) P.push(B(.2,.003,.7,.25,.01,.15,'#7a6a3a',{ry:K.r()*3}),B(.6,.003,.8,.2,.01,.12,'#6a5a30',{ry:K.r()*3}));
+    return P; }},
+});
+Object.assign(DECOR,{
+  mirrorR(K){ const broken=K.mess>.5&&K.r()<.4; return [C(.25,1.3,.12,.5,.5,.03,pick(K.r,['#c9a24a','#5a4030','#3a3330']),undefined,'z'),C(.29,1.34,.14,.42,.42,.01,broken?'#6c7a7e':'#bcd0d6',undefined,'z')]; },
+  blanket(K){ const cols=pick(K.r,PAL.rug), P=[B(.08,1.05,.12,.84,1.1,.015,cols[0])]; for(let k=0;k<5;k++) P.push(B(.12,1.12+k*.2,.135,.76,.07,.006,cols[1+k%3])); P.push(B(.04,2.15,.1,.92,.04,.04,'#5a4030')); return P; },
+  guitar(K){ const c=pick(K.r,['#c98b4a','#7a2e35','#2b2c2e']); return [C(.32,1.15,.12,.36,.36,.08,c,undefined,'z'),C(.36,1.42,.12,.28,.28,.08,c,undefined,'z'),B(.47,1.6,.14,.06,.55,.03,'#3a3330'),B(.45,2.12,.14,.1,.12,.03,'#3a3330'),C(.46,1.28,.2,.08,.08,.005,'#1e1e1e',undefined,'z')]; },
+  dreamcatcher(K){ const P=[C(.36,1.5,.12,.28,.28,.015,'#8a6a4a',undefined,'z'),C(.39,1.53,.13,.22,.22,.005,'#e8e0d0',undefined,'z')]; for(let k=0;k<3;k++) P.push(B(.42+k*.08,1.22,.13,.008,.28,.004,'#8a6a4a'),B(.4+k*.08,1.16,.13,.05,.1,.004,pick(K.r,['#e8e4da','#7a4a2c','#2f6f73']))); return P; },
+  sconce(K){ const lit=K.mess<.2&&K.r()<.4; return [B(.42,1.75,.12,.16,.2,.03,'#3a3330'),C(.4,1.85,.14,.2,.18,.16,lit?'#ffe0a0':'#e8d8b0')]; },
+  bulletin(K){ const P=[B(.1,1.2,.12,.8,.6,.025,'#5a4030'),B(.13,1.23,.14,.74,.54,.006,'#b8925a')]; for(let k=0;k<7;k++) P.push(B(.16+K.r()*.55,1.26+K.r()*.4,.147,.1+K.r()*.06,.12,.003,pick(K.r,['#efe9dc','#e8d64a','#f3a7b8','#9cc8e0','#efe9dc']),{rz:(K.r()-.5)*.3})); return P; },
+  map(K){ const P=[B(.1,1.25,.12,.8,.6,.025,'#5a4030'),B(.13,1.28,.14,.74,.54,.005,'#e8d8b0')]; for(let k=0;k<6;k++) P.push(B(.18+K.r()*.55,1.32+K.r()*.4,.146,.08+K.r()*.12,.06+K.r()*.1,.003,pick(K.r,['#c9a080','#a7b85a','#9cc8e0','#c98b62']))); P.push(B(.15,1.5,.147,.7,.01,.002,'#c23b2e',{rz:.3})); return P; },
+  calendar(K){ return [B(.36,1.4,.12,.28,.36,.015,'#efe9dc'),B(.36,1.64,.13,.28,.12,.005,pick(K.r,['#c98b62','#3f5f86','#7d8f62']))]; },
+  hooks(K){ const P=[B(.1,1.7,.12,.8,.08,.03,'#5a4030')]; for(let k=0;k<4;k++){ P.push(B(.18+k*.2,1.68,.15,.03,.06,.06,'#2b2c2e')); if(K.r()<.6){ const hat=K.r()<.5; P.push(hat?C(.08+k*.2,1.5,.15,.24,.06,.2,pick(K.r,['#8a6a4a','#c9a080','#2b2c2e'])):B(.12+k*.2,1.2,.16,.16,.46,.08,pick(K.r,PAL.fab))); if(hat) P.push(C(.13+k*.2,1.56,.18,.14,.1,.14,'#6a4a32')); } } return P; },
+  antlers(K){ const P=[B(.42,1.6,.12,.16,.22,.04,'#5a4030'),B(.44,1.62,.15,.12,.14,.08,'#e8e0d0')]; for(const s of [-1,1]){ P.push(B(.5+s*.05,1.78,.17,.36,.035,.035,'#d8c8a8',{rz:s*.6})); P.push(B(.5+s*.22,1.9,.17,.18,.03,.03,'#d8c8a8',{rz:s*1.2})); } return P; },
+  lights(K){ const P=[B(0,2.35,.18,1,.008,.008,'#2b2c2e')]; for(let k=0;k<4;k++) P.push(C(.1+k*.25,2.27+(k%2)*.03,.15,.05,.08,.05,K.mess<.3&&K.r()<.5?'#ffe0a0':pick(K.r,['#e8e0d0','#c23b2e','#e0b526','#2f6fa0']))); return P; },
+  plates2(K){ const P=[]; for(let k=0;k<3;k++) P.push(C(.08+k*.3,1.5+(k%2)*.12,.12,.24,.24,.02,pick(K.r,['#2f5f9a','#e8e4da','#c98b62','#e0b526']),undefined,'z'),C(.13+k*.3,1.55+(k%2)*.12,.13,.14,.14,.005,pick(K.r,['#e8e4da','#2f5f9a']),undefined,'z')); return P; },
+});
+for(const [k,add] of Object.entries({living:['blanket','mirrorR','guitar','dreamcatcher','sconce','antlers','map'],dining:['plates2','mirrorR','sconce'],kitchen:['calendar','plates2'],
+  master:['mirrorR','blanket','dreamcatcher','sconce'],bed:['mirrorR','blanket','dreamcatcher','guitar'],hall:['mirrorR','hooks','map','sconce'],den:['guitar','antlers','map','blanket'],
+  office:['bulletin','map','calendar'],openoffice:['bulletin','map','calendar'],breakroom:['bulletin','calendar'],waiting:['bulletin','map'],cafe:['lights','plates2','map','mirrorR'],
+  salon:['mirrorR','lights'],bay:['calendar','bulletin'],lobby:['map','sconce'],reception:['map','sconce'],ffdining:['lights'],garage:['calendar','hooks']}))
+  DECOR_BY[k]=(DECOR_BY[k]||[]).concat(add);
+{ const rd=DECOR_BY.rdining; DECOR_BY.rdining=st=>rd(st).concat(st.cuisine==='bar'?['antlers','lights','sconce']:st.cuisine==='mexican'?['plates2','lights']:st.cuisine==='asian'?['sconce']:['map','sconce','plates2']); }

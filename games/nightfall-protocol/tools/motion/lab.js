@@ -78,6 +78,8 @@ function arming(){ const pick=i=>ui.weapon==='mixed'?(i%2?'pistol':'rifle'):ui.w
 const later=[]; const after=(ms,fn)=>later.push({t:ms/1000,fn});
 document.getElementById('hit').addEventListener('click',()=>loopers.forEach((p,i)=>after(i*140,()=>{ const r=p.f.root, a=r.rotation.y+(Math.random()-.5)*1.2; Motion.kick(p.f,'hit',1,{from:{x:r.position.x+Math.sin(a)*12,z:r.position.z+Math.cos(a)*12}}); })));
 document.getElementById('fire').addEventListener('click',()=>loopers.forEach((p,i)=>after(i*110,()=>Motion.kick(p.f,'recoil'))));
+const holsterBtn=document.getElementById('holster');
+holsterBtn.addEventListener('click',()=>{ ui.holstered=!ui.holstered; holsterBtn.textContent=ui.holstered?'Draw':'Holster'; });
 const fallBtn=document.getElementById('fall');
 fallBtn.addEventListener('click',()=>{ ui.fallen=!ui.fallen; fallBtn.textContent=ui.fallen?'Get up':'Fall';
   if(ui.fallen) loopers.forEach((p,i)=>{ const r=p.f.root, a=r.rotation.y+(i%2?.4:-.4); p.f.motion&&Motion.kick(p.f,'hit',1.1,{from:{x:r.position.x+Math.sin(a)*10,z:r.position.z+Math.cos(a)*10}}); p.down=true; });
@@ -100,8 +102,10 @@ cards.addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) r
 // ---- readout: slip of planted feet, steps, the hold ----
 const readout=document.getElementById('readout'), v=new THREE.Vector3(); let slip=0, last=[null,null], steps=0, lastSt=[true,true], roT=0;
 function measure(p,dt){ const M=p.f.motion; if(!M||!M.R||M.clip||M.rag) { last=[null,null]; return; } p.f.root.updateMatrixWorld(true);
-  for(let i=0;i<2;i++){ v.set(0,-M.R.b,0); p.f.kn[i].localToWorld(v); const st=M.stance&&M.stance[i];
-    if(st&&last[i]&&dt>0) slip=Math.max(slip,Math.hypot(v.x-last[i].x,v.z-last[i].z)/dt); if(st&&!lastSt[i]) steps++; lastSt[i]=!!st; last[i]=st?v.clone():null; } }
+  // the point on the ground: the heel while landing, the ball of the foot while rolling off, else the ankle
+  for(let i=0;i<2;i++){ const an=p.f.an[i], hl=an.localToWorld(new THREE.Vector3(0,-.062,-.05)), bl=an.localToWorld(new THREE.Vector3(0,-.062,.12)), st=M.stance&&M.stance[i];
+    const w=bl.y<hl.y-.0005?1:hl.y<bl.y-.0005?0:2; if(w===2){ v.set(0,-M.R.b,0); p.f.kn[i].localToWorld(v); } else v.copy(w?bl:hl);
+    if(st&&last[i]&&last[i].w===w&&dt>0) slip=Math.max(slip,Math.hypot(v.x-last[i].p.x,v.z-last[i].p.z)/dt); if(st&&!lastSt[i]) steps++; lastSt[i]=!!st; last[i]=st?{p:v.clone(),w}:null; } }
 function drawReadout(){ const P=ui.view==='loop'?loopers[0]:runners[0], M=P.f.motion; if(!M) return;
   const what=M.rag?(M.rag.sleep?'down':'falling'):M.clip?(ui.view==='loop'?'getting up':P.doing):M.gaitW<.5?'standing':M.runW>.5?'running':'walking';
   readout.innerHTML=`<b>${P.name}</b> · ${what}${M.w?` · ${M.w.spec.kind}`:''}<br>`+(ui.view==='course'?`${runners.map(r=>`${r.name} ${r.doing||''}`).join(' · ')}<br>`:`speed ${M.v.toFixed(2)} m/s · steps ${steps}<br>`)+
@@ -110,7 +114,7 @@ function drawReadout(){ const P=ui.view==='loop'?loopers[0]:runners[0], M=P.f.mo
 let lastT=performance.now();
 function loop(now){ requestAnimationFrame(loop); const dt=Math.min(.05,(now-lastT)/1000); lastT=now;
   for(let i=later.length-1;i>=0;i--){ if((later[i].t-=dt)<=0){ later[i].fn(); later.splice(i,1); } }
-  const still=['hunker','work'].includes(ui.act), sp=still?0:ui.speed, state=act=>({act,mood:ui.mood,ground});
+  const still=['hunker','work'].includes(ui.act), sp=still?0:ui.speed, state=act=>({act,mood:ui.mood,ground,holster:ui.holstered});
   for(const p of loopers){ const f=p.f, r=f.root;
     if(p.down){ Motion.update(f,state('fall'),dt); p.crate.visible=false; continue; }
     if(Motion.busy(f)){ Motion.update(f,state('idle'),dt); continue; }

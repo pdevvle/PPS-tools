@@ -25,6 +25,13 @@ The Roadrunner store in the New River block and the houses around it are the fir
 - The layout follows what the building is: Arizona ranch houses (garage, living room, kitchen, bedrooms, bathrooms), corner stores, gas stations, pharmacies, restaurants, offices, schools, churches.
 - Loot inside matches the site's loot category and what the place really was. A pharmacy has medicine on its shelves; a hardware store has tools.
 - Visual style follows the foundation: furniture and fittings are ink-faceted props.
+- **Office layouts (proposed in the mockup, from research).** Anthem's offices are 2-storey multi-tenant Class B blocks with suites of about 110–650 m², many of them medical, some left as unfinished shells. So big or multi-storey offices are split into a shared corridor of about 2 m along the middle of every wing, tied to the stair and lift cores, a street entrance and a back exit. Suites open onto that corridor, and each is an office suite, a clinic or a vacant shell. Private offices are about 3×3 to 3.6×3.6 m.
+- **Fighting space (proposed in the mockup, from tactical level-design write-ups).**
+  - Rooms carry a cover budget: big rooms keep clear floor between pieces of cover, and low cover is preferred to tall.
+  - Rooms of 30 m² or more get a second door, so there is always another way in.
+  - Corridors are wide enough to fight in.
+  The values themselves belong to combat.
+- **Destructible walls (proposed in the mockup).** Every wall edge has a build-up: drywall, stucco over frame, concrete block or reinforced concrete. Thin walls give way to bullets, a sledge and grenades. Thick walls (block exteriors, shafts, walls between shops) stop rounds and need a breaching charge; a vault takes two. Damage runs cracked → holed (see and shoot through) → breached (walk through) and is kept in the change record. Combat sets the numbers.
 
 ## Decisions to make here (record them in this brief)
 
