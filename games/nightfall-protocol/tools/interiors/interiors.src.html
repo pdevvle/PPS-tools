@@ -243,6 +243,9 @@ const TYPES={
   salon:      {label:'Hair salon', wallH:3.2, hub:'salon', units:10, mix:{goods:3,medicine:.5}, front:['salon'], back:['storage']},
   clinic:     {label:'Clinic', wallH:3.0, hub:'waiting', units:20, mix:{medicine:5,goods:1}, front:['waiting'], back:['storage','office','exam']},
   boutique:   {label:'Small shop', wallH:3.4, hub:'sales', units:14, mix:{goods:4,gear:1}},
+  common:     {label:'Corridors', wallH:3.0, hub:'corridor', units:2, mix:{goods:1}, front:['corridor'], back:['corridor']},
+  suite:      {label:'Office suite', wallH:3.0, hub:'reception', units:8, mix:{goods:3,food:1,water:1,medicine:.4,gear:.3}, front:[], back:[]},
+  vacant:     {label:'Vacant suite', wallH:3.0, hub:'shell', units:1, mix:{goods:1,tools:1}, front:[], back:[]},
   canopy:     {label:'Fuel canopy', wallH:5.0, hub:'forecourt', units:4, mix:{fuel:3,goods:1}, front:[], back:[]},
 };
 for(const k in TYPES){ const T=TYPES[k]; T.front=T.front||['sales']; T.back=T.back||['stock','storage','dispensary','office']; }
@@ -275,6 +278,7 @@ const ROOM={ // name, floor colour, min width (cells), pull toward front/drive
   bay:{n:'Service bay',minW:4,f:1.2}, waiting:{n:'Waiting room',minW:3,f:1.2},
   salon:{n:'Salon',minW:4,f:1.2}, exam:{n:'Exam room',minW:3,f:-.2}, forecourt:{n:'Forecourt',minW:3},
   stair:{n:'Stairwell',minW:3}, elev:{n:'Elevator',minW:3},
+  corridor:{n:'Corridor',minW:2}, shell:{n:'Vacant suite',minW:3},
 };
 // Closets, baths and back rooms are drawn larger than real life so a squad can fight in them.
 const ROOMY=new Set(['bath','mbath','restroom','laundry','server','storage','walkin','office','stock','cafeback','vault','teller','exam','breakroom']);
@@ -316,6 +320,14 @@ function program(typeKey,A,rng,fl){
   const W2=(f,rooms2,mode2)=>({kind:'group',rooms:rooms2,mode:mode2||'bsp'});
   switch(typeKey){
     case 'canopy': return {groups:[W2(0,[R('forecourt',A)])],cars:0};
+    case 'common': return {groups:[W2(0,[R('corridor',A)])],cars:0};
+    case 'vacant': return {groups:[W2(0,[R('shell',A)])],cars:0};
+    case 'suite': { // a small firm: reception by the corridor door, a bullpen and meeting room, offices and a break room behind
+      const nOff=clamp(Math.round(A/60),1,6), work=[], back=[];
+      if(A>90) work.push(R('openoffice',Math.max(20,.26*A),{name:'Bullpen'})); if(A>150) work.push(R('conference',Math.max(14,.1*A)));
+      for(let k=0;k<nOff;k++) back.push(R('office',11,{name:'Office '+(k+1)}));
+      back.push(R('breakroom',Math.max(8,.06*A),{name:'Break and copy'})); if(A>120) back.push(R('restroom',5)); if(A>220) back.push(R('storage',6));
+      return {groups:[W2(0,[R('reception',Math.max(9,.08*A))]),W2(0,work.length?work:[R('office',11)]),W2(0,back)],cars:0}; }
     case 'fastfood': front.push(R('ffdining',.55*A)); back.push(R('ffkitchen',.3*A),R('restroom',4)); if(A>140) back.push(R('restroom',4),R('office',5),R('walkin',Math.max(5,.03*A))); return {groups:[W2(0,front),W2(0,back)],cars:0};
     case 'cafe': front.push(R('cafe',.72*A)); back.push(R('cafeback',.18*A),R('restroom',4)); return {groups:[W2(0,front),W2(0,back)],cars:0};
     case 'bank': front.push(R('lobby',.36*A)); back.push(R('teller',.14*A),R('vault',Math.max(8,.06*A))); for(let k=0;k<(A>400?3:A>200?2:1);k++) back.push(R('office',.07*A,{name:'Office '+(k+1)})); back.push(R('breakroom',Math.max(8,.06*A)),R('restroom',5)); return {groups:[W2(0,front),W2(0,back)],cars:0};
@@ -648,7 +660,7 @@ const LINK={
   ffkitchen:['ffdining'], cafeback:['cafe'], teller:['lobby'], vault:['teller','office','hall'], breakroom:['hall','openoffice','reception','teller','lobby','office'],
   conference:['reception','openoffice','hall'], openoffice:['reception','hall','conference'], server:['hall','openoffice','breakroom'],
   exam:['hall','waiting'], bay:['waiting','bay','storage','office'], waiting:['bay'],
-  stair:['hall','lobby','reception','openoffice','conference','breakroom','storage','office'], elev:['hall','lobby','reception','openoffice','conference','breakroom','office'],
+  stair:['corridor','hall','lobby','reception','openoffice','conference','breakroom','storage','office'], shell:['corridor'], corridor:[], elev:['corridor','hall','lobby','reception','openoffice','conference','breakroom','office'],
 };
 const COUNTER=new Set(['dispensary|sales','sales|dispensary','teller|lobby','lobby|teller']);
 const OPEN=new Set(['bay|bay','living|kitchen','kitchen|living','living|dining','dining|living','kitchen|dining','dining|kitchen','hall|living','living|hall','hall|dining','dining|hall']);
@@ -659,7 +671,7 @@ const WIN={
   rdining:{bays:true,sill:.6,head:2.4}, sales:{storefront:true,sill:.35,head:2.6},
   ffdining:{bays:true,sill:.5,head:2.6}, cafe:{storefront:true,sill:.4,head:2.6}, lobby:{storefront:true,sill:.4,head:2.7}, reception:{storefront:true,sill:.5,head:2.5},
   waiting:{storefront:true,sill:.5,head:2.5}, salon:{storefront:true,sill:.35,head:2.6}, openoffice:{n:4,w:[2,3],sill:.8,head:2.4}, conference:{n:2,w:[2],sill:.8,head:2.4},
-  breakroom:{n:1,w:[1,2],sill:1.0,head:2.2}, exam:{n:1,w:[1],sill:1.2,head:2.1},
+  breakroom:{n:1,w:[1,2],sill:1.0,head:2.2}, exam:{n:1,w:[1],sill:1.2,head:2.1}, corridor:{n:2,w:[2],sill:.9,head:2.4}, shell:{n:3,w:[2,3],sill:.8,head:2.4}, reception:{storefront:true,sill:.5,head:2.5},
 };
 
 function openings(M,P,rng,sense,units,floorIdx){
@@ -732,7 +744,12 @@ function openings(M,P,rng,sense,units,floorIdx){
   units.forEach((Un,uk)=>{
     const typeKey=Un.typeKey, T=TYPES[typeKey], urooms=rooms.filter(r=>r.unit===uk); if(!urooms.length) return;
     if(typeKey==='canopy'){ for(const e of ext) if(byId[e.a]&&byId[e.a].unit===uk) e.type='none'; return; }
-    const hub=urooms.find(r=>r.kind===T.hub)||urooms.reduce((a,b)=>a.cells.length>b.cells.length?a:b);
+    let hub=urooms.find(r=>r.kind===T.hub)||urooms.reduce((a,b)=>a.cells.length>b.cells.length?a:b);
+    if(Un.inner){ // the suite's door to the corridor decides its hub
+      const corr=new Set(rooms.filter(r=>r.kind==='corridor').map(r=>r.id)), pref=['reception','waiting','shell','openoffice','conference','breakroom','office','storage'];
+      const cand=urooms.filter(r=>[...(adj[r.id]||[])].some(n=>corr.has(n))).sort((a,b)=>(pref.indexOf(a.kind)+1||99)-(pref.indexOf(b.kind)+1||99));
+      if(cand.length){ hub=cand[0]; link(hub.id,[...(adj[hub.id])].find(n=>corr.has(n)));
+        if(Un.cells.length>200&&cand.length>1){ const r2=cand.find(r=>r!==hub&&!/restroom|storage|office/.test(r.kind)); if(r2) link(r2.id,[...(adj[r2.id])].find(n=>corr.has(n))); } } }
     if(!hubAll) hubAll=hub;
     const conn=new Set([hub.id]); const isolated=[];
     const nb=id=>[...(adj[id]||[])].filter(n=>byId[n]&&byId[n].unit===uk);
@@ -749,7 +766,7 @@ function openings(M,P,rng,sense,units,floorIdx){
       for(const run of cands){ front=putExt(run,shop?2:1,'door','front'); if(front) break; }
       if(front) break;
     }
-    if(!front&&!upper){ const all=urooms.flatMap(r=>roomRuns(r.id)).sort((a,b)=>dot(b[0].dir,f)-dot(a[0].dir,f)); for(const run of all){ front=putExt(run,1,'door','front'); if(front) break; } }
+    if(!front&&!upper&&!Un.inner){ const all=urooms.flatMap(r=>roomRuns(r.id)).sort((a,b)=>dot(b[0].dir,f)-dot(a[0].dir,f)); for(const run of all){ front=putExt(run,1,'door','front'); if(front) break; } }
     if(front){ front.unit=uk; fronts.push(front); }
     // garage doors on the drive side; service bays open to the street
     for(const gar of upper?[]:urooms.filter(r=>r.kind==='garage'||r.kind==='bay')){
@@ -763,9 +780,14 @@ function openings(M,P,rng,sense,units,floorIdx){
       for(const run of cands){ back=putExt(run,1,'door','back'); if(back) break; }
       if(back) break;
     }
-    if(!back&&!upper){ for(const kind of T.back){ const cands=urooms.filter(r=>r.kind===kind).flatMap(r=>roomRuns(r.id)).filter(r=>dot(r[0].dir,f)<.3); for(const run of cands){ back=putExt(run,1,'door','back'); if(back) break; } if(back) break; } }
+    if(!back&&!upper&&!Un.inner){ for(const kind of T.back){ const cands=urooms.filter(r=>r.kind===kind).flatMap(r=>roomRuns(r.id)).filter(r=>dot(r[0].dir,f)<.3); for(const run of cands){ back=putExt(run,1,'door','back'); if(back) break; } if(back) break; } }
     if(back){ back.unit=uk; backs.push(back); }
-    if(!upper) for(const r of isolated) for(const run of roomRuns(r.id)){ if(putExt(run,1,'door','side')) break; }
+    // a big room with one way in gets a second, so no fight is a dead end
+    const doorCount=id=>doors.filter(e=>e.a===id||e.b===id).length+[...edges.values()].filter(e=>e.type==='open'&&(e.a===id||e.b===id)).length;
+    for(const r of urooms){ if(r.cells.length<30||/bath|restroom|walkin|vault|server|stair|elev|storage|corridor/.test(r.kind)||doorCount(r.id)>1) continue;
+      const nbs=nb(r.id).filter(n=>!/bath|restroom|walkin|vault|server|stair|elev/.test(byId[n].kind)&&!doors.some(e=>(e.a===r.id&&e.b===n)||(e.a===n&&e.b===r.id))).sort((a,b)=>byId[b].cells.length-byId[a].cells.length);
+      if(nbs.length) link(r.id,nbs[0]); }
+    if(!upper&&!Un.inner) for(const r of isolated) for(const run of roomRuns(r.id)){ if(putExt(run,1,'door','side')) break; }
     // windows
     const nearDoor=new Set();
     for(const d of extDoors) for(const e of d.edges){ const o=e.key[0], [p,q]=e.key.slice(1).split(',').map(Number); for(const s2 of [-1,1]) nearDoor.add(o==='v'?o+p+','+(q+s2):o+(p+s2)+','+q); }
@@ -874,7 +896,7 @@ const FURN={
   bay:[['liftcar','car',0],['toolchest','wall',1],['tires','wall',[0,1]],['drums','wall',[0,1]]],
   salon:[['station','wall',5,{avoidWin:1}],['washsink','wall',[1,2],{farDoor:1}],['receptiondesk','nearDoor',1,{clear:1}],['chairs3','wall',[0,1]],['wallshelf','wall',[0,1]]],
   forecourt:[['pump','tables',0,{alt:'none',pitch:5}]],
-  stair:[], elev:[],
+  stair:[], elev:[], corridor:[['ficus','wall',[0,2],{corner:1}],['watercooler','wall',[0,1]],['chairs3','wall',[0,1]]], shell:[['crate','free',[0,2]],['rshelf','wall',[0,1]]],
 };
 // Recipes that depend on what the tenant was
 {
@@ -1060,6 +1082,14 @@ function furnish(M,P,O,rng,typeKey,progCars){
       }
     }
   }
+  // Cover budget: furniture may cover only part of a room; the least needed pieces go first.
+  const BUDGET={sales:.4,stock:.45,storage:.45,walkin:.5,garage:.5,bay:.5,kitchen:.45,rkitchen:.45,ffkitchen:.45,bath:.55,mbath:.55,restroom:.55,laundry:.5,office:.35,conference:.4,breakroom:.4,server:.5,vault:.55,cafeback:.45,dispensary:.45};
+  const DROP=['ficus','floorlamp','cactus','watercooler','armchair','chairs3','printer','filing','bookcase','crate','tvstand','hutch','nightstand','dresser','tires','drums','vending','checkstand','coffee','prep','table2','cubicle','table4','booth','rshelf','wallshelf','cooler'];
+  for(const room of rooms){ const lim=BUDGET[room.kind]||.28, mine=items.filter(it=>it.room===room.id&&!it.dropped);
+    let used=mine.reduce((a,it)=>a+(it.spec.cover!=='none'?it.cells.length:0),0);
+    for(const key of DROP){ if(used<=lim*room.cells.length) break; for(const it of mine.filter(x=>x.key===key&&!x.dropped).reverse()){ if(used<=lim*room.cells.length) break; it.dropped=true; for(const c of it.cells) if(occ[c]===it.id){ occ[c]=-1; reserved[c]=0; } used-=it.spec.cover!=='none'?it.cells.length:0; } } }
+  const kept=items.filter(it=>!it.dropped); occ.fill(-1); kept.forEach((it,k)=>{ it.id=k; for(const c of it.cells) occ[c]=k; });
+  items.length=0; items.push(...kept);
   return {items,occ,reserved,keep,doorCells};
 }
 
@@ -1177,13 +1207,13 @@ const FLOOR_OF={living:['wood','carpet','parquet','slate','saltillo'],dining:['w
   sales:['vinyl','terrazzo','polished'],stock:['concrete'],dispensary:['vinyl','terrazzo'],ffdining:['tile','vinyl','terrazzo'],ffkitchen:['quarry','brick'],cafe:['wood','tile','parquet','polished','brick'],cafeback:['tile','vinyl'],
   lobby:['tile','terrazzo','slate','polished'],teller:['carpet','carpettile'],vault:['concrete'],reception:['carpet','wood','terrazzo'],openoffice:['carpet','carpettile'],conference:['carpet','carpettile','wood'],
   breakroom:['tile','vinyl','terrazzo'],server:['vinyl'],bay:['concrete','polished'],waiting:['tile','vinyl','carpettile','terrazzo'],salon:['wood','tile','polished','terrazzo'],exam:['vinyl','terrazzo'],
-  forecourt:['concrete'],stair:['concrete'],elev:['concrete']};
+  forecourt:['concrete'],stair:['concrete'],elev:['concrete'],corridor:['carpettile','vinyl','terrazzo','carpet'],shell:['concrete']};
 // Wall finishes on the room side of each wall
 const WALL_OF={living:['paint','paint','wainscot','stripes','accent','panel'],dining:['wainscot','stripes','paint','accent','talavera'],bed:['paint','stripes','accent','wainscot'],master:['paint','stripes','accent','wainscot'],
   den:['panel','paint','accent'],hall:['paint','wainscot','accent'],kitchen:['tilewain','paint','talavera','tilewain'],bath:['tilewain','tilefull','paint'],mbath:['tilewain','tilefull'],restroom:['tilefull','tilewain'],laundry:['paint','tilewain'],
   rdining:['brick','panel','wainscot','talavera','accent'],ffdining:['tilewain','accent','paint'],cafe:['brick','panel','accent','stripes'],lobby:['wainscot','panel','accent'],reception:['accent','panel','paint'],
   waiting:['wainscot','paint','accent'],salon:['accent','brick','stripes'],openoffice:['paint','accent'],conference:['panel','accent','paint'],office:['paint','panel','accent'],breakroom:['tilewain','paint'],exam:['tilewain','paint'],
-  sales:['paint','accent','paint'],rkitchen:['tilefull'],ffkitchen:['tilefull'],cafeback:['tilewain'],teller:['panel','paint']};
+  sales:['paint','accent','paint'],rkitchen:['tilefull'],ffkitchen:['tilefull'],cafeback:['tilewain'],teller:['panel','paint'],corridor:['paint','wainscot','accent','paint'],shell:['bare']};
 const WALLPAPER=[['#e8dcc0','#d8c4a0'],['#d4e4e2','#b8d4cf'],['#ecd6c7','#d8b8a8'],['#e9e1d0','#c9953f'],['#d9e0cf','#b8c4b0'],['#f0e7d4','#7a2e35'],['#e3e0ea','#b8b0c8']];
 const WALLTILE=[['#e8e4da','#d8d4c9'],['#d4e4e2','#b8d4cf'],['#f0ece2','#3f5f86'],['#e8dcc0','#c9953f'],['#e8e4da','#2b2c2e'],['#d9e0cf','#7d8f62'],['#ecd6c7','#c98b62']];
 const ACCENT=['#2f6f73','#7a2e35','#c9953f','#3f5f86','#5f7d3f','#b5543a','#6b4f7a','#3a3d40'];
@@ -1204,6 +1234,62 @@ function styleFor(seedStr,units,rooms){
 }
 
 // ---------------------------------------------------------------- whole generation
+// Multi-tenant offices (Anthem's are 2-storey Class B blocks of 110-650 m² suites): a 2-3 m corridor along the
+// middle of every wing, found as the ridge of the distance from the outside walls, joined to the cores and to an
+// entrance on the street side and an exit at the back. What is left becomes suites, each touching the corridor.
+function officeSuites(M,cores,sense,rng,fk){
+  const {W,H,mask}=M, N=W*H, core=new Set(cores.flatMap(c=>c.cells));
+  const dist=new Int32Array(N).fill(0), q=[];
+  for(let c=0;c<N;c++) if(mask[c]){ const i=c%W,j=(c/W)|0; for(const [di,dj] of DIRS) if(!mask[(j+dj)*W+i+di]){ dist[c]=1; q.push(c); break; } }
+  for(let h=0;h<q.length;h++){ const c=q[h], i=c%W,j=(c/W)|0; for(const [di,dj] of DIRS){ const n=(j+dj)*W+i+di; if(mask[n]&&!dist[n]){ dist[n]=dist[c]+1; q.push(n); } } }
+  // centre lines of the footprint by thinning (Zhang-Suen), spurs trimmed, then 2 m wide
+  const m=Uint8Array.from(mask); let changed=true;
+  while(changed){ changed=false; for(const step of [0,1]){ const del=[];
+    for(let j=1;j<H-1;j++) for(let i=1;i<W-1;i++){ const c=j*W+i; if(!m[c]) continue;
+      const n=[m[c-W],m[c-W+1],m[c+1],m[c+W+1],m[c+W],m[c+W-1],m[c-1],m[c-W-1]], B=n.reduce((x,y)=>x+y,0); if(B<2||B>6) continue;
+      let A=0; for(let k=0;k<8;k++) if(!n[k]&&n[(k+1)%8]) A++; if(A!==1) continue;
+      if(step===0?(n[0]&&n[2]&&n[4])||(n[2]&&n[4]&&n[6]):(n[0]&&n[2]&&n[6])||(n[0]&&n[4]&&n[6])) continue; del.push(c); }
+    for(const c of del) m[c]=0; if(del.length) changed=true; } }
+  let cor=new Set(); for(let c=0;c<N;c++) if(m[c]&&dist[c]>=3&&!core.has(c)) cor.add(c);
+  let pending=[];
+  const n8=c=>{ let k=0; for(const d of [-W-1,-W,-W+1,-1,1,W-1,W,W+1]) if(cor.has(c+d)) k++; return k; };
+  for(let it=0;it<6;it++) for(const c of [...cor]) if(n8(c)<=1) cor.delete(c);
+  { const comp8=s0=>{ const seen=new Set([s0]), st=[s0]; while(st.length){ const c=st.pop(); for(const d of [-W-1,-W,-W+1,-1,1,W-1,W,W+1]){ const n=c+d; if(cor.has(n)&&!seen.has(n)){ seen.add(n); st.push(n); } } } return seen; };
+    const comps=[], seenC=new Set(); for(const c of cor){ if(seenC.has(c)) continue; const k=comp8(c); for(const x of k) seenC.add(x); if(k.size>=10) comps.push(k); }
+    comps.sort((a,b)=>b.size-a.size); cor=new Set(comps[0]||[]); pending=comps.slice(1); }
+  for(const c of [...cor]) for(const d of [1,W,W+1]) if(mask[c+d]&&!core.has(c+d)) cor.add(c+d);
+  // carve 2 m paths: corridor to every core, to a street entrance and to a back exit
+  const carve=(from,isGoal)=>{ const prev=new Map(), st=[...from]; for(const c of st) prev.set(c,-1);
+    for(let h=0;h<st.length;h++){ const c=st[h]; if(isGoal(c)&&!from.has(c)){ let x=c; while(x>=0&&!from.has(x)){ cor.add(x); const i=x%W; if(mask[x+1]&&!core.has(x+1)) cor.add(x+1); else if(mask[x+W]&&!core.has(x+W)) cor.add(x+W); x=prev.get(x); } return true; }
+      for(const [di,dj] of DIRS){ const n=c+dj*W+di; if(mask[n]&&!core.has(n)&&!prev.has(n)){ prev.set(n,c); st.push(n); } } } return false; };
+  if(!cor.size){ let c0=-1,dm=-1; for(let c=0;c<N;c++) if(mask[c]&&!core.has(c)&&dist[c]>dm){ dm=dist[c]; c0=c; } if(c0>=0) cor.add(c0); }
+  // other centre-line pieces (wings cut off by a core) join the main corridor
+  for(const k of pending){ const cells=[...k]; carve(cor,c=>k.has(c)); for(const c of cells){ cor.add(c); for(const d of [1,W,W+1]) if(mask[c+d]&&!core.has(c+d)) cor.add(c+d); } }
+  for(const cd of cores){ const touch=new Set(); for(const c of cd.cells) for(const [di,dj] of DIRS){ const n=c+dj*W+di; if(mask[n]&&!core.has(n)) touch.add(n); } if(![...touch].some(c=>cor.has(c))) carve(cor,c=>touch.has(c)); }
+  const f=sense.front, edgeTo=(c,dv)=>{ const i=c%W,j=(c/W)|0; for(let d=0;d<4;d++){ const n=(j+DIRS[d][1])*W+i+DIRS[d][0]; if(!mask[n]&&DIRS[d][0]*dv[0]+DIRS[d][1]*dv[1]>.45) return true; } return false; };
+  if(fk===0){ carve(cor,c=>edgeTo(c,f)); carve(cor,c=>edgeTo(c,[-f[0],-f[1]])); }
+  // suites: what is left, cut into pieces of 110-380 m² that each touch the corridor
+  const rest=[]; for(let c=0;c<N;c++) if(mask[c]&&!cor.has(c)&&!core.has(c)) rest.push(c);
+  const suites=[]; const restSet=new Set(rest), seen=new Set();
+  const cut=(cells)=>{ const target=110+rng()*270; if(cells.length<=target*1.25){ suites.push(cells); return; }
+    let i0=1e9,i1=-1e9,j0=1e9,j1=-1e9; for(const c of cells){ const i=c%W,j=(c/W)|0; i0=Math.min(i0,i); i1=Math.max(i1,i); j0=Math.min(j0,j); j1=Math.max(j1,j); }
+    const ax=(i1-i0)>=(j1-j0), key=c=>ax?c%W:(c/W)|0, sorted=cells.slice().sort((a,b)=>key(a)-key(b)), m=key(sorted[Math.floor(sorted.length*Math.max(.3,Math.min(.7,target/cells.length)))]);
+    const a=cells.filter(c=>key(c)<m), b=cells.filter(c=>key(c)>=m); if(!a.length||!b.length){ suites.push(cells); return; } cut(a); cut(b); };
+  for(const c0 of rest){ if(seen.has(c0)) continue; const piece=[c0]; seen.add(c0); for(let h=0;h<piece.length;h++){ const c=piece[h]; for(const [di,dj] of DIRS){ const n=c+dj*W+di; if(restSet.has(n)&&!seen.has(n)){ seen.add(n); piece.push(n); } } } cut(piece); }
+  // pieces that miss the corridor or are too small join a neighbour that has it
+  const owner=new Int32Array(N).fill(-1); suites.forEach((sc,k)=>{ for(const c of sc) owner[c]=k; });
+  const touches=k=>suites[k].some(c=>DIRS.some(([di,dj])=>cor.has(c+dj*W+di)));
+  for(let pass=0;pass<4;pass++) suites.forEach((sc,k)=>{ if(!sc.length||(touches(k)&&sc.length>=40)) return; const cnt={}; for(const c of sc) for(const [di,dj] of DIRS){ const o=owner[c+dj*W+di]; if(o>=0&&o!==k) cnt[o]=(cnt[o]||0)+1; } const t=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a])[0]; if(t===undefined) return; for(const c of sc){ owner[c]=+t; suites[+t].push(c); } suites[k]=[]; });
+  const touchSet=cells=>cells.some(c=>DIRS.some(([di,dj])=>cor.has(c+dj*W+di)));
+  for(let k=0;k<suites.length;k++){ const sc=suites[k]; if(sc.length<=450) continue;
+    for(const axis of [0,1]){ const key=c=>axis?((c/W)|0):c%W, sorted=sc.slice().sort((a,b)=>key(a)-key(b)), mm=key(sorted[sorted.length>>1]); const a=sc.filter(c=>key(c)<mm), b=sc.filter(c=>key(c)>=mm);
+      if(a.length>40&&b.length>40&&touchSet(a)&&touchSet(b)){ suites[k]=a; suites.push(b); k--; break; } } }
+  const out=[{typeKey:'common',cells:[...cor],what:'',name:'Corridors',cuisine:'diner'}];
+  for(const sc of suites){ if(!sc.length) continue; const r=rng(); const t=r<.22?'vacant':r<.4?'clinic':'suite';
+    out.push({typeKey:t,cells:sc,what:t==='clinic'?(rng()<.5?'dentist':'doctors'):'',name:t==='vacant'?'Vacant suite':t==='clinic'?'Medical suite':'Suite '+(out.length),cuisine:'diner',inner:true}); }
+  return out;
+}
+
 // Stair and elevator cores for multi-storey buildings: chosen once on the footprint so every floor
 // has them in the same cells. A main stair and an elevator near the middle, fire stairs at the far ends.
 function coresFor(M,levels){
@@ -1240,7 +1326,8 @@ function generate(site,typeKey,seedStr,history){
   for(let fk=0;fk<levels;fk++){
     const fs=fk?'|f'+fk:'';
     // upper floors of shops and houses become offices; offices stay offices
-    const units=fk===0?units0:[{typeKey:units0.length>1||!/office|bank|clinic/.test(units0[0].typeKey)?'office':units0[0].typeKey,cells:units0.flatMap(u=>u.cells),what:'',name:units0[0].name,cuisine:'diner'}];
+    const tenantOffice=units0.length===1&&units0[0].typeKey==='office'&&(levels>1||A>1500);
+    const units=tenantOffice?officeSuites(M,cores,sense,rngOf(seedStr+'|suites'+fs),fk):fk===0?units0:[{typeKey:units0.length>1||!/office|bank|clinic/.test(units0[0].typeKey)?'office':units0[0].typeKey,cells:units0.flatMap(u=>u.cells),what:'',name:units0[0].name,cuisine:'diner'}];
     const roomOf=new Int32Array(M.W*M.H).fill(-1), rooms=[]; let cars=0;
     for(const cd of cores){ const r=R(cd.kind,cd.cells.length,{name:cd.name}); r.id=rooms.length; r.cells=cd.cells.slice(); r.unit=0; r.rect=cd.rect; r.unitType=units[0].typeKey; rooms.push(r); for(const c of r.cells) roomOf[c]=r.id; }
     units.forEach((Un,k)=>{
