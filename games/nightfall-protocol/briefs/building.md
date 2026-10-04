@@ -21,7 +21,7 @@ Also `data/base/ranch_site.json` and `mockups/base.html`.
 ## Where it stands
 
 - **Design**: done and merged (first task 1). Two one-page designs were drafted in parallel and are now one; see Decisions. The details are in `tools/base/DESIGN.md`.
-- **Prototype** (first task 2, done): `mockups/base.html` runs on 760 × 500 m of the baked New River block.
+- **Prototype** (first task 2, done): `mockups/base.html` runs on 760 × 500 m of the baked New River block. Published as the Base Builder artifact: https://claude.ai/artifact/VHZBkjgVgmS823qTqJAeVU
   - **Founding**: the base can be founded anywhere on the cut. Two base points are suggested.
   - **Placing**: all fourteen buildables can be placed on the 2 m grid. You can also repair the old well or take an outbuilding apart.
   - **People**: six `People` survivors choose the work with `People.score`, fetch materials, walk the real ground and build. They refill canteens from the base's water and rest indoors in the heat. At night they sleep on cots, in the bunkhouse or in the house, with two on watch.
