@@ -1,4 +1,4 @@
-<title>Ranch Base</title>
+<title>Base Builder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -71,14 +71,15 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 <div class="wrap">
   <header>
     <p class="eyebrow">Nightfall · building · prototype</p>
-    <h1>The ranch on West New River Road</h1>
-    <p class="lede">The real lot from the baked New River block. Order walls, a water tank, beds and the other first buildables onto the 2 m movement grid. Survivors take the work, walk the real ground to it and build. Water drains from every person every hour.</p>
+    <h1>A base on real ground at New River</h1>
+    <p class="lede">760 × 500 m of the baked New River block. Found a 140 m base anywhere on it: the ranch lot, the region home point, or open desert. Order walls, gates, tanks, beds, a bunkhouse and the other first buildables onto the 2 m movement grid. Survivors from the people simulation choose the work, walk the real ground to it and build. Each carries a canteen and refills it from the base's water.</p>
   </header>
   <div class="app">
     <div class="main">
       <div class="bar" role="toolbar" aria-label="Build">
         <div class="grp" id="build"><span class="lbl">Build</span></div>
-        <div class="grp"><span class="lbl">Order</span><button type="button" id="repair">Repair well</button><button type="button" data-tool="tear">Tear down</button><button type="button" data-tool="cancel">Cancel</button></div>
+        <div class="grp"><span class="lbl">Order</span><button type="button" id="repair">Repair well</button><button type="button" data-tool="tear">Take apart</button><button type="button" data-tool="cancel">Cancel</button></div>
+        <div class="grp" id="presets"><span class="lbl">Base</span><button type="button" data-tool="found">Found here…</button></div>
       </div>
       <div class="bar">
         <div class="grp"><span class="clock" id="clock">Day 1 05:00</span><span class="temp" id="phase"></span></div>
@@ -99,22 +100,21 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
         <div class="temp" id="wdays"></div>
       </section>
       <section aria-labelledby="h-stock"><h2 id="h-stock">Stores</h2><dl class="stock" id="stock"></dl></section>
-      <section aria-labelledby="h-people"><h2 id="h-people">People · water behind</h2><div class="people" id="people"></div></section>
+      <section aria-labelledby="h-people"><h2 id="h-people">People · water short</h2><div class="people" id="people"></div></section>
       <section aria-labelledby="h-sel"><h2 id="h-sel">Selected</h2><div class="sel" id="sel">Click a person or a thing.</div></section>
       <section aria-labelledby="h-view"><h2 id="h-view">View</h2>
         <div class="toggles">
           <label><input type="checkbox" id="grid"> Movement grid (kinds and cover)</label>
           <label><input type="checkbox" id="area" checked> Buildable area</label>
-          <label><input type="checkbox" id="heat"> Outdoor work through the heat</label>
         </div>
       </section>
       <section aria-labelledby="h-log"><h2 id="h-log">Log</h2><ul class="log" id="log"></ul></section>
     </aside>
   </div>
   <section class="notes">
-    <div><b>Real ground</b><span>A 200 m cut of the baked sector: heights, the 2 m movement grid, the house, barn, shed and outbuildings, roads, the wash and the plants. The buildable area is 140 m square.</span></div>
-    <div><b>Built things change the grid</b><span>Walls, gates, tanks, the kitchen and watch posts write <code>wall</code> or <code>building</code> and their cover into the grid when finished, as the bake does. Paths go round them, and gates let the ranch's own people through.</span></div>
-    <div><b>Stand-in rules</b><span>Water drains at 0.5 L per person per hour, doubled from 10:00 to 18:00. Job choice is a simple score until <code>people.md</code> provides the real one, and stores stand in until <code>settlement.md</code>.</span></div>
+    <div><b>Found it anywhere</b><span>A base is a 140 m square on the 2 m grid. Buildings standing on it are claimed. The biggest house is home and holds the water barrels, the next is the store and the next the workshop. Small outbuildings can be taken apart. A base with a house has an old well whose pump died with the grid.</span></div>
+    <div><b>Built things change the grid</b><span>Walls, tanks, the bunkhouse and watch posts write <code>wall</code> or <code>building</code> and their cover, as the bake does. Barricades, kitchens and workbenches give half cover. Gates shut at night and always let the base's own people through.</span></div>
+    <div><b>Shared rules</b><span>Survivors are <code>People</code> records: their bodies, moods and choice of work come from the people simulation. Building offers tasks in the shared shape and sets the day: outdoor work 06–10 and 18–22, half speed in the heat, sleep 22–06 with two on watch. The stores stand in until settlement is wired.</span></div>
   </section>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>

@@ -26,6 +26,12 @@ if(Motion.busy(fig)) { /* a clip or ragdoll owns the root: read fig.root back in
 
 - A foot that bears weight is pinned to its spot in the world. Hip (three axes), knee and the new ankle are solved to reach it, with the knee pointing forward.
 - Walking swaps feet by the gait phase, which moves by the distance covered divided by the stride. Standing still, a foot steps when the stance wants it elsewhere or the body has turned 30° away from it. That gives turning on the spot, small shuffles and changes of stance, and no foot slides round tight bends.
+- **Pelvis.** The pelvis moves three ways while walking, all sized per person:
+  - it shifts over the standing leg (sway, 14–32 mm each way);
+  - it drops on the swinging side (tilt, 2.5–6.5°, about 30% more for women);
+  - it turns forward with the swinging leg (twist, 3–7.5°).
+
+  The chest turns against the twist and levels against the tilt, so shoulders and head stay steady. Knees, and so feet, point the way each foot landed, whatever the pelvis is doing. Standing, the pelvis rests on one hip (the favoured one, or away from a wound) and drifts. Measured at 1.4 m/s: sway 45 mm, tilt 9°, twist 11° peak to peak; shoulders tilt only 2°.
 - **Gait height.** Only feet bearing weight hold the pelvis down; a swinging foot bends its knee to fit and counts only as it lands. The back foot rolls onto the ball of the foot before push-off (the ankle pivots round the ball, so the ball stays put), and the front foot lands heel first (pivoting round the heel). The foot lands slightly under the body, and the stance leg is nearly straight (99.3% of its length). Measured pelvis bob over four people:
 
 | Gait | Pelvis bob | Knee at mid-stance |
@@ -53,6 +59,30 @@ if(Motion.busy(fig)) { /* a clip or ragdoll owns the root: read fig.root back in
   - Measured with all five digits touching in every hold (rifle aim, ready and low; pistol aim and carried): worst sink 0.5–3.7 mm against 14–30 mm with fixed curls, fingertips within 0–6 mm of the surface. The cost is about 0.1 ms per armed figure per frame.
 - **Rifle stance.** Rifle aim, ready and reload are bladed: the body turns about 45° to the right so the left hand reaches the fore-end, and the neck turns the head back to the target.
 - **Ankle joint.** FigureKit has no ankle. `Motion` slips a group between each knee and its foot meshes (`fig.an`) the first time it sees a figure. It also sets `fig.hand` (the wrist groups) and neck yaw on `fig.head`.
+
+## Variation
+
+Every animation draws from ranges, so nothing plays the same way twice:
+
+- **Per person:** traits from the seed.
+- **Per action:** the pose roll.
+- **Per stride:** stride length, foot lift, sway, tilt and twist follow smooth noise over the stride count. How much they vary is itself a trait (`vary`).
+- **Per clip:** vaults, climbs, drops and get-ups get a tempo (±12%) and nudged in-between keys. Hands on an edge and feet on the ground only move along the surface. Ladders roll their climbing speed, which rung the hands start on, the lean and the top-out.
+- **Weapons:** cycles (bolt, reloads) roll their tempo; hits and recoil roll their size and side.
+- **Steps:** turning steps roll their timing and lift.
+- **Dig:** each stroke is rolled afresh (see below).
+
+## Dig
+
+`work` digs with a D-handle spade (built when needed). Both hands are solved onto it with the same grasp-by-contact as weapons, and the weapon is slung. Each stroke is rolled:
+
+1. Drive the blade in (13–21 cm deep).
+2. On most strokes, step onto the tread with the right foot and push.
+3. Lever back.
+4. Lift, turn left and throw the soil (it flies and lands).
+5. Come back.
+
+Duration, spot, depth, lever, throw distance and height, and the blade flip all vary.
 
 ## Weapons
 

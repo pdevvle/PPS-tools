@@ -35,8 +35,14 @@ function traits(seed){ const r=rng(Math.imul(seed|0,7)+1);
     toe:(r()-.5)*.08,              // stance width
     fidget:.7+r()*.6,              // how much they move standing still
     favour:r()<.5?0:1,             // the leg they rest on, and the one a wound favours
-    head:(r()-.5)*.12};            // head carriage
+    head:(r()-.5)*.12,             // head carriage
+    sway:.014+r()*.018,            // pelvis shift over the standing leg (metres)
+    tilt:(2.5+r()*4)*D,            // pelvis drop on the swinging side
+    twist:(3+r()*4.5)*D,           // pelvis turn with the stride (the shoulders turn against it)
+    vary:.08+r()*.1};              // how much one stride or one action differs from the next
 }
+// smooth per-person variation keyed by a counter (stride, stroke): -1..1
+const vnoise=(M,k,ch)=>noise(k+.37,ch*131+(M.seed%977));
 // FigureKit figures carry their face values; the same person always hashes to the same seed
 function seedOf(fig){ if(fig.seed!=null) return fig.seed>>>0; let h=2166136261; const FP=fig.FP||{};
   for(const k of Object.keys(FP).sort()){ const v=FP[k]; if(typeof v==='number'){ h^=Math.round(v*1e4); h=Math.imul(h,16777619); } }
@@ -63,7 +69,7 @@ const ACTS={
   hunker: {pose:P({bodyY:-.38,lgR:-1.2,knR:1.7,lgL:-.5,knL:1.9,torsoX:.55,headX:.2,shRx:-.8,shRz:-.3,elR:-1.6,shLx:-.9,shLz:.35,elL:-1.5}), legs:'plant', arms:'hold', roll:1, crouch:1, hold:{rifle:'hug',pistol:'hug'}},
   hit:    {pose:P({bodyY:-.06,torsoX:-.2,headX:-.15,shRz:-.45,shLz:.45,elR:-.6,elL:-.6,lgR:-.2,knR:.4,lgL:.1,knL:.3}), legs:'plant', arms:'hold', roll:1.2, hold:{rifle:'low',pistol:'hand'}},
   carry:  {pose:P({torsoX:-.06,headX:.1,shRx:-.7,shRz:-.28,elR:-1.15,shLx:-.7,shLz:.28,elL:-1.15}), legs:'plant', arms:'hold', roll:.5, stride:.8, hold:{rifle:'sling',pistol:'holster'}},
-  work:   {pose:P({bodyY:-.08,torsoX:.4,headX:.25,lgR:-.4,knR:.5,lgL:.2,knL:.25,shRx:-.7,shRz:-.15,elR:-.5,shLx:-.9,shLz:.15,elL:-.4}), legs:'plant', arms:'hold', roll:.8, cycle:'dig', hold:{rifle:'sling',pistol:'holster'}},
+  work:   {pose:P({bodyY:-.03,torsoX:.08,headX:.2,lgR:-.4,knR:.5,lgL:.2,knL:.25,shRx:-.7,shRz:-.15,elR:-.5,shLx:-.9,shLz:.15,elL:-.4}), legs:'plant', arms:'hold', roll:.8, cycle:'dig', hold:{rifle:'sling',pistol:'holster'}},
   swim:   {pose:P({torsoX:.35,headX:-.25,shRz:-.5,shLz:.5,elR:-.4,elL:-.4,knR:.3,knL:.3}), legs:'free', arms:'hold', roll:.3, cycle:'swim', hold:{rifle:'sling',pistol:'holster'}},
   fall:   {pose:P({}), legs:'rag', arms:'rag', roll:0, fall:1},
 };
@@ -139,9 +145,10 @@ const ARM_POLE=[V(-.55,-1,-.3),V(.55,-1,-.3)], KNEE_POLE=[V(-.12,.05,1),V(.12,.0
 // ankle relative to the hip joint for a thigh angle and a knee bend (the leg's own plane)
 const fk=(R,th,kn)=>({y:-(R.a*Math.cos(th)+R.b*Math.cos(th+kn)), z:-(R.a*Math.sin(th)+R.b*Math.sin(th+kn))});
 
-function init(fig){ const seed=seedOf(fig), R=rig(fig), M={grip:[null,null], seed, tr:traits(seed), R, rr:rng(Math.imul(seed,31)+7), j:Object.assign({},ACTS.idle.pose),
+function init(fig){ const seed=seedOf(fig), R=rig(fig), M={grip:[null,null], strideN:0, pelvis:{x:0,tilt:0,rot:0}, seed, tr:traits(seed), R, rr:rng(Math.imul(seed,31)+7), j:Object.assign({},ACTS.idle.pose),
     ph:rng(seed)()*1, v:0, lx:fig.root.position.x, lz:fig.root.position.z, gaitW:0, runW:0, act:null, actT:0, roll:{}, t:rng(seed+3)()*50,
     wound:0, panic:0, hit:0, hitSide:1, hitDir:null, recoil:0, moving:false, still:0, feet:null, handW:[0,0], wc:null, clip:null, rag:null, dirty:false};
+  if(fig.fem){ M.tr.tilt*=1.3; M.tr.twist*=1.2; M.tr.sway*=1.15; }
   fig.motion=M; return M; }
 function rollFor(M,def){ const o={}, k=def.roll||0; for(const key of KEYS){ const s=def.steady&&ARMKEYS.has(key)?.3:1; o[key]=(M.rr()*2-1)*BOUND[key]*k*s; } return o; }
 
@@ -219,6 +226,56 @@ function holdTarget(fig,M,name,s,out){ const W=M.w.spec, R=M.R, torso=fig.torso;
       p=toLocal(fig,h.localToWorld(V(0,-.075,.005))); hands=[0,0]; M.inHand=1; } }
   out.p=p; out.q=q; out.hands=hands; return out; }
 
+// ---------- tools: a D-handle spade for digging ----------
+// Tool frame: origin at the blade tip, +y up the shaft to the D-handle (1.1 m), +z out of the blade's face.
+const TOOLS={
+  spade:{len:1.1,
+    grip:[{p:V(0,1.1,0),axis:V(0,-.2,1),palm:V(0,-1,-.2)}, {p:V(0,.62,0),axis:V(-1,0,.1),palm:V(0,0,1)}],
+    build(){ const g=new THREE.Group();
+      part(g,box(.19,.27,.012),STEEL,0,.135,0); part(g,box(.19,.018,.04),STEEL,0,.27,-.008); part(g,new THREE.CylinderGeometry(.02,.026,.08,6),STEEL,0,.31,0);
+      part(g,new THREE.CylinderGeometry(.017,.017,.72,6),WOOD,0,.69,0);
+      part(g,box(.012,.09,.022),WOOD,-.05,1.06,0,0,0,-.35); part(g,box(.012,.09,.022),WOOD,.05,1.06,0,0,0,.35); part(g,new THREE.CylinderGeometry(.015,.015,.12,6),WOOD,0,1.1,0,0,0,Math.PI/2);
+      const dirt=new THREE.Mesh(new THREE.IcosahedronGeometry(.075,0),wm('#8a6a48')); dirt.scale.set(1,.55,1); dirt.castShadow=true; dirt.visible=false;
+      return {g,dirt}; }}};
+// one stroke of digging, re-rolled every time: drive the blade in, sometimes stand on it, lever back, lift, turn and
+// throw to the left, come back. Keys are the D-handle and the blade tip in the root frame; the body follows the stroke.
+function rollStroke(M,R){ const r=M.rr, tr=M.tr, k=1+tr.vary*(r()*2-1);
+  return {T:2.5*(.82+.36*r()), x:-.03+(r()-.5)*.1, z:.58+(r()-.5)*.1, depth:.13+.08*r(), lever:.8+.45*r(), toss:.45+.6*r(), up:.35+.3*r(), foot:r()<.7, body:k, flip:1.1+.5*r()}; }
+function digKeys(S,g){ const x=S.x, z=S.z, gy=g;
+  // [u, handle, tip, roll, torsoX, torsoY, bodyY]
+  return [[0,   V(x-.2,gy+.92,.02),          V(x,gy+.05,z+.04),           0,   .12,0,   -.02],
+          [.2,  V(x-.12,gy+1.06,z-.32),      V(x,gy+.03,z),               0,   .16,0,   -.02],
+          [.34, V(x-.1,gy+.93,z-.24),        V(x,gy-S.depth*.6,z-.04),    0,   .24,0,   -.04],
+          [.48, V(x-.1,gy+.86,z-.24),        V(x,gy-S.depth,z-.05),       0,   .28,0,   -.05],
+          [.6,  V(x-.22,gy+.8-.06*S.lever,-.04),V(x,gy-S.depth*.7,z+.06*S.lever),.05,.34,0,-.08],
+          [.74, V(x-.06,gy+.95+.1*S.up,.05),   V(x+.25*S.toss,gy+S.up,z-.02),.1,  .22,.25*S.toss,-.05],
+          [.84, V(x+.04,gy+1+.1*S.up,.1),      V(x+.6*S.toss,gy+S.up+.15,z-.25),S.flip,.14,.55*S.toss,-.03],
+          [1,   V(x-.2,gy+.92,.02),          V(x,gy+.05,z+.04),           0,   .12,0,   -.02]]; }
+function digAt(K,u){ let i=0; while(i<K.length-2&&u>K[i+1][0]) i++; const A=K[i], B=K[i+1], e=smooth((u-A[0])/(B[0]-A[0]));
+  return {hdl:A[1].clone().lerp(B[1],e), tip:A[2].clone().lerp(B[2],e), roll:lerp(A[3],B[3],e), tX:lerp(A[4],B[4],e), tY:lerp(A[5],B[5],e), by:lerp(A[6],B[6],e)}; }
+function digStep(fig,M,s,dt){ const R=M.R; let G=M.dig;
+  if(!G||G.t>=G.S.T){ const S=rollStroke(M,R); const sp=toWorld(fig,S.x,0,S.z); G=M.dig={t:0,S,K:digKeys(S,groundW(fig,s,sp.x,sp.z)-fig.root.position.y)}; }
+  G.t+=dt; const u=G.t/G.S.T, P=digAt(G.K,u); G.P=P; G.u=u; const k=G.S.body;
+  // the right foot goes up onto the blade's tread and pushes it in (most strokes)
+  const fw=G.S.foot?smooth((u-.26)/.08)*(1-smooth((u-.52)/.08)):0;
+  if(fw>0){ const dir=P.hdl.clone().sub(P.tip).normalize(), tread=P.tip.clone().addScaledVector(dir,.28); M.digFoot={w:fw, p:tread.add(V(-.02,SOLE+.02,-.06)), pitch:-.1}; } else M.digFoot=null;
+  return {tX:P.tX*k, tY:P.tY*k, hX:.12+.1*P.tX, by:P.by*k-(fw>0?.05*fw:0)}; }
+function tool(fig,M,s,def,dt){
+  if(def.cycle!=='dig'||!M.dig){ if(M.tool){ M.tool.g.visible=false; M.tool.dirt.visible=false; } return; }
+  if(!M.tool){ const b=TOOLS.spade.build(); b.spec=TOOLS.spade; fig.root.add(b.g); fig.root.add(b.dirt); if(FigureKit.inkUp) FigureKit.inkUp(b.g,{color:0x1d1814,persp:true,width:.0016}); M.tool=b; }
+  const T=M.tool, P=M.dig.P; T.g.visible=true;
+  const y=P.hdl.clone().sub(P.tip).normalize(), z=V(0,0,1).addScaledVector(y,-y.z).normalize().applyAxisAngle(y,P.roll), x=V().crossVectors(y,z);
+  _m.makeBasis(x,y,z); T.g.quaternion.setFromRotationMatrix(_m); T.g.position.copy(P.hdl).addScaledVector(y,-T.spec.len); T.g.updateMatrixWorld(true);
+  // soil on the blade from the lever to the throw, then a short flight
+  const u=M.dig.u; if(u>.58&&u<.84){ T.dirt.visible=true; T.dirt.position.copy(T.g.position).add(y.clone().multiplyScalar(.14)).add(z.clone().multiplyScalar(.05)); T.dirtV=null; }
+  else if(u>=.84&&u<.84+.5/M.dig.S.T){ if(!T.dirtV) T.dirtV=V(.9*M.dig.S.toss,1.2,-.3); T.dirtV.y-=9.8*dt; T.dirt.position.addScaledVector(T.dirtV,dt); T.dirt.visible=true; }
+  else T.dirt.visible=false;
+  // both hands on the spade: the weapon is slung
+  M.held=T; const wq=T.g.getWorldQuaternion(Q());
+  for(let i=0;i<2;i++){ const g=T.spec.grip[i], axisW=g.axis.clone().applyQuaternion(wq).normalize(), palmW=g.palm.clone().applyQuaternion(wq).normalize();
+    let gp=surfaceAlong(proxies(T),T.g.localToWorld(g.p.clone()),palmW).addScaledVector(palmW,-.0118*(fig.handK||1));
+    solveArm(fig,M,i,gp.sub(axisW.clone().multiplyScalar(.055)),axisW,1,palmW); M.grip[i]='grip'; } }
+
 // weapon-cycle timelines: each a list of [time, target] for one hand; targets are {w:Vector3} (weapon frame),
 // {t:Vector3} (torso frame) or null (the hand's own grip)
 const seg=(list,t)=>{ for(let i=0;i<list.length-1;i++){ const [t0,a]=list[i], [t1,b]=list[i+1]; if(t<=t1) return [a,b,smooth((t-t0)/(t1-t0||1))]; } const l=list[list.length-1]; return [l[1],l[1],1]; };
@@ -272,8 +329,7 @@ function pose(fig,M,s,def,actName,dt,dist,vr){
   if(Pn>0){ T.torsoX+=.12*Pn; T.headX-=.14*Pn; T.bodyY-=.05*Pn; if(def.arms==='swing'){ T.shRz=lerp(T.shRz,-.04,Pn); T.shLz=lerp(T.shLz,.04,Pn); T.elR-=.7*Pn; T.elL-=.7*Pn; T.shRx-=.3*Pn; T.shLx-=.3*Pn; } }
   if(def.cycle==='reload'&&!M.w){ const c=(M.actT%1.6)/1.6, down=smooth(c/.3)*(1-smooth((c-.6)/.3));
     T.shLx=lerp(T.shLx,.15,down); T.shLz=lerp(T.shLz,.22,down); T.elL=lerp(T.elL,-.7,down); T.shRx+=.12*Math.sin(c*TAU); T.headX+=.1*down; }
-  if(def.cycle==='dig'){ const c=M.actT/1.5*TAU, sw=Math.sin(c);
-    T.torsoX+=.22*sw; T.headX+=.08*sw; T.shRx+=-.45*sw; T.shLx+=-.45*sw; T.elR+=.25*Math.cos(c); T.elL+=.25*Math.cos(c); T.bodyY+=-.04*(sw*.5+.5); }
+  if(def.cycle==='dig'){ const Dg=digStep(fig,M,s,dt); T.torsoX+=Dg.tX; T.torsoY+=Dg.tY; T.headX+=Dg.hX; T.bodyY+=Dg.by; } else { M.digFoot=null; if(M.dig) M.dig=null; }
   if(def.cycle==='swim'){ const t=M.t*2.2; Object.assign(T,{shRx:-1.4+Math.sin(t)*1.3,shLx:-1.4-Math.sin(t)*1.3,lgR:Math.sin(t*2)*.35,lgL:-Math.sin(t*2)*.35}); }
   if(M.w&&M.w.spec.kind==='rifle'&&(actName==='aim'||actName==='shoot')) T.headX+=.12;   // cheek on the stock
   // a rifle is shot bladed: the body turns right so the left shoulder leads and the support hand reaches the fore-end;
@@ -299,18 +355,23 @@ function pose(fig,M,s,def,actName,dt,dist,vr){
   if(feet){ const gw=M.gaitW, rw=M.runW, sw=gw*Math.min(1.3,vr/1.4+.15)*(def.arms==='swing'?1:.15)*(1-.5*W)*(1-.6*Pn), n0=feet.n[0], n1=feet.n[1];
     O.shRx+=n0*.3*tr.swing*sw*(1+rw*.6); O.shLx+=n1*.3*tr.swing*sw*(1+rw*.6);
     if(def.arms==='swing'){ O.elR-=(.12+.2*tr.swing)*gw+rw*1.0; O.elL-=(.12+.2*tr.swing)*gw+rw*1.0; }
-    O.torsoX+=rw*.12*gw+.05*gw*Math.min(1,vr/1.4); O.torsoY+=(n1-n0)*.04*gw*(1+rw); }
+    O.torsoX+=rw*.12*gw+.05*gw*Math.min(1,vr/1.4); }
+  // the chest turns against the pelvis and levels against its tilt, so shoulders and head stay steady
+  if(feet){ O.torsoY-=M.pelvis.rot*1.3; } else { M.pelvis.x*=.9; M.pelvis.tilt*=.9; M.pelvis.rot*=.9; }
   // ---- impulses ----
   if(M.hit>0){ const h=M.hit*M.hit; O.torsoX-=.45*h; O.headX-=.3*h; O.torsoY+=M.hitSide*.25*h; O.shRz-=.3*h; O.shLz+=.3*h; O.bodyY-=.04*h; M.hit=Math.max(0,M.hit-dt*2.2); }
   if(M.recoil>0){ const r=M.recoil; O.torsoX-=.05*r; O.headX-=.04*r; if(!M.w){ O.shRx+=.25*r; O.shLx+=.18*r; } }
   M.out=O; FigureKit.applyPose(fig,O);
+  fig.body.position.x=M.pelvis.x; fig.hips.rotation.set(0,M.pelvis.rot,M.pelvis.tilt); fig.torso.rotation.z=-M.pelvis.tilt*1.15; fig.head.rotation.z=M.pelvis.tilt*.1;
   fig.head.rotation.y=clamp(M.look-clamp(M.look,-1.2,1.2)*.5,-.8,.8)*.9-(M.blade||0)*.85;
   fig.root.updateMatrixWorld(true);
   // ---- solve legs and ankles to their targets ----
-  if(feet) for(let i=0;i<2;i++) solveLeg(fig,M,i,feet.w[i],feet.pitch[i]);
+  // knees (and so feet) point the way each foot landed, whatever the pelvis does
+  if(feet) for(let i=0;i<2;i++) solveLeg(fig,M,i,feet.w[i],feet.pitch[i],feet.yaw[i]-M.pelvis.rot);
   else for(let i=0;i<2;i++){ fig.lg[i].rotation.y=0; fig.lg[i].rotation.z=0; fig.an[i].rotation.x=0; }
   // ---- weapon and hands ----
   weapon(fig,M,s,def,actName,dt);
+  tool(fig,M,s,def,dt);
   fingers(fig,M,def,actName,dt);
   M.recoil=Math.max(0,M.recoil-dt*5);
 }
@@ -323,13 +384,16 @@ function legs(fig,M,s,def,O,dt,dist,vr,W,Pn,shift){
   const wantRun=(def.run?1:0)||(vr>2.3&&!def.crouch?1:0); M.runW+=(wantRun-M.runW)*Math.min(1,dt*4);
   const rw=M.runW, gw=M.gaitW, cr=def.crouch?1:0;
   const strideLen=clamp(R.L*(.78+.48*Math.min(vr,4))*tr.stride*(def.stride||1)*(cr?.75:1)*(1-.22*W)*(1-.12*Pn),R.L*.7,R.L*3.2);
-  if(M.moving) M.ph=(M.ph+dist/strideLen)%1;
-  const beta=.58-.22*rw, lift=(.06+.04*Math.min(1,vr/1.5))*(cr?.8:1)+.16*rw;
+  // each stride a little different: length, lift and the pelvis, from smooth noise over the stride count
+  const sv=ch=>vnoise(M,M.strideN+M.ph,ch)*tr.vary;
+  const sl=strideLen*(1+.3*sv(1));
+  if(M.moving){ const np=M.ph+dist/sl; if(np>=1) M.strideN++; M.ph=np%1; }
+  const beta=.58-.22*rw, lift=((.06+.04*Math.min(1,vr/1.5))*(cr?.8:1)+.16*rw)*(1+sv(2));
   // nominal stance: where the action's pose puts each foot (root frame)
   const nom=[0,1].map(i=>{ const f=fk(R,i?O.lgL:O.lgR,i?O.knL:O.knR); return V((i?1:-1)*R.hipX*(1+tr.toe),0,f.z+(i===tr.favour?1:-1)*shift*.02); });
   if(!M.feet){ M.feet=[0,1].map(i=>{ const w=footWorld(fig,M,i)||toWorld(fig,nom[i].x,0,nom[i].z); w.y=groundW(fig,s,w.x,w.z)+SOLE; return {st:'stance',a:w,yaw,from:null,t:0,dur:.3,gait:false}; }); }
   if(M.moving) M.still=0; else M.still+=dt;
-  const out={w:[],pitch:[],n:[0,0]}, loc=[];
+  const out={w:[],pitch:[],n:[0,0],yaw:[0,0]}, loc=[];
   const groundL=(l)=>{ const w=toWorld(fig,l.x,0,l.z); return groundW(fig,s,w.x,w.z)-root.position.y; };
   for(let i=0;i<2;i++){ const F=M.feet[i], injured=W>.01&&i===tr.favour, b=beta-(injured?.1*W:0), ph=(M.ph+(i?.5:0))%1;
     const land=V(nom[i].x,0,lerp(nom[i].z,strideLen*b*.42,gw)), s1=.28*gw*(1-rw);   // land a little under the body; the toe roll covers the longer push-off behind
@@ -346,7 +410,7 @@ function legs(fig,M,s,def,O,dt,dist,vr,W,Pn,shift){
     } else if(F.st==='swing'&&F.gait){ F.gait=false; F.t=0; F.dur=.22; F.from=toWorld(fig,F.cur.x,F.cur.y,F.cur.z); }
     if(F.st==='swing'){ const u=F.gait?clamp((ph-b)/(1-b),0,1):clamp((F.t+=dt)/F.dur,0,1); swingU=u;
       const fl=toLocal(fig,F.from), e=smooth(u), c=V(lerp(fl.x,land.x,e),0,lerp(fl.z,land.z,e));
-      c.y=lerp(F.from.y-root.position.y,groundL(land)+SOLE+(F.gait?SOLE*(Math.cos(s1)-1)+.05*Math.sin(s1):0),e)+(F.gait?lift:.07)*Math.sin(Math.PI*u); F.cur=c;
+      c.y=lerp(F.from.y-root.position.y,groundL(land)+SOLE+(F.gait?SOLE*(Math.cos(s1)-1)+.05*Math.sin(s1):0),e)+(F.gait?lift:(F.lift||.07))*Math.sin(Math.PI*u); F.cur=c;
       if(!F.gait&&u>=1){ F.st='stance'; F.a=toWorld(fig,c.x,0,c.z); F.a.y=groundW(fig,s,F.a.x,F.a.z)+SOLE; F.yaw=yaw; } }
     // the ankle swings round the contact point: the ball of the foot (0.12 ahead, on the sole) while rolling off,
     // the heel (0.05 behind) while landing; so that point stays where it is on the ground
@@ -358,30 +422,38 @@ function legs(fig,M,s,def,O,dt,dist,vr,W,Pn,shift){
     // foot pitch: flat on its ground, heel up before toe-off, toes up through the swing
     const h1=groundL(V(F.cur.x,0,F.cur.z-.07)), h2=groundL(V(F.cur.x,0,F.cur.z+.12));
     let pitch=F.st==='stance'?clamp(Math.atan2(h1-h2,.19),-.4,.4)+roll-strike:(F.gait?(F.roll0||0)*(1-smooth(swingU/.35))-.28*gw*(1-rw)*smooth((swingU-.55)/.45):0)-.18*Math.sin(Math.PI*clamp(swingU,0,1));
-    out.pitch.push(pitch); }
+    out.pitch.push(pitch); out.yaw[i]=F.st==='stance'?clamp(wrap(F.yaw-yaw),-.8,.8):0; }
   // standing still: step a foot that is out of place or turned away (one at a time)
   if(!M.moving&&M.feet.every(F=>F.st==='stance')){ let worst=-1, wv=0;
     for(let i=0;i<2;i++){ const F=M.feet[i], e=Math.hypot(loc[i].x-nom[i].x,loc[i].z-nom[i].z), dy=Math.abs(wrap(yaw-F.yaw)), v=Math.max(e/.15,dy/.5,M.still>.35?e/.05:0);
       if(v>1&&v>wv){ wv=v; worst=i; } }
-    if(worst>=0&&(M.lastStep===undefined||M.t-M.lastStep>.12)){ const F=M.feet[worst]; F.st='swing'; F.gait=false; F.t=0; F.dur=.26; F.from=F.a.clone(); M.lastStep=M.t; } }
-  // pelvis: as high as the action wants, low enough that every foot reaches
+    if(worst>=0&&(M.lastStep===undefined||M.t-M.lastStep>.12)){ const F=M.feet[worst]; F.st='swing'; F.gait=false; F.t=0; F.dur=.26*(.85+.3*M.rr()); F.lift=.07*(.75+.5*M.rr()); F.from=F.a.clone(); M.lastStep=M.t; } }
+  // pelvis: walking, it shifts over the standing leg, drops on the swinging side and turns forward with the swinging
+  // leg; standing, it rests on one hip (the favoured one, or away from a wound) and drifts with the weight shift
+  { const c=Math.cos(TAU*(M.ph-.29)), spd=Math.min(1,vr/1.2), side=(tr.favour?1:-1)*(W>.3?-1:1), drift=.6+.4*noise(M.t*.12,30+M.seed%97);
+    const walkX=-c*tr.sway*(1+2*sv(4))*(1-.6*rw)*(1-.4*cr), walkT=-c*tr.tilt*(1+2*sv(5))*(1-.5*rw)*(1+.6*W), walkR=Math.cos(TAU*M.ph)*tr.twist*spd*(1+2*sv(6))*(1+.5*rw);
+    const standX=side*tr.sway*.9*drift+shift*.006, standT=side*tr.tilt*.7*drift;
+    const P=M.pelvis, k=Math.min(1,dt*10);
+    P.x+=(lerp(standX,walkX,gw)-P.x)*k; P.tilt+=(lerp(standT,walkT,gw)-P.tilt)*k; P.rot+=(walkR*gw-P.rot)*k; }
   const reach=R.L*(lerp(.997,.993,gw)-.05*rw)-(W>.01?.01:0);
   const minG=Math.min(groundL(V(nom[0].x,0,nom[0].z)),groundL(V(nom[1].x,0,nom[1].z)));
   let by=O.bodyY+minG*(1-gw)+(rw*(.012*tr.bounce*Math.cos(M.ph*TAU*2)-.045))*gw;   // walking: as high as the stance legs allow; a run keeps a little lift
   // only feet bearing weight hold the pelvis down; a swinging foot bends its knee to fit, and only counts as it lands
-  for(let i=0;i<2;i++){ const l=loc[i], dx=l.x-(i?1:-1)*R.hipX, room=reach*reach-dx*dx-l.z*l.z, lim=room>0?l.y-R.hipH+Math.sqrt(room):l.y-R.hipH+.05;
+  for(let i=0;i<2;i++){ const hs=i?1:-1, P=M.pelvis, hx0=hs*R.hipX*Math.cos(P.rot)+P.x, hz0=-hs*R.hipX*Math.sin(P.rot), hy0=hs*R.hipX*Math.sin(P.tilt);
+    const l=loc[i], dx=l.x-hx0, dz=l.z-hz0, room=reach*reach-dx*dx-dz*dz, lim=room>0?l.y-R.hipH-hy0+Math.sqrt(room):l.y-R.hipH-hy0+.05;
     const F=M.feet[i], w=F.st==='stance'?1:smooth((F.u-(.75-.4*rw))/.25); by=Math.min(by,lerp(by,lim,w)); }
   if(W>.01) for(let i=0;i<2;i++) if(i===tr.favour&&M.feet[i].st==='stance') by-=.03*W*gw;
-  O.bodyY=by; M.stance=M.feet.map(F=>F.st==='stance');
+  if(M.digFoot&&M.digFoot.w>0){ const F=M.digFoot; loc[0]=loc[0].clone().lerp(F.p,F.w); out.pitch[0]=lerp(out.pitch[0],F.pitch||0,F.w); }   // a foot on the spade
+  O.bodyY=by; M.stance=M.feet.map((F,i)=>F.st==='stance'&&!(i===0&&M.digFoot&&M.digFoot.w>.01));
   out.w=loc.map(l=>toWorld(fig,l.x,l.y,l.z));
   return out; }
 function footWorld(fig,M,i){ if(!fig.kn[i].parent) return null; fig.root.updateMatrixWorld(true); const w=fig.kn[i].localToWorld(V(0,-M.R.b,0)); return w; }
 // hip (two axes) and knee to put the ankle at a world point; the ankle turns the foot to the wanted pitch
-function solveLeg(fig,M,i,w,pitch){ const R=M.R, hips=fig.hips;
-  const t=hips.worldToLocal(w.clone()).sub(R.lgP[i]), r=limb(R.a,R.b,t,1,KNEE_POLE[i]);
+function solveLeg(fig,M,i,w,pitch,turn=0){ const R=M.R, hips=fig.hips;
+  const t=hips.worldToLocal(w.clone()).sub(R.lgP[i]), r=limb(R.a,R.b,t,1,turn?KNEE_POLE[i].clone().applyAxisAngle(UP,turn):KNEE_POLE[i]);
   fig.lg[i].rotation.set(r.rx,r.ry,r.rz); fig.kn[i].rotation.x=r.e;
-  fig.kn[i].updateMatrixWorld(true); setFootPitch(fig,i,pitch); }
-function setFootPitch(fig,i,pitch){ const y=fig.root.rotation.y, f=V(Math.sin(y)*Math.cos(pitch),-Math.sin(pitch),Math.cos(y)*Math.cos(pitch));
+  fig.kn[i].updateMatrixWorld(true); setFootPitch(fig,i,pitch,turn+M.pelvis.rot); }
+function setFootPitch(fig,i,pitch,turn=0){ const y=fig.root.rotation.y+turn, f=V(Math.sin(y)*Math.cos(pitch),-Math.sin(pitch),Math.cos(y)*Math.cos(pitch));
   fig.kn[i].getWorldQuaternion(_q); f.applyQuaternion(_q.invert()); fig.an[i].rotation.x=clamp(Math.atan2(-f.y,f.z),-.75,.95); }
 // shoulder (two axes) and elbow to put the wrist at a world point; the wrist turns the hand along a world direction
 function solveArm(fig,M,i,w,axis,weight,palm){ const R=M.R, torso=fig.torso;
@@ -399,7 +471,7 @@ function solveArm(fig,M,i,w,axis,weight,palm){ const R=M.R, torso=fig.torso;
 // fingers: wrapped round a grip (index on the trigger), pinching a bolt or a clip, holding a load or a tool, fists in
 // panic, a loose curl otherwise with a little life in it
 function fingers(fig,M,def,actName,dt){ const want=[0,1].map(i=>{ const g=M.grip&&M.grip[i];
-    if(g==='grip'){ const spec=M.w.spec.grip[i]; return {curl:1,index:spec.index,thumb:.85,spread:.05}; }
+    if(g==='grip'){ const spec=(M.held||M.w).spec.grip[i]; return {curl:1,index:spec.index,thumb:.85,spread:.05}; }
     if(g==='pinch') return {curl:.75,index:.35,thumb:.7,spread:.05};
     if(M.inHand&&i===0) return {curl:1,index:.45,thumb:.85,spread:.05};
     if(actName==='carry') return {curl:.75,thumb:.3,spread:.1};
@@ -408,10 +480,10 @@ function fingers(fig,M,def,actName,dt){ const want=[0,1].map(i=>{ const g=M.grip
     return {curl:.28+.1*noise(M.t*.3,20+i)+.15*M.wound,thumb:.3,spread:.18}; });
   smoothHands(fig,M,want,dt);
   M.contact=[null,null];
-  if(Motion.grasp!==false) for(let i=0;i<2;i++){ if(!(M.w&&(M.grip[i]==='grip'||(M.inHand&&i===0)))){ if(M.gc) M.gc[i]=null; continue; }
+  if(Motion.grasp!==false) for(let i=0;i<2;i++){ const H=M.held||M.w; if(!(H&&(M.grip[i]==='grip'||(M.inHand&&i===0)))){ if(M.gc) M.gc[i]=null; continue; }
     // reuse the last solve while the hand sits the same way on the weapon (within 1.5 mm and about 1.5°) and asks for
     // the same curl; otherwise solve again
-    const h=fig.hand[i]; h.updateMatrixWorld(true); const rel=_m.copy(h.matrixWorld).invert().multiply(M.w.g.matrixWorld), e=rel.elements, cu=M.hc[i];
+    const h=fig.hand[i]; h.updateMatrixWorld(true); const rel=_m.copy(h.matrixWorld).invert().multiply(H.g.matrixWorld), e=rel.elements, cu=M.hc[i];
     const key=[e[12],e[13],e[14],e[0],e[1],e[2],e[8],e[9],e[10],cu.curl,cu.index,cu.thumb];
     M.gc=M.gc||[null,null]; const C=M.gc[i];
     if(C&&C.key.every((v,n)=>Math.abs(v-key[n])<(n<3?.0015:.025))){ C.apply(); M.contact[i]=C.out; continue; }
@@ -442,7 +514,7 @@ function chainHit(chain,k,list){ let worst=0; for(let j=k;j<chain.length;j++){ c
     for(const t of [.3,.65,1]){ _c.set(0,-S.len*t,0); g.localToWorld(_c); const pen=S.r*.92-partDist(list,_c); if(pen>worst) worst=pen; } } return worst; }
 function graspContact(fig,M,i){ const hand=fig.hand[i], c=i?-1:1, out={touch:0,chains:0,pen:0,gap:0};
   hand.updateMatrixWorld(true); const hp=hand.getWorldPosition(V());
-  const list=proxies(M.w).filter(P=>P.wc.distanceTo(hp)<P.rad+.16); if(!list.length) return out;
+  const list=proxies(M.held||M.w).filter(P=>P.wc.distanceTo(hp)<P.rad+.16); if(!list.length) return out;
   for(const chain of [...fig.fingers[i],fig.thumbs[i]]){ if(!chain||!chain.length) continue; out.chains++;
     const want=chain.map(g=>Math.abs(g.rotation.z)); let touched=false;
     // the thumb root can also swing round (about its own y) to clear the grip: take the first swing that frees it
@@ -468,7 +540,7 @@ function graspContact(fig,M,i){ const hand=fig.hand[i], c=i?-1:1, out={touch:0,c
   return out; }
 function smoothHands(fig,M,want,dt){ if(!M.hc) M.hc=want.map(w=>Object.assign({index:w.curl},w)); const k=Math.min(1,dt*14);
   for(let i=0;i<2;i++){ const h=M.hc[i], w=want[i], wi=w.index===undefined?w.curl:w.index; h.curl+=(w.curl-h.curl)*k; h.index+=(wi-h.index)*k; h.thumb+=(w.thumb-h.thumb)*k; h.spread+=(w.spread-h.spread)*k; setHand(fig,i,h); } }
-function weapon(fig,M,s,def,actName,dt){ const w=M.w; M.grip=[null,null];
+function weapon(fig,M,s,def,actName,dt){ const w=M.w; M.grip=[null,null]; M.held=w;
   if(!w){ for(let i=0;i<2;i++) fig.hand[i].quaternion.slerp(_q.identity(),Math.min(1,dt*8)); return; }
   const spec=w.spec; M.inHand=0;
   let hold=(def.hold||{})[spec.kind]||'low'; if(spec.kind==='rifle'&&hold==='low'&&M.runW>.5) hold='port';
@@ -487,7 +559,7 @@ function weapon(fig,M,s,def,actName,dt){ const w=M.w; M.grip=[null,null];
     const shift=toLocal(fig,w.g.getWorldPosition(V()).addScaledVector(palm,d)); w.pos.copy(shift); w.g.position.copy(shift); w.g.updateMatrixWorld(true); }
   // cycles: bolt after a rifle shot, the reloads; the hands follow their timelines, the moving parts follow the hands
   let tgt=[null,null], magOn=false;
-  if(M.wc){ const tl=TL[M.wc.type]; M.wc.t+=dt; const tt=M.wc.t;
+  if(M.wc){ const tl=TL[M.wc.type]; if(!M.wc.k) M.wc.k=.86+.28*M.rr(); M.wc.t+=dt*M.wc.k; const tt=M.wc.t;
     for(const [i,key] of [[0,'R'],[1,'L']]) if(tl[key]){ const [a,b,e]=seg(tl[key],tt); tgt[i]=[a,b,e]; }
     if(tl.mag&&tt>tl.mag[0]&&tt<tl.mag[1]) magOn=true;
     if(tt>=tl.dur) M.wc=null; }
@@ -567,6 +639,16 @@ function snapshot(fig,M){ fig.root.updateMatrixWorld(true); const w=o=>o.getWorl
     feet:[0,1].map(i=>fig.kn[i].localToWorld(V(0,-M.R.b,0))), hands:[0,1].map(i=>w(fig.hand[i]))}; }
 // keys use the clip frame: +z forward along the clip's yaw, +x to the figure's left, y up from the origin
 function frameW(C,v){ return v.clone().applyQuaternion(C.yq).add(C.o); }
+// every clip plays a little differently: tempo, and the in-between keys nudged inside small bounds. Things in contact
+// (hands on an edge, feet on the ground) only move along the surface; the first key (the snapshot) and the last (the
+// standing finish) stay put.
+function vary(keys,M,o={}){ const r=M.rr, k=M.tr.vary/.13, j=(a)=>(r()*2-1)*a*k, tempo=1+(r()*2-1)*.12*k;
+  keys.forEach((K,n)=>{ K.t*=tempo; if(n===0||n===keys.length-1) return;
+    if(K.hips) K.hips.add(V(j(.02),j(.02),j(.025)));
+    if(K.tX!==undefined) K.tX+=j(.07); K.hX=(K.hX||0)+j(.06); K.tY=(K.tY||0)+j(.06);
+    if(K.hands) K.hands.forEach(h=>h.add(o.handsFree?V(j(.03),j(.03),j(.03)):V(j(.02),0,j(.012))));
+    if(K.feet) K.feet.forEach(f=>f.add(V(j(.015),0,0))); });
+  return tempo; }
 function keyed(keys){ // Catmull-Rom through the keys for vectors, smooth blends for scalars, slerp for rotations
   return t=>{ let i=0; while(i<keys.length-2&&t>keys[i+1].t) i++; const A=keys[i], B=keys[i+1], u=clamp((t-A.t)/(B.t-A.t||1),0,1), e=smooth(u);
     const P0=keys[Math.max(0,i-1)], P3=keys[Math.min(keys.length-1,i+2)];
@@ -623,7 +705,8 @@ function startRise(fig,M,s){ const G=M.rag, P=G.pts, R=M.R; M.rag=null;
     {t:1.5, root:V(), hips:V(0,H0-.2,-.1), q:pitchQ(0), tX:.35, hX:0, feet:[F(-hx,.15),F(hx,-.15)], hands:[V(-.2,.55,.2),V(.2,.55,.05)]},
     {t:1.9, root:V(), hips:V(0,H0-.02,0), q:pitchQ(0), tX:.05, hX:.06, feet:[F(-hx,0),F(hx,0)], hands:[V(-.2,H0-.12,0),V(.2,H0-.12,0)]}];
   C.hand={curl:.12,thumb:.15,spread:.3};
-  return startClip(fig,M,C,keyed(keys),1.9,.45); }
+  const tempo=vary(keys,M);
+  return startClip(fig,M,C,keyed(keys),1.9*tempo,.45); }
 
 // ---------- traversal ----------
 // spec: {type, x, z, yaw, height, depth?, ground?}
@@ -660,23 +743,24 @@ function traverse(fig,spec,state){ const M=fig.motion||init(fig); if(M.clip||M.r
       {t:.55+fall, root:V(0,0,.55), hips:V(0,H0-.5,.52), q:pitchQ(.2), tX:.55, hX:-.05, feet:[F(-hx,0,.58),F(hx,0,.48)], hands:[V(-.3,H0-.45,.85),V(.3,H0-.45,.8)]},
       {t:1.05+fall, root:V(0,0,.6), ...stand(.6), q:pitchQ(0), tX:.06, hands:[V(-.2,H0-.12,.6),V(.2,H0-.12,.6)]}];
     C.o.y=gy; dur=1.05+fall; }
-  else if(spec.type==='ladder'||spec.type==='descend'){ const fn=ladderFn(R,h); dur=fn.dur;
+  else if(spec.type==='ladder'||spec.type==='descend'){ const fn=ladderFn(R,h,M); dur=fn.dur;
     const f=spec.type==='ladder'?fn:(t=>fn(fn.dur-t));   // down is the climb played backward: facing the ladder, the drop behind
     return startClip(fig,M,C,f,dur,.35); }
   if(!keys) return 0;
+  dur*=vary(keys,M,{handsFree:spec.type==='drop'});
   return startClip(fig,M,C,keyed(keys),dur,.2); }
 function toFrame(C,w){ const d=w.clone().sub(C.o); return d.applyQuaternion(qYaw(-C.yaw)); }
 // a ladder at z=0 rising to a top at height h, rungs every 0.3 m: hands on the rails, feet on the rungs, each limb
 // holding while its diagonal partner moves (right hand with left foot); then over the top onto the floor behind it
-function ladderFn(R,h){ const H0=R.hipH, hx=R.hipX, RUNG=.3, v=.55, z0=-.38, climbTop=h+.15-(H0-.12), tc=Math.max(.1,climbTop)/v, tIn=.4, tTop=1.4, dur=tIn+tc+tTop;
+function ladderFn(R,h,M){ const r=M.rr, H0=R.hipH, hx=R.hipX, RUNG=.3, v=.55*(.82+.36*r()), reach=r()<.5?0:RUNG, lean=.08+.1*r(), z0=-.36-.05*r(), climbTop=h+.15-(H0-.12), tc=Math.max(.1,climbTop)/v, tIn=.35+.15*r(), tTop=1.4*(.88+.24*r()), dur=tIn+tc+tTop;
   const step=(p,off,base)=>{ const q=(p-off)/(2*RUNG), f=q-Math.floor(q); return base+2*RUNG*(Math.floor(q)+smooth((f-.5)/.5)); };
   const snap=y=>Math.max(RUNG,Math.round(y/RUNG)*RUNG);
   const hipsEnd=H0-.12+climbTop, top=keyed([
     {t:0, root:V(0,hipsEnd-H0,z0), hips:V(0,hipsEnd,z0+.02), q:pitchQ(-.05), tX:.12, hX:-.15}, {t:.5, root:V(0,h,-.1), hips:V(0,h+.28,-.16), q:pitchQ(.5), tX:.5, hX:-.25}, {t:.95, root:V(0,h,.3), hips:V(0,h+.5,.25), q:pitchQ(.1), tX:.65},
     {t:tTop, root:V(0,h,.5), hips:V(0,h+H0-.02,.5), q:pitchQ(0), tX:.06}].map(k=>Object.assign({feet:[V(),V()],hands:[V(),V()],q:Q(),hips:V()},k)));
   const fn=t=>{ const tt=Math.max(0,t-tIn), p=Math.min(climbTop,tt*v), hipsY=H0-.12+p;
-    const handY=[step(p,0,snap(H0+.6)),step(p,RUNG,snap(H0+.6)+RUNG)], footY=[step(p,RUNG,RUNG),step(p,0,2*RUNG)];
-    const base={root:V(0,hipsY-H0,z0), hips:V(0,hipsY,z0+.02), q:pitchQ(-.05), tX:.12, tY:0, hX:-.15, yaw:0,
+    const handY=[step(p,0,snap(H0+.6)+reach),step(p,RUNG,snap(H0+.6)+RUNG+reach)], footY=[step(p,RUNG,RUNG),step(p,0,2*RUNG)];
+    const base={root:V(0,hipsY-H0,z0), hips:V(0,hipsY,z0+.02), q:pitchQ(-.05), tX:lean, tY:0, hX:-.15, yaw:0,
       hands:[V(-.2,Math.min(h,handY[0]),-.05),V(.2,Math.min(h,handY[1]),-.05)], feet:[V(-hx,footY[0]+.07,-.15),V(hx,footY[1]+.07,-.15)], fp:[.1,.1]};
     if(t<tIn){ const e=smooth(t/tIn); base.hips.z=lerp(z0+.05,z0+.02,e); }
     if(t<=tIn+tc) return base;
@@ -691,9 +775,9 @@ function ladderFn(R,h){ const H0=R.hipH, hx=R.hipX, RUNG=.3, v=.55, z0=-.38, cli
 // kick(fig,'hit',k,{from:{x,z}}) flinches away from the shooter; kick(fig,'recoil') fires: kicks the weapon back,
 // and a bolt-action rifle then works its bolt
 function kick(fig,what,k=1,opt={}){ const M=fig.motion||init(fig);
-  if(what==='hit'){ M.hit=Math.min(1.2,Math.max(M.hit,k)); M.hitSide=M.rr()<.5?-1:1;
+  if(what==='hit'){ k*=.8+.4*M.rr(); M.hit=Math.min(1.2,Math.max(M.hit,k)); M.hitSide=M.rr()<.5?-1:1;
     if(opt.from){ const p=fig.root.position; M.hitDir=V(p.x-opt.from.x,0,p.z-opt.from.z).normalize(); const loc=toLocal(fig,V(opt.from.x,0,opt.from.z)); M.hitSide=loc.x>0?-1:1; } else M.hitDir=null; }
-  else if(what==='recoil'){ M.recoil=Math.min(1.5,M.recoil+k); if(M.w&&M.w.spec.cycle==='bolt'&&!M.wc) M.wc={type:'bolt',t:-.18}; } }
+  else if(what==='recoil'){ M.recoil=Math.min(1.5,M.recoil+k*(.85+.3*M.rr())); if(M.w&&M.w.spec.cycle==='bolt'&&!M.wc) M.wc={type:'bolt',t:-.18}; } }
 function reset(fig){ const M=fig.motion; if(!M) return; M.lx=fig.root.position.x; M.lz=fig.root.position.z; M.v=0; M.feet=null; }
 const busy=fig=>!!(fig.motion&&(fig.motion.clip||fig.motion.rag));
 

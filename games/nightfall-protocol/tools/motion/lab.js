@@ -100,8 +100,10 @@ cards.addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) r
 // ---- readout: slip of planted feet, steps, the hold ----
 const readout=document.getElementById('readout'), v=new THREE.Vector3(); let slip=0, last=[null,null], steps=0, lastSt=[true,true], roT=0;
 function measure(p,dt){ const M=p.f.motion; if(!M||!M.R||M.clip||M.rag) { last=[null,null]; return; } p.f.root.updateMatrixWorld(true);
-  for(let i=0;i<2;i++){ v.set(0,-M.R.b,0); p.f.kn[i].localToWorld(v); const st=M.stance&&M.stance[i];
-    if(st&&last[i]&&dt>0) slip=Math.max(slip,Math.hypot(v.x-last[i].x,v.z-last[i].z)/dt); if(st&&!lastSt[i]) steps++; lastSt[i]=!!st; last[i]=st?v.clone():null; } }
+  // the point on the ground: the heel while landing, the ball of the foot while rolling off, else the ankle
+  for(let i=0;i<2;i++){ const an=p.f.an[i], hl=an.localToWorld(new THREE.Vector3(0,-.062,-.05)), bl=an.localToWorld(new THREE.Vector3(0,-.062,.12)), st=M.stance&&M.stance[i];
+    const w=bl.y<hl.y-.0005?1:hl.y<bl.y-.0005?0:2; if(w===2){ v.set(0,-M.R.b,0); p.f.kn[i].localToWorld(v); } else v.copy(w?bl:hl);
+    if(st&&last[i]&&last[i].w===w&&dt>0) slip=Math.max(slip,Math.hypot(v.x-last[i].p.x,v.z-last[i].p.z)/dt); if(st&&!lastSt[i]) steps++; lastSt[i]=!!st; last[i]=st?{p:v.clone(),w}:null; } }
 function drawReadout(){ const P=ui.view==='loop'?loopers[0]:runners[0], M=P.f.motion; if(!M) return;
   const what=M.rag?(M.rag.sleep?'down':'falling'):M.clip?(ui.view==='loop'?'getting up':P.doing):M.gaitW<.5?'standing':M.runW>.5?'running':'walking';
   readout.innerHTML=`<b>${P.name}</b> · ${what}${M.w?` · ${M.w.spec.kind}`:''}<br>`+(ui.view==='course'?`${runners.map(r=>`${r.name} ${r.doing||''}`).join(' · ')}<br>`:`speed ${M.v.toFixed(2)} m/s · steps ${steps}<br>`)+

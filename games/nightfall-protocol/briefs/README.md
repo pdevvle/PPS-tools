@@ -12,9 +12,9 @@ Nightfall Protocol is being built in parallel conversations. This folder is how 
 | `strategy-map.md` | The region map: squads, knowledge, travel, time | prototype running |
 | `models.md` | Characters, clothing and hair layers, props, weapons | figure study done |
 | `animation.md` | Procedural motion for walking, actions and idles | shared module running |
-| `building.md` | The base: building, survivors' jobs, resources (the logistic layer) | prototype running |
-| `people.md` | Survivors' individual simulation: needs, health, age, mood, relationships, reproduction | not started |
-| `settlement.md` | Stores, barter and trade, roles, rules and civics | not started |
+| `building.md` | The base: site, layout, construction and the tasks buildings offer | prototype running |
+| `people.md` | Survivors' individual simulation: needs, health, age, mood, relationships, reproduction | needs, health, mood and harness running |
+| `settlement.md` | Stores, barter and trade, roles, rules and civics | stores, rationing, barter and civics running |
 | `lore.md` | Setting, history, factions, item and place lore that feeds loot | backstory in, four open questions |
 | `interiors.md` | Procedural interiors for every building: plans, doors, furniture, loot | not started |
 
