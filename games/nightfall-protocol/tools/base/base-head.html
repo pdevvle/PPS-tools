@@ -1,0 +1,121 @@
+<title>Ranch Base</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: the ranch's real ground fills the stage. A build bar sits above it and a column on the right holds stores, people and the log. The Nightfall dark frame, with gold for what is selected. A single dark look, as in every Nightfall mockup. */
+:root{
+  color-scheme:dark;
+  --bg:#1b1c1e; --panel:#232427; --panel2:#2a2b2f; --line:#38393d; --text:#e2e0dc; --muted:#98968f; --accent:#e0a526; --accent-ink:#211b10;
+  --water:#4aa6c8; --good:#3fae7f; --warn:#e0a526; --bad:#c23b2e;
+  --body:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+html,body{background:var(--bg)}
+body{color:var(--text);font:15px/1.45 var(--body);padding-inline:16px;margin:0}
+.wrap{max-width:1320px;margin:0 auto;padding-block:18px 32px;display:flex;flex-direction:column;gap:14px}
+header{display:flex;flex-direction:column;gap:4px}
+.eyebrow{font:12px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin:0}
+h1{font:600 clamp(24px,4.2vw,32px)/1.1 var(--body);margin:0;text-wrap:balance}
+.lede{margin:0;max-width:80ch;color:var(--muted)}
+.app{display:grid;grid-template-columns:minmax(0,1fr) 320px;border:1px solid var(--line);background:var(--panel)}
+.main{display:flex;flex-direction:column;min-width:0}
+.bar{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--line);background:var(--panel2)}
+.bar .grp{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.bar .lbl{font:11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-right:2px}
+button{background:#2d2f33;border:1px solid var(--line);color:var(--text);font:500 13px var(--body);padding:4px 9px;border-radius:3px;cursor:pointer;min-height:30px}
+button:hover{border-color:#5a5b60}
+button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+button:disabled{opacity:.4;cursor:default}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.clock{font:500 15px var(--mono);min-width:13ch}
+.temp{font:12px var(--mono);color:var(--muted)}
+.stage{position:relative;height:min(68vh,640px);min-height:380px;background:linear-gradient(180deg,#9fc6e4,#e8dcc2);touch-action:none;overflow:hidden}
+.stage canvas{position:absolute;inset:0;display:block;width:100%;height:100%}
+.tip{position:absolute;left:10px;top:8px;font:12px var(--mono);color:#2b2620;background:rgba(240,232,214,.85);padding:3px 7px;border-radius:3px;pointer-events:none;max-width:calc(100% - 20px)}
+.tip.bad{color:#7a1d14}
+.hint{position:absolute;left:10px;bottom:26px;font:12px var(--mono);color:#2b2620;background:rgba(240,232,214,.78);padding:2px 7px;border-radius:3px;pointer-events:none;max-width:calc(100% - 20px)}
+.credit{position:absolute;left:10px;bottom:6px;font:10px var(--mono);color:#2b2620;background:rgba(240,232,214,.6);padding:0 5px;border-radius:2px;pointer-events:none}
+.labels{position:absolute;inset:0;pointer-events:none}
+.tag{position:absolute;transform:translate(-50%,-100%);font:11px var(--mono);color:#1d1814;background:rgba(244,238,224,.88);border-radius:3px;padding:1px 5px;white-space:nowrap}
+.tag.sel{background:var(--accent)}
+.tag.thirst{box-shadow:inset 0 -2px 0 var(--bad)}
+.loading{position:absolute;inset:0;display:grid;place-items:center;font:13px var(--mono);color:#3b3934}
+.side{border-left:1px solid var(--line);display:flex;flex-direction:column;min-width:0}
+.side section{padding:10px 12px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:6px}
+.side h2{font:11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0;font-weight:400}
+.meter{height:8px;background:#141517;border-radius:2px;overflow:hidden}
+.meter>i{display:block;height:100%;background:var(--water)}
+.water{display:flex;justify-content:space-between;font:13px var(--mono)}
+.water b{font-weight:500}
+.stock{display:grid;grid-template-columns:1fr auto;gap:1px 10px;font:12px var(--mono);margin:0}
+.stock dt{color:var(--muted)} .stock dd{margin:0;text-align:right}
+.people{display:flex;flex-direction:column;gap:2px;max-height:270px;overflow:auto}
+.person{display:grid;grid-template-columns:62px 1fr 54px;gap:8px;align-items:center;font:12px var(--mono);padding:3px 4px;border-radius:3px;cursor:pointer;border:1px solid transparent;background:none;color:var(--text);text-align:left;min-height:0}
+.person:hover{border-color:var(--line)}
+.person[aria-pressed="true"]{border-color:var(--accent)}
+.person .nm{font:500 13px var(--body)}
+.person .what{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.person .meter{height:6px}
+.person .meter>i.t{background:var(--warn)} .person .meter>i.d{background:var(--bad)}
+.sel{font:12px var(--mono);color:var(--muted);min-height:3em}
+.sel b{color:var(--text);font:500 13px var(--body)}
+.log{font:12px var(--mono);display:flex;flex-direction:column;gap:2px;max-height:160px;overflow:auto;margin:0;padding:0;list-style:none}
+.log li{color:var(--muted)} .log li span{color:#6f6d67;margin-right:6px}
+.toggles{display:flex;flex-direction:column;gap:4px;font:12px var(--mono)}
+.toggles label{display:flex;gap:6px;align-items:center;cursor:pointer}
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;font-size:14px;color:var(--muted)}
+.notes b{display:block;color:var(--text);font-weight:500;margin-bottom:2px}
+@media (max-width:860px){ .app{grid-template-columns:1fr} .side{border-left:0;border-top:1px solid var(--line)} .stage{height:58vh} }
+</style>
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Nightfall · building · prototype</p>
+    <h1>The ranch on West New River Road</h1>
+    <p class="lede">The real lot from the baked New River block. Order walls, a water tank, beds and the other first buildables onto the 2 m movement grid. Survivors take the work, walk the real ground to it and build. Water drains from every person every hour.</p>
+  </header>
+  <div class="app">
+    <div class="main">
+      <div class="bar" role="toolbar" aria-label="Build">
+        <div class="grp" id="build"><span class="lbl">Build</span></div>
+        <div class="grp"><span class="lbl">Order</span><button type="button" id="repair">Repair well</button><button type="button" data-tool="tear">Tear down</button><button type="button" data-tool="cancel">Cancel</button></div>
+      </div>
+      <div class="bar">
+        <div class="grp"><span class="clock" id="clock">Day 1 05:00</span><span class="temp" id="phase"></span></div>
+        <div class="grp" id="speed"><span class="lbl">Speed</span><button type="button" data-s="0">Pause</button><button type="button" data-s="0.25" aria-pressed="true">15×</button><button type="button" data-s="1">60×</button><button type="button" data-s="10">600×</button></div>
+      </div>
+      <div class="stage" id="stage">
+        <div class="labels" id="labels"></div>
+        <div class="tip" id="tip" hidden></div>
+        <div class="loading" id="loading">Loading the ranch…</div>
+        <div class="hint" id="hint">Drag to turn · right-drag or two fingers to pan · wheel or pinch to zoom · R rotates · Esc drops the tool</div>
+        <div class="credit">© OpenStreetMap contributors, ODbL · Terrain Tiles on AWS</div>
+      </div>
+    </div>
+    <aside class="side">
+      <section aria-labelledby="h-water"><h2 id="h-water">Water</h2>
+        <div class="water"><b id="wl">400 L</b><span id="wcap">of 400 L</span></div>
+        <div class="meter"><i id="wbar" style="width:100%"></i></div>
+        <div class="temp" id="wdays"></div>
+      </section>
+      <section aria-labelledby="h-stock"><h2 id="h-stock">Stores</h2><dl class="stock" id="stock"></dl></section>
+      <section aria-labelledby="h-people"><h2 id="h-people">People · water behind</h2><div class="people" id="people"></div></section>
+      <section aria-labelledby="h-sel"><h2 id="h-sel">Selected</h2><div class="sel" id="sel">Click a person or a thing.</div></section>
+      <section aria-labelledby="h-view"><h2 id="h-view">View</h2>
+        <div class="toggles">
+          <label><input type="checkbox" id="grid"> Movement grid (kinds and cover)</label>
+          <label><input type="checkbox" id="area" checked> Buildable area</label>
+          <label><input type="checkbox" id="heat"> Outdoor work through the heat</label>
+        </div>
+      </section>
+      <section aria-labelledby="h-log"><h2 id="h-log">Log</h2><ul class="log" id="log"></ul></section>
+    </aside>
+  </div>
+  <section class="notes">
+    <div><b>Real ground</b><span>A 200 m cut of the baked sector: heights, the 2 m movement grid, the house, barn, shed and outbuildings, roads, the wash and the plants. The buildable area is 140 m square.</span></div>
+    <div><b>Built things change the grid</b><span>Walls, gates, tanks, the kitchen and watch posts write <code>wall</code> or <code>building</code> and their cover into the grid when finished, as the bake does. Paths go round them, and gates let the ranch's own people through.</span></div>
+    <div><b>Stand-in rules</b><span>Water drains at 0.5 L per person per hour, doubled from 10:00 to 18:00. Job choice is a simple score until <code>people.md</code> provides the real one, and stores stand in until <code>settlement.md</code>.</span></div>
+  </section>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
