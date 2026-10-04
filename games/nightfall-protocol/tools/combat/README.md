@@ -22,7 +22,24 @@ Fighting inside procedurally generated buildings (task 7 in `briefs/combat-tasks
   - **Movement** runs over a hidden 0.5 m cost field with 16 step directions, so a range is round to within a few percent. Doors, windows and counters are portals, so routes pass through the middle of every opening. Routes are pulled straight afterwards. `costTo` and `pathTo` work for any point, not just field nodes.
   - `snap` moves a click near cover to just behind it. `leans` lets a unit in cover step out sideways to see or shoot. `coverSpots` are points along every piece of cover, for the AI.
   - `posted()` gives the generator's people their roles: a sentry at a street-side window looking out, and the boss.
-- `rules.js` holds the foundation's combat values as plain, seeded functions over points:
+- `rules.js` holds the foundation's combat values as plain, seeded functions over points.
+  - **Roles** (`ROLES`), the original game's four classes adapted to survivors:
+
+    | Role | Weapon | Ability |
+    |---|---|---|
+    | Ranger | pump shotgun | Run and gun: one extra action, every 3 rounds |
+    | Sharpshooter | hunting rifle | Steady aim: +15 when the shot is the first action of the turn |
+    | Breacher | carbine | 2 pipe bombs, and a charge that blows barricades and boards at a breach |
+    | Medic | pistol | 2 first-aid kits: heal 3, stabilise someone bleeding out, or get a stabilised ally up |
+
+  - **Weapons** (`WEAPONS`) have range profiles: short gets +15 under 6 m and −2/m past 12 m; mid keeps the foundation's numbers; long gets −10 under 8 m and no fall-off to 40 m. Each weapon also sets damage, crit and ammo, and reloading takes an action.
+  - **Explosions**: pipe bombs reach 3 m and do 3 damage (4 within 1 m), ignoring cover. They blow apart furniture, blow doors in and break glass. Walls and closed doors shelter.
+  - **Wounds**: squad members at 0 HP go down and bleed out after 3 of their own turns unless the Medic reaches them. Raiders die at 0 HP.
+  - **Morale**: once the boss is down or half the pod is gone, each raider may break and run for the exit furthest from the squad, escaping once outside and out of sight.
+  - **Doorway overwatch**: a reaction shot at someone in a doorway or window has no −15 penalty, because the spot is pre-aimed.
+  - `odds` returns the reasons with the numbers, so the page can show where every percentage comes from.
+
+  The functions:
   - `odds` and `roll` for shots;
   - `lineOfFire`, which allows leaning out of cover;
   - `sees` for unaware raiders' sight cones;
@@ -35,11 +52,14 @@ Fighting inside procedurally generated buildings (task 7 in `briefs/combat-tasks
 
   Then hand checks on the Roadrunner: range is round, any point can be stood on, snapping, angled cover and a seeded replay. Run `node tools/combat/test-space.js`, or add `--quick` for the Roadrunner only.
 - `demo-script.js` and `demo.src.html` are the playable page.
-  - **Range**: smooth outlines, blue for one action and gold for a dash.
+  - **Range**: glowing outlines, blue for one action and gold for a dash.
   - **Hover**: a ring where the unit would stand, the route there, and a marker toward each raider: tall gold for full cover, short gold for half, flat red for flanked.
   - **Sight**: drawn as fans cut by walls.
   - **Breach**: stack on the gold (door) and blue (window) rings, then breach with free shots.
   - **Fight**: XCOM turns, overwatch on the move, doors that open as units walk through, and glass that breaks.
+  - **Abilities**: each role's ability is on the action bar. Pipe bombs preview their arc, blast ring and who gets hit, and blown furniture is drawn as rubble.
+  - **Odds**: hovering a target shows how the hit chance was worked out.
+  - **End**: the summary counts kills, escapes, the squad's wounds and dead, hits and the daylight spent.
 
   The interiors renderer draws the building, including its cutaway walls.
 

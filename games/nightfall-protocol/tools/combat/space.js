@@ -46,7 +46,8 @@ function fromGenerated(G,opt={}){
   const doorState=e=>doorSt[e.key]!==undefined?doorSt[e.key]:(e.door.state==='broken'?'broken':e.door.state==='barricaded'?'barricaded':e.door.open?'open':'closed');
   // solid: keeps bodies R away. cross: a body may pass through it (at extra effective metres).
   function props(o){
-    if(o.kind==='item'){ const cv=COV[o.it.spec.cover]||0, tall=cv===2&&o.h>=EYE; return {solid:true,sight:!tall,shot:!tall,cover:cv,cross:false}; }
+    if(o.kind==='item'){ if(o.destroyed) return {solid:false,sight:true,shot:true,cover:0,cross:true,extra:1};   // blown apart: rubble
+      const cv=COV[o.it.spec.cover]||0, tall=cv===2&&o.h>=EYE; return {solid:true,sight:!tall,shot:!tall,cover:cv,cross:false}; }
     if(o.kind==='yard'){ const tall=o.h>=EYE; return {solid:true,sight:!tall,shot:!tall,cover:o.h>=1.2?2:1,cross:false}; }
     const e=o.e;
     switch(e.type){
@@ -202,7 +203,22 @@ function fromGenerated(G,opt={}){
     // the generator places people on cell centres, which can sit tight against furniture: nudge each to clear floor
     for(const p of out) if(!clearAt(p.p[0],p.p[1])){ let best=null; for(let k=1;k<=24&&!best;k++){ const a=k*2.4, rr=.25+k*.06, q=[p.p[0]+Math.sin(a)*rr,p.p[1]+Math.cos(a)*rr]; if(clearAt(q[0],q[1])&&insideAt(q[0],q[1])) best=q; } if(best) p.p=best; }
     return out; }
-  return {G,R,EYE,FY,X0,Z0,X1,Z1,obs,props,doorSt,doorState,sight,castRay,coverFrom,clearAt,walk,speedAt,field,costTo,pathTo,snap,nearestCover,coverSpots,leans,entries,setDoor,setWindow,people,posted,frontApproach,
+  // ---------- explosions ----------
+  // furniture blown apart stops being cover or an obstacle; the floor under it becomes rubble (slow)
+  function destroyItem(o){ if(o.kind!=='item'||o.destroyed) return; o.destroyed=true; lows.push(o.box); const b=grow(o.box,1.6);
+    for(let j=Math.max(0,Math.floor((b.z0-Z0)/NS));j<=Math.min(NH-1,Math.floor((b.z1-Z0)/NS));j++) for(let i=Math.max(0,Math.floor((b.x0-X0)/NS));i<=Math.min(NW-1,Math.floor((b.x1-X0)/NS));i++){
+      const n=j*NW+i, x=nx(n), z=nz(n); free[n]=clearAt(x,z)?1:0; speed[n]=free[n]?speedAt(x,z):0; links[n]=undefined; } }
+  // what a blast at c reaches within r: furniture, doors and windows the blast can see (walls and closed doors shelter)
+  function blastReach(c,r){ const items=[], openings=[], cand=[];
+    near(c[0]-r,c[1]-r,c[0]+r,c[1]+r,o=>{ cand.push(o); });   // gather first: sight() searches the hash too, so it can't run inside near()
+    for(const o of cand){ const q=o.box?ptBox(c[0],c[1],o.box):ptSeg(c[0],c[1],o.seg[0],o.seg[1],o.seg[2],o.seg[3]); if(q.d>r) continue;
+      // look at the near face from a hair outside it, so the thing itself doesn't count as in the way
+      const L=Math.max(q.d,1e-6), p=q.d<.05?[c[0],c[1]]:[q.x+(c[0]-q.x)/L*.06,q.z+(c[1]-q.z)/L*.06]; if(!sight(c,p,{shot:true})) continue;
+      if(o.kind==='item'&&!o.destroyed) items.push(o); else if(o.kind==='edge'&&/door|window/.test(o.e.type)) openings.push(o); }
+    return {items,openings}; }
+  // doors between rooms, for watching doorways
+  const innerDoors=()=>obs.filter(o=>o.kind==='edge'&&!o.ext&&/door/.test(o.e.type));
+  return {G,R,EYE,FY,destroyItem,blastReach,innerDoors,X0,Z0,X1,Z1,obs,props,doorSt,doorState,sight,castRay,coverFrom,clearAt,walk,speedAt,field,costTo,pathTo,snap,nearestCover,coverSpots,leans,entries,setDoor,setWindow,people,posted,frontApproach,
     insideAt, floorY:(x,z)=>insideAt(x,z)?FY:0, NS, NW, NH, nodeX:nx, nodeZ:nz, nodeAt, free};
 }
 return {fromGenerated,R,EYE,DIRS,segSeg,segBox,ptSeg};

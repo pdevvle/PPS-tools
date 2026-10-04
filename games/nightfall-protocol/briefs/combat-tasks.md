@@ -336,7 +336,12 @@ Steps 1 and 2 of 7h are done, and so are the sight and cover rules (7b), breachi
 - a hidden 0.5 m cost field with 16 step directions is used for pathfinding only;
 - doors, windows and counters are portals, so routes pass through the middle of openings.
 
-Doorway overwatch, fall back and flee (7e), holdouts (7f), loot (7g) and joining the streamed world (step 3) are still to do.
+Also done:
+- **Task 4**: the four roles with weapons, range profiles, ammo and reloads, plus pipe bombs.
+- **Task 5, in the fight**: going down, bleeding out and first aid. The result record back to the map is still to do.
+- **7e**: doorway overwatch, wounded raiders falling back, and morale that sends raiders running for an exit.
+
+Still to do: holdouts (7f), loot (7g), and joining the streamed world (step 3).
 
 ### 7h. Order of work for 7
 
