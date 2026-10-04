@@ -1,0 +1,1 @@
+A 760 × 500 m cut of the baked New River block for the base prototype (`../../tools/base/cut_site.py`). © OpenStreetMap contributors, licensed under the Open Database Licence (ODbL) 1.0: https://opendatacommons.org/licenses/odbl/. Elevation from Mapzen Terrain Tiles on AWS. See `../../tools/osm/README.md` for how the block was made.
