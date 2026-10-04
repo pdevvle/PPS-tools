@@ -39,5 +39,20 @@ Physics: a "Click does" control switches clicks between searching, throwing a gr
 - A grenade (4.5 m) runs cannon.js (cdnjs, 0.6.2) on the props in range, with walls, untouched furniture and the floor as static colliders. Heavy fittings in `STATIC_PROPS` (kit.js) stay put. Each chair is its own piece, so dining sets come apart. The blast breaks windows within reach and blows nearby doors.
 - Overturning is scripted, not simulated. Props in `FLIP_PROPS` tip onto the edge away from the camera. A table becomes a low wall giving half cover; tall things fall flat. The chairs stay where they were.
 - Either way the outcome goes into the change record as a pose per piece, the cells the prop now blocks and the cover it gives (`moved`), plus scorch marks (`blasts`) and broken windows (`windows`). Reloads redraw from the record, so physics never has to replay the same way twice.
+- Walls are destructible. Each wall edge gets a build-up when it is generated (`WALLMAT`, `assignWallMats`):
+  - drywall partitions inside;
+  - stucco over wood frame, or concrete block, for house exteriors;
+  - block for shop and office exteriors, for stair and lift shafts, and between shops in a strip;
+  - framed exteriors on upper office floors;
+  - reinforced concrete round a vault.
+  The build-up sets the drawn thickness and what each tool does:
+  - **Shoot:** fires a round level along the view. Drywall and frame let it through; block and concrete stop it.
+  - **Sledgehammer:** opens drywall in a blow or two and frame in a few; block only chips.
+  - **Breaching charge:** opens any wall (a vault takes two) and throws whatever stands close.
+  - **Grenade:** cracks, holes or breaches thin walls near it; a solid wall in between shields what is behind.
+  Damage climbs from cracked to holed (see and shoot through) to breached (walk through), and is kept in the change record as `walls` (state, hole position, bullet holes). The geometry, gaps and rubble are seeded from the edge, so reloads redraw them the same. The values are placeholders for combat to set.
 
 Rebuild after editing: `python3 tools/interiors/build.py`.
+
+
+Rendering: the scene draws at about twice the screen's pixels (multisampled where WebGL 2 allows) and is filtered down ("Smoothing" toggles it). Floor and wall patterns are carried by colour at half a metre or more, with no hairline grout or plank gaps. Ink outlines only pieces with some body; seams where two boxes abut are dropped, and faces sit a hair behind their ink so lines don't flicker.
