@@ -78,6 +78,8 @@ function arming(){ const pick=i=>ui.weapon==='mixed'?(i%2?'pistol':'rifle'):ui.w
 const later=[]; const after=(ms,fn)=>later.push({t:ms/1000,fn});
 document.getElementById('hit').addEventListener('click',()=>loopers.forEach((p,i)=>after(i*140,()=>{ const r=p.f.root, a=r.rotation.y+(Math.random()-.5)*1.2; Motion.kick(p.f,'hit',1,{from:{x:r.position.x+Math.sin(a)*12,z:r.position.z+Math.cos(a)*12}}); })));
 document.getElementById('fire').addEventListener('click',()=>loopers.forEach((p,i)=>after(i*110,()=>Motion.kick(p.f,'recoil'))));
+const holsterBtn=document.getElementById('holster');
+holsterBtn.addEventListener('click',()=>{ ui.holstered=!ui.holstered; holsterBtn.textContent=ui.holstered?'Draw':'Holster'; });
 const fallBtn=document.getElementById('fall');
 fallBtn.addEventListener('click',()=>{ ui.fallen=!ui.fallen; fallBtn.textContent=ui.fallen?'Get up':'Fall';
   if(ui.fallen) loopers.forEach((p,i)=>{ const r=p.f.root, a=r.rotation.y+(i%2?.4:-.4); p.f.motion&&Motion.kick(p.f,'hit',1.1,{from:{x:r.position.x+Math.sin(a)*10,z:r.position.z+Math.cos(a)*10}}); p.down=true; });
@@ -112,7 +114,7 @@ function drawReadout(){ const P=ui.view==='loop'?loopers[0]:runners[0], M=P.f.mo
 let lastT=performance.now();
 function loop(now){ requestAnimationFrame(loop); const dt=Math.min(.05,(now-lastT)/1000); lastT=now;
   for(let i=later.length-1;i>=0;i--){ if((later[i].t-=dt)<=0){ later[i].fn(); later.splice(i,1); } }
-  const still=['hunker','work'].includes(ui.act), sp=still?0:ui.speed, state=act=>({act,mood:ui.mood,ground});
+  const still=['hunker','work'].includes(ui.act), sp=still?0:ui.speed, state=act=>({act,mood:ui.mood,ground,holster:ui.holstered});
   for(const p of loopers){ const f=p.f, r=f.root;
     if(p.down){ Motion.update(f,state('fall'),dt); p.crate.visible=false; continue; }
     if(Motion.busy(f)){ Motion.update(f,state('idle'),dt); continue; }

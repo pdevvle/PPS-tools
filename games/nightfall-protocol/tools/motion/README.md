@@ -105,6 +105,17 @@ Each action picks a hold for each weapon:
 
 The weapon is smoothed between holds. The arms are solved so the wrist sits behind each grip, and the wrist turns the hand along the grip. The aim line comes from the hold, not from the noise layers, so idle noise never moves the aim. Recoil kicks the weapon back and up (the pistol flips more). The bolt cycle and reloads are hand timelines, and the bolt or slide follows the hand.
 
+## Drawing and stowing
+
+Moving a weapon between the hands and its stowed place plays a transition instead of a glide. It starts whenever the hold changes between in-hand and stowed: an action that slings or holsters (carry, dig, swim), or `holster:true` in the state.
+
+- **Pistol, holster:** the support hand lets go. The pistol comes back to the body, muzzle down over the holster mouth, slides in, and the hand opens and drops.
+- **Pistol, draw:** the hand reaches to the holster and closes on the grip, lifts the pistol straight out, turns the muzzle forward at the chest, and pushes out as the support hand joins.
+- **Rifle, sling:** the support hand lets go. The rifle comes up vertical in front of the right shoulder, the hand slides up to the fore-end, swings it over the shoulder onto the back, and lets go.
+- **Rifle, unsling:** reach over the shoulder for the fore-end, swing it forward, the left hand catches the fore-end, the right slides down to the grip.
+
+The weapon's path is keyed on the moving body, so it can be done while walking. A hand not on the weapon hangs and swings until it takes hold. Each swap rolls its tempo (±15%) and a few centimetres of its path. About 45% of pistol swaps glance down at the holster.
+
 ## Falls and get-ups
 
 - `fall` or `dead` starts a ragdoll of 19 verlet particles (trunk, head, limbs, toes, and the weapon's grip and muzzle) held by distance constraints. It collides with `ground` and has friction.

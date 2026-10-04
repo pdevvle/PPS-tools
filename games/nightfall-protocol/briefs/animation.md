@@ -16,6 +16,7 @@ Procedural motion for every figure: each person moves in their own way, actions 
 - **Pelvis:** walking sways it over the standing leg, drops it on the swinging side and turns it with the stride, sized per person and varying stride to stride. The chest counters it, so the shoulders stay level. Standing, people rest on one hip.
 - **Variation:** every animation has ranged output. Per person, per action, per stride, per clip (tempo and nudged keys, with contacts kept), per weapon cycle, per impulse and per dig stroke.
 - **Dig:** a D-handle spade with hands solved on it. Drive, foot on the tread, lever, throw to the left, each stroke rolled.
+- **Drawing and stowing:** holstering and drawing the pistol, slinging and unslinging the rifle, each a rolled transition with hands on the weapon. Triggered by actions that stow, or `holster:true`.
 - **Falls:** a verlet ragdoll shoved away from the shooter; the dropped weapon lies where it fell. Get-ups from the back or the front start from wherever the body lies.
 - **Traversal:** `Motion.traverse` plays vault, ledge climb, ladder up, ladder down and drop clips that move the root themselves.
 - Carry and dig are rough first versions for `building.md`.
@@ -37,6 +38,7 @@ Procedural motion for every figure: each person moves in their own way, actions 
 - `FigureKit.applyPose(fig, joints)` with joint keys `bodyY torsoX torsoY headX shRx shRz elR shLx shLz elL lgR knR lgL knL`. On top of these, `Motion` sets shoulder and hip twist (rotation y and z) and neck yaw on the head. It adds two things to each figure the first time it sees it: ankle groups (`fig.an`, slipped between each knee and its foot meshes), `fig.hand` (the wrists), and jointed hands (`fig.fingers`, `fig.thumbs`), which replace the mitten mesh. **For `models.md`:** if FigureKit grows real ankles, fingers or a neck, `Motion` should use them instead.
 - `Motion.update(fig, {act, mood, ground, slope, compress, look, lookAt, aimPitch}, dt)`, called after the runtime places `fig.root`. Acts: idle, walk, run, ready, aim, shoot, reload, crouch-walk, crouch, hunker, hit, carry, work, swim, fall, dead. Moods: calm, wounded, panicked.
 - `Motion.arm(fig, kind)`; `Motion.WEAPONS[kind].grip` (grip points and hand axes in the weapon frame: origin at the trigger grip, +z down the barrel) is what a final weapon model from `models.md` needs to supply.
+- `holster:true` in the state stows the weapon (pistol to the holster, rifle to the sling) with a transition; removing it draws again.
 - `Motion.kick(fig, 'hit', k, {from:{x,z}})` and `Motion.kick(fig, 'recoil')`.
 - `Motion.traverse(fig, {type:'vault'|'climb'|'ladder'|'descend'|'drop', x, z, yaw, height, depth, y}, state)`. While `Motion.busy(fig)` is true, a clip or the ragdoll owns `fig.root`; the runtime reads it back instead of moving it.
 - Assembly order on a page: `figure-kit.js`, then `motion.js`, then the runtime.

@@ -323,6 +323,9 @@ function pose(fig,M,s,def,actName,dt,dist,vr){
   if(M.dirty) clean(fig,M);
   // ---- target pose: action base + roll + traits + mood + the action's own cycle ----
   const T={}; for(const k of KEYS) T[k]=def.pose[k]+(M.roll[k]||0);
+  // with the weapon stowed (and no draw under way), empty hands hang and swing instead of holding the action's grip
+  const armsFree=M.w&&!def.cycle&&(M.wx||s.holster||(def.hold||{})[M.w.spec.kind]==='sling'||(def.hold||{})[M.w.spec.kind]==='holster');   // during a swap too: a hand rests until it takes hold
+  if(armsFree) for(const k of ARMKEYS) T[k]=ACTS.idle.pose[k]+(M.roll[k]||0)*.5;
   T.torsoX+=tr.slouch; T.headX+=tr.head-tr.slouch*.6; T.shRz-=tr.width; T.shLz+=tr.width;
   if(W>0){ T.torsoX+=.14*W; T.headX+=.12*W; T.bodyY-=.03*W;   // slumped, one arm held to the side
     if(def.arms==='swing'&&!M.w){ if(tr.favour){ T.shLx=lerp(T.shLx,-.45,W); T.shLz=lerp(T.shLz,.05,W); T.elL=lerp(T.elL,-1.7,W); } else { T.shRx=lerp(T.shRx,-.45,W); T.shRz=lerp(T.shRz,-.05,W); T.elR=lerp(T.elR,-1.7,W); } } }
@@ -352,7 +355,7 @@ function pose(fig,M,s,def,actName,dt,dist,vr){
   let feet=null;
   if(def.legs==='plant') feet=legs(fig,M,s,def,O,dt,dist,vr,W,Pn,shift); else { M.gaitW=0; M.runW=0; M.feet=null; }
   // arms swing against the legs while moving (an armed hand on the weapon ignores it)
-  if(feet){ const gw=M.gaitW, rw=M.runW, sw=gw*Math.min(1.3,vr/1.4+.15)*(def.arms==='swing'?1:.15)*(1-.5*W)*(1-.6*Pn), n0=feet.n[0], n1=feet.n[1];
+  if(feet){ const gw=M.gaitW, rw=M.runW, sw=gw*Math.min(1.3,vr/1.4+.15)*(def.arms==='swing'||armsFree?1:.15)*(1-.5*W)*(1-.6*Pn), n0=feet.n[0], n1=feet.n[1];
     O.shRx+=n0*.3*tr.swing*sw*(1+rw*.6); O.shLx+=n1*.3*tr.swing*sw*(1+rw*.6);
     if(def.arms==='swing'){ O.elR-=(.12+.2*tr.swing)*gw+rw*1.0; O.elL-=(.12+.2*tr.swing)*gw+rw*1.0; }
     O.torsoX+=rw*.12*gw+.05*gw*Math.min(1,vr/1.4); }
@@ -361,6 +364,7 @@ function pose(fig,M,s,def,actName,dt,dist,vr){
   // ---- impulses ----
   if(M.hit>0){ const h=M.hit*M.hit; O.torsoX-=.45*h; O.headX-=.3*h; O.torsoY+=M.hitSide*.25*h; O.shRz-=.3*h; O.shLz+=.3*h; O.bodyY-=.04*h; M.hit=Math.max(0,M.hit-dt*2.2); }
   if(M.recoil>0){ const r=M.recoil; O.torsoX-=.05*r; O.headX-=.04*r; if(!M.w){ O.shRx+=.25*r; O.shLx+=.18*r; } }
+  if(M.wx&&M.wx.look){ const u=M.wx.t/M.wx.dur; O.headX+=M.wx.look*Math.sin(Math.PI*clamp(u,0,1)); }
   M.out=O; FigureKit.applyPose(fig,O);
   fig.body.position.x=M.pelvis.x; fig.hips.rotation.set(0,M.pelvis.rot,M.pelvis.tilt); fig.torso.rotation.z=-M.pelvis.tilt*1.15; fig.head.rotation.z=M.pelvis.tilt*.1;
   fig.head.rotation.y=clamp(M.look-clamp(M.look,-1.2,1.2)*.5,-.8,.8)*.9-(M.blade||0)*.85;
@@ -545,13 +549,19 @@ function weapon(fig,M,s,def,actName,dt){ const w=M.w; M.grip=[null,null]; M.held
   const spec=w.spec; M.inHand=0;
   let hold=(def.hold||{})[spec.kind]||'low'; if(spec.kind==='rifle'&&hold==='low'&&M.runW>.5) hold='port';
   if(M.wc&&M.wc.type!=='bolt'&&actName!=='reload') M.wc=null;
-  if(actName==='reload'&&!M.wc) M.wc={type:spec.kind==='rifle'?'rifleReload':'pistolReload',t:-.6};   // held reload: go again after a pause
-  const H=holdTarget(fig,M,hold,s,{});
+  if(actName==='reload'&&!M.wc&&!M.wx) M.wc={type:spec.kind==='rifle'?'rifleReload':'pistolReload',t:-.6};   // held reload: go again after a pause
+  // drawing and stowing: moving between the hands and the sling or holster plays a transition instead of a glide
+  if(s.holster) hold=spec.kind==='rifle'?'sling':'holster';
+  if(M.wHold===undefined) M.wHold=hold;
+  if(!M.wx&&hold!==M.wHold){ if(STOWED.has(hold)!==STOWED.has(M.wHold)&&w.pos) startSwap(fig,M,s,STOWED.has(hold)?'stow':'draw',hold); M.wHold=hold; }
+  if(M.wx) M.wc=null;
+  const H=holdTarget(fig,M,M.wx?M.wx.hold:hold,s,{});
   // recoil: back and muzzle up, then settle
   if(M.recoil>0){ const r=M.recoil*M.recoil; H.p.add(V(0,0,-spec.back*r).applyQuaternion(H.q)); H.q.multiply(Q().setFromEuler(_e.set(-spec.flip*r,0,0))); }
   const k=1-Math.exp(-dt*(M.inHand?30:12));
   if(!w.pos){ w.pos=H.p.clone(); w.q.copy(H.q); } else { w.pos.lerp(H.p,k); w.q.slerp(H.q,k); }
   if(M.inHand){ w.pos.copy(H.p); w.q.copy(H.q); }
+  let plan=null; if(M.wx){ const X=swapStep(fig,M,s,H,dt); w.pos.copy(X.p); w.q.copy(X.q); plan=X.hands; M.inHand=0; }
   w.g.position.copy(w.pos); w.g.quaternion.copy(w.q); w.g.updateMatrixWorld(true);
   // carried in the hand: slide the weapon along the palm's normal until its grip rests on the palm
   if(M.inHand&&fig.fingers){ const h=fig.hand[0], palm=V(1,0,0).applyQuaternion(h.getWorldQuaternion(Q())), pc=h.localToWorld(V(0,-.05,0)), g0=w.g.localToWorld(spec.grip[0].p.clone());
@@ -570,9 +580,10 @@ function weapon(fig,M,s,def,actName,dt){ const w=M.w; M.grip=[null,null]; M.held
   else { let back=M.recoil>0?.03*M.recoil:0; if(M.wc&&TL[M.wc.type].rack){ const r=TL[M.wc.type].rack, tt=M.wc.t; if(tt>r[0]&&tt<r[2]) back=.045*(tt<r[1]?smooth((tt-r[0])/(r[1]-r[0])):1-smooth((tt-r[1])/(r[2]-r[1]))); } w.bolt.position.z=-back; }
   // hands
   const resolve=tg=>tg.t?fig.torso.localToWorld(tg.t.clone()):w.g.localToWorld(tg.w.clone());
-  for(let i=0;i<2;i++){ const want=H.hands[i]; M.handW[i]+=(want-M.handW[i])*Math.min(1,dt*10);
+  for(let i=0;i<2;i++){ const want=plan?plan[i].w:H.hands[i]; M.handW[i]=plan?want:M.handW[i]+(want-M.handW[i])*Math.min(1,dt*10);
     const g=spec.grip[i], wq=w.g.getWorldQuaternion(Q()), axisW=g.axis.clone().applyQuaternion(wq), palmW=g.palm&&g.palm.clone().applyQuaternion(wq);
     let gp=w.g.localToWorld(g.p.clone());
+    if(plan&&plan[i].pt){ tgt[i]=[{w:plan[i].pt},{w:plan[i].pt},1]; }   // holding the weapon somewhere other than its grip
     if(tgt[i]){ const [a,b,e]=tgt[i]; const pa=a?resolve(a):gp.clone(), pb=b?resolve(b):gp.clone(); gp=pa.lerp(pb,e); }
     // seat the palm on the grip's surface: from the grip point, find where the part ends on the palm's side
     if(palmW&&!(tgt[i]&&(tgt[i][0]||tgt[i][1]))){ gp=surfaceAlong(proxies(w),gp,palmW).addScaledVector(palmW,-.0118*(fig.handK||1)); }
@@ -583,6 +594,39 @@ function weapon(fig,M,s,def,actName,dt){ const w=M.w; M.grip=[null,null]; M.held
     M.grip[i]=busyHand?'pinch':hw>.5?'grip':null;
     if(i===1&&magOn){ w.mag.visible=true; w.mag.position.copy(toLocal(fig,fig.hand[1].localToWorld(V(0,-.09,.02)))); w.mag.quaternion.copy(w.q); } }
   if(!magOn) w.mag.visible=false; }
+
+// ---------- draw and stow ----------
+// Keys for the weapon (root frame), evaluated every frame so they move with the body; the first is where the weapon
+// was when the swap began, the last is the live hold it ends in. Hands say how firmly they hold (0..1) and, when not
+// at their own grip, the point on the weapon they hold. Every swap rolls its tempo, a little of its path, and for
+// the pistol whether the eyes go down to the holster.
+const STOWED=new Set(['sling','holster']);
+function startSwap(fig,M,s,type,hold){ const r=M.rr, w=M.w, kind=w.spec.kind;
+  const dur=(kind==='rifle'?(type==='stow'?1.25:1.15):(type==='stow'?.95:.8))*(.85+.3*r());
+  M.wx={type,kind,hold,t:0,dur,from:{p:w.pos.clone(),q:w.q.clone()},j:[0,1,2,3].map(()=>V((r()-.5)*.04,(r()-.5)*.04,(r()-.5)*.04)),
+    look:kind==='pistol'&&r()<.45?.3+.25*r():0, w0:[M.handW[0],M.handW[1]]}; }
+function swapStep(fig,M,s,H,dt){ const X=M.wx, w=M.w; X.t+=dt; const u=Math.min(1,X.t/X.dur);
+  const torsoQ=()=>{ fig.torso.getWorldQuaternion(_q); qYaw(-fig.root.rotation.y,_q2); return _q2.multiply(_q).clone(); };
+  const tk=(x,y,z,dir,roll=0)=>({p:toLocal(fig,fig.torso.localToWorld(V(x,y,z))), q:torsoQ().multiply(Q().setFromUnitVectors(V(0,0,1),dir.normalize())).multiply(Q().setFromAxisAngle(V(0,0,1),roll))});
+  const up=(K,h,f=0)=>({p:K.p.clone().add(V(0,h,f)),q:K.q.clone()}), tilt=(K,a)=>({p:K.p.clone(),q:K.q.clone().multiply(Q().setFromEuler(_e.set(a,0,0)))});
+  const ramp=(a,b)=>smooth((u-a)/(b-a)), FORE=V(0,.01,.3), GRIP=null;
+  let keys, hands;
+  if(X.kind==='pistol'){ const Hs=holdTarget(fig,M,'holster',s,{}), above=up(Hs,.11), mid=tilt(up(Hs,.2,.1),-.6);
+    if(X.type==='stow'){ keys=[[0,X.from],[.32,mid],[.58,above],[.82,Hs],[1,Hs]];
+      hands=[{w:1-ramp(.84,1),pt:GRIP},{w:X.w0[1]*(1-ramp(0,.18)),pt:GRIP}]; }
+    else { const ready=holdTarget(fig,M,'ready',s,{}); keys=[[0,Hs],[.28,Hs],[.46,above],[.7,ready],[1,H]];
+      hands=[{w:ramp(0,.28),pt:GRIP},{w:H.hands[1]*ramp(.6,.88),pt:GRIP}]; } }
+  else { const S=holdTarget(fig,M,'sling',s,{}), front=tk(-.22,.3,.24,V(.08,1,.1),-.3), over=tk(-.17,.44,-.03,V(-.3,.93,-.22));
+    if(X.type==='stow'){ keys=[[0,X.from],[.3,front],[.62,over],[1,S]];
+      hands=[{w:1-ramp(.82,1),pt:u<.12?GRIP:V().lerpVectors(w.spec.grip[0].p,FORE,ramp(.12,.32))},{w:X.w0[1]*(1-ramp(0,.2)),pt:GRIP}]; }
+    else { keys=[[0,S],[.25,S],[.52,over],[.78,front],[1,H]];
+      hands=[{w:ramp(0,.25),pt:u>.9?GRIP:V().lerpVectors(FORE,w.spec.grip[0].p,ramp(.7,.9))},{w:H.hands[1]*ramp(.6,.85),pt:GRIP}]; } }
+  // where along the keys, with each middle key nudged by this swap's roll
+  let i=0; while(i<keys.length-2&&u>keys[i+1][0]) i++; const [ua,A]=keys[i], [ub,B]=keys[i+1], e=smooth((u-ua)/(ub-ua||1));
+  const pa=A.p.clone().add(i>0&&i<keys.length-1?X.j[i]:V()), pb=B.p.clone().add(i+1<keys.length-1?X.j[i+1]:V());
+  const out={p:pa.lerp(pb,e), q:A.q.clone().slerp(B.q,e), hands};
+  if(u>=1){ M.wx=null; w.pos=H.p.clone(); w.q.copy(H.q); M.handW=[hands[0].w,hands[1].w]; }
+  return out; }
 
 // ======================================================================================================
 // Ragdoll: particles on the joints, held together by distances, dropped under gravity; the skeleton follows
