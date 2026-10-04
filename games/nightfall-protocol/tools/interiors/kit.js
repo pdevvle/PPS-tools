@@ -406,7 +406,7 @@ function diningSet(P,K,opt){
     T.push(B(cx-sx/2-e,.765,cz-sz/2-e,sx+2*e,.01,sz+2*e,c),B(cx-sx/2-e,.765-h,cz-sz/2-e,sx+2*e,h,.01,c),B(cx-sx/2-e,.765-h,cz+sz/2+e-.01,sx+2*e,h,.01,c),B(cx-sx/2-e,.765-h,cz-sz/2-e,.01,h,sz+2*e,c),B(cx+sx/2+e-.01,.765-h,cz-sz/2-e,.01,h,sz+2*e,c));
     T.push(B(cx-.05,0,cz-.05,.1,.72,.1,CHROME)); }
   else if(opt.pedestal) T.push(C(cx-.05,0,cz-.05,.1,.72,.1,CHROME),C(cx-.28,0,cz-.28,.56,.03,.56,CHROME));
-  else for(const [a,b] of [[-1,-1],[1,-1],[-1,1],[1,1]]) T.push(B(cx+a*(sx/2-.08)-.03,0,cz+b*(sz/2-.08)-.03,.06,.72,.06,K.j(col,.08)));
+  else { const lx=opt.round?s*.3:sx/2-.08, lz=opt.round?s*.3:sz/2-.08; for(const [a,b] of [[-1,-1],[1,-1],[-1,1],[1,1]]) T.push(B(cx+a*lx-.03,0,cz+b*lz-.03,.06,.72,.06,K.j(col,.08))); }
   if(!over){
     if(opt.cond) T.push(...condiments(K,cx-.2,.76,cz-.05));
     if(opt.center){ T.push(B(cx-.15,.76,cz-.15,.3,.08,.3,'#d8d2c4')); for(let k=0;k<4;k++) T.push(B(cx-sx/2+.15+K.r()*(sx-.5),.76,cz-sz/2+.1+K.r()*(sz-.4),.3,.005,.25,K.j(K.st.fab,.1),{ry:(K.r()-.5)*.4})); }
