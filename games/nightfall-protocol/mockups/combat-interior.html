@@ -987,7 +987,7 @@ function drawers(out,K,x0,x1,y0,y1,zf,rows,cols,col,hcol){
 function chair(out,K,cx,cz,dir,opt){
   const yaw=Math.atan2(-dir[0],dir[1])+(opt.yawJ||0);
   const down=opt.down;
-  const o={yaw,pv:[cx,cz]};
+  K.pc=(K.pc||0)+1; const o={yaw,pv:[cx,cz],piece:'c'+K.pc};
   if(down===1){ o.tilt=-Math.PI/2; o.pv=[cx,cz-.24]; } // on its back
   if(down===2){ o.roll=(K.r()<.5?1:-1)*Math.PI/2; o.pv=[cx,cz]; o.lift=.21; } // on its side
   const s=opt.style||'wood', c=opt.col, seat=opt.seat||c, leg=s==='diner'?CHROME:c;
@@ -1331,7 +1331,7 @@ function diningSet(P,K,opt){
     T.push(B(cx-sx/2-e,.765,cz-sz/2-e,sx+2*e,.01,sz+2*e,c),B(cx-sx/2-e,.765-h,cz-sz/2-e,sx+2*e,h,.01,c),B(cx-sx/2-e,.765-h,cz+sz/2+e-.01,sx+2*e,h,.01,c),B(cx-sx/2-e,.765-h,cz-sz/2-e,.01,h,sz+2*e,c),B(cx+sx/2+e-.01,.765-h,cz-sz/2-e,.01,h,sz+2*e,c));
     T.push(B(cx-.05,0,cz-.05,.1,.72,.1,CHROME)); }
   else if(opt.pedestal) T.push(C(cx-.05,0,cz-.05,.1,.72,.1,CHROME),C(cx-.28,0,cz-.28,.56,.03,.56,CHROME));
-  else for(const [a,b] of [[-1,-1],[1,-1],[-1,1],[1,1]]) T.push(B(cx+a*(sx/2-.08)-.03,0,cz+b*(sz/2-.08)-.03,.06,.72,.06,K.j(col,.08)));
+  else { const lx=opt.round?s*.3:sx/2-.08, lz=opt.round?s*.3:sz/2-.08; for(const [a,b] of [[-1,-1],[1,-1],[-1,1],[1,1]]) T.push(B(cx+a*lx-.03,0,cz+b*lz-.03,.06,.72,.06,K.j(col,.08))); }
   if(!over){
     if(opt.cond) T.push(...condiments(K,cx-.2,.76,cz-.05));
     if(opt.center){ T.push(B(cx-.15,.76,cz-.15,.3,.08,.3,'#d8d2c4')); for(let k=0;k<4;k++) T.push(B(cx-sx/2+.15+K.r()*(sx-.5),.76,cz-sz/2+.1+K.r()*(sz-.4),.3,.005,.25,K.j(K.st.fab,.1),{ry:(K.r()-.5)*.4})); }
@@ -1616,6 +1616,10 @@ Object.assign(DECOR_BY,{
   waiting:['poster','certificate','clock','photo'], exam:['certificate','poster'], salon:['poster','photo','neon'], bay:['plates','poster','neon','horseshoe'],
   rdining:st=>st.cuisine==='asian'?['lantern','lantern','scroll','photo']:st.cuisine==='mexican'?['papel','papel','skull','photo','flag']:st.cuisine==='pizza'?['photo','neon','menu','plates']:st.cuisine==='bar'?['neon','neon','screen','plates','flag','skull','wheel']:['neon','photo','flag','skull','plates','wheel','menu','horseshoe'],
 });
+
+// How props behave when pushed: heavy fittings stay put in a blast; these can be overturned for cover.
+const STATIC_PROPS=new Set(['car','liftcar','pump','range','grill','charbroil','fryer','dsink','counter','sinkc','stove','island','checkout','ffcounter','cafecounter','barcounter','pos','tellerwin','depositbox','pcounter','receptiondesk','tallshelf','mcase','cooler','reachin','heater','serverrack','keycut','paintcounter','pizzaoven','wok','washsink','dw','washer','dryer','tub','toilet','vanity','shower','booth','safe','atm','soda','shake','warmer','dipcase','pobox','station','fridge','barricade']);
+const FLIP_PROPS=new Set(['dtable','table4','table2','conftable','coffee','desk','prep','checkstand','dresser','bookcase','filing','vending','wardrobe','sofa','armchair','hutch','tvstand','shelf','hshelf','wallshelf','rshelf','gshelf','crate','nightstand','chairs3','showcase','produce','cubicle']);
 
 const SLOTS={
   media:{n:'TV stand',cap:1,t:10,cats:{goods:2,gear:.5}}, bookcase:{n:'Bookcase',cap:1,t:15,cats:{goods:1,medicine:.2}}, hutch:{n:'China cabinet',cap:1,t:15,cats:{goods:2}},
@@ -2201,7 +2205,7 @@ function build(G,rec){
   world.add(yb.mesh(solidMat,true));
   // floors below the one in view are drawn as shells; the roof view shows them all
   for(let j=0;j<(G.roofView?G.levels:G.level);j++) world.add(shellFloor(G,G.floors[j],j*G.FH));
-  const fg=new THREE.Group(); fg.position.y=Math.min(G.level,G.levels-1)*G.FH; world.add(fg);
+  const fg=new THREE.Group(); fg.position.y=Math.min(G.level,G.levels-1)*G.FH; world.add(fg); curFG=fg;
   if(G.roofView){ fg.add(roofTop(G)); applyView(); return; }
   if(G.fk>0){ // the slab under an upper floor, open over the stairwells
     const sb=new Batch(), hole=new Set(P.rooms.filter(r=>r.kind==='stair').flatMap(r=>r.cells));
@@ -2233,6 +2237,7 @@ function build(G,rec){
       }
     } }
   // sand blown in through broken windows and open doors
+  for(const e of O.edges.values()) if(e.type==='window'&&rec.windows&&rec.windows[G.level+':'+e.key]) e.win.state='broken';
   for(const e of O.edges.values()){
     const open=(e.type==='window'&&e.win.state==='broken')||(e.ext&&e.door&&(e.door.state==='broken'||e.door.open));
     if(!e.ext||!open) continue;
@@ -2337,9 +2342,20 @@ function build(G,rec){
   const itemL=(i,j,f,y)=>{ const F=DIRS[f], Tt=DIRS[(f+1)%4]; const bx=cx(i)+.5-.5*F[0]-.5*Tt[0], bz=cz(j)+.5-.5*F[1]-.5*Tt[1]; return new THREE.Matrix4().set(Tt[0],0,F[0],bx, 0,1,0,y, Tt[1],0,F[1],bz, 0,0,0,1); };
   const emit=(parts,L,into)=>{ for(const pt of parts){ partMatrix(pt,L,_pm); const bt=pt[6]==='glass'?furG:(into||fur), col=pt[6]==='glass'?'#9cc8d6':pt[6]; if(pt[7]&&pt[7].shape==='cyl') bt.cyl(_pm,col,pt[7].axis); else bt.cube(_pm,col); } };
   const decorB={};
+  applyMoves(G,rec);
   for(const it of Fn.items){
     const opened=it.searched||rec.taken.includes(G.level+':'+it.id);
-    emit(it.spec.build(lookOf(G,it,opened)),itemL(it.i,it.j,it.f,FY));
+    const L0=itemL(it.i,it.j,it.f,FY), parts=it.spec.build(lookOf(G,it,opened)), mv=rec.moved&&rec.moved[G.level+':'+it.id];
+    it.L0=L0;
+    if(DYN&&DYN.items.has(it.id)){ DYN.collect(it,parts,L0,mv); continue; }
+    if(mv){ for(const pt of parts){ const pc=(pt[7]&&pt[7].piece)||'m'; emit([pt],mv.m&&mv.m[pc]?new THREE.Matrix4().fromArray(mv.m[pc]):L0); } }
+    else emit(parts,L0);
+    if(mv&&mv.box){ // a moved prop is picked where it lies now
+      const [x0,y0,z0,x1,y1,z1]=mv.box; const pm=new THREE.Mesh(new THREE.BoxGeometry(Math.max(.3,x1-x0),Math.max(.3,y1-y0),Math.max(.3,z1-z0)),pickMat); pm.position.set((x0+x1)/2,(y0+y1)/2,(z0+z1)/2);
+      pm.userData={item:it.id}; fg.add(pm); picks.push(pm); it.top=[(x0+x1)/2,y1,(z0+z1)/2]; continue; }
+    if(!it.spec.slot&&FLIP_PROPS.has(it.key)){
+      let mi=1e9,ma=-1e9,ni=1e9,na=-1e9; for(const c of it.cells){ const i=c%W,j=(c/W)|0; mi=Math.min(mi,cx(i)); ma=Math.max(ma,cx(i+1)); ni=Math.min(ni,cz(j)); na=Math.max(na,cz(j+1)); }
+      const pm=new THREE.Mesh(new THREE.BoxGeometry(ma-mi,1,na-ni),pickMat); pm.position.set((mi+ma)/2,FY+.5,(ni+na)/2); pm.userData={item:it.id}; fg.add(pm); picks.push(pm); }
     if(it.spec.slot){
       let mi=1e9,ma=-1e9,ni=1e9,na=-1e9; const hy=Math.min(it.spec.h,2.1); for(const c of it.cells){ const i=c%W,j=(c/W)|0; mi=Math.min(mi,cx(i)); ma=Math.max(ma,cx(i+1)); ni=Math.min(ni,cz(j)); na=Math.max(na,cz(j+1)); }
       const pm=new THREE.Mesh(new THREE.BoxGeometry(ma-mi,hy+.2,na-ni),pickMat); pm.position.set((mi+ma)/2,FY+(hy+.2)/2,(ni+na)/2);
@@ -2347,6 +2363,8 @@ function build(G,rec){
       it.top=[(mi+ma)/2,FY+hy,(ni+na)/2];
     }
   }
+  // grenade scorch marks
+  for(const b of (rec.blasts||[])) if(b.lv===G.level){ const sb=new Batch(), q=rngOf('scorch'+b.x+b.z); for(let k=0;k<14;k++){ const a=q()*6.28, r=.3+q()*1.5, w=.25+q()*.5; sb.cyl(new THREE.Matrix4().compose(new THREE.Vector3(b.x+Math.cos(a)*r,FY+.003+k*.0003,b.z+Math.sin(a)*r),new THREE.Quaternion(),new THREE.Vector3(w,.003,w)),pick(q,['#5a4c3e','#4a4036','#6a5a48'])); } sb.cyl(new THREE.Matrix4().compose(new THREE.Vector3(b.x,FY+.007,b.z),new THREE.Quaternion(),new THREE.Vector3(.7,.003,.7)),'#2e2822'); fg.add(sb.mesh(solidMat,false)); }
   // wall decor and floor clutter
   for(const r of P.rooms){
     const q=rngOf(G.fseed+'|decor|'+r.id), st=G.style[r.id]; let list=DECOR_BY[r.kind]; if(typeof list==='function') list=list(st);
