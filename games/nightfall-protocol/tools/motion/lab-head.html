@@ -24,6 +24,8 @@ h1{font:600 clamp(24px,4.2vw,32px)/1.1 var(--body);margin:0;text-wrap:balance}
 .hint{position:absolute;left:10px;bottom:8px;font:12px var(--mono);color:#3b3934;pointer-events:none}
 .side{border-left:1px solid var(--line);padding:14px;display:flex;flex-direction:column;gap:14px;min-width:0}
 fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;min-width:0}
+fieldset.group{gap:14px}
+fieldset:disabled{opacity:.45}
 legend{font:12px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:0;margin-bottom:6px}
 .seg{display:flex;flex-wrap:wrap;gap:4px}
 .seg button,.acts button{background:#2d2f33;border:1px solid var(--line);color:var(--text);font:500 13px var(--body);padding:5px 9px;border-radius:3px;cursor:pointer}
@@ -36,8 +38,10 @@ legend{font:12px var(--mono);letter-spacing:.08em;text-transform:uppercase;color
 .readout{font:12px/1.55 var(--mono);color:var(--muted);font-variant-numeric:tabular-nums;border-top:1px solid var(--line);padding-top:10px}
 .readout b{color:var(--text);font-weight:500}
 .readout .ok{color:var(--good)}
-.people{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line)}
-.people div{background:var(--panel);padding:8px 10px;font:12px/1.5 var(--mono);color:var(--muted);font-variant-numeric:tabular-nums;min-width:0}
+.people{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line)}
+.people button{background:var(--panel);border:0;border-radius:0;text-align:left;cursor:pointer;padding:8px 10px;font:12px/1.5 var(--mono);color:var(--muted);font-variant-numeric:tabular-nums;min-width:0}
+.people button[aria-pressed="true"]{box-shadow:inset 0 -3px 0 var(--accent)}
+.people button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .people b{display:block;font:600 14px var(--body);color:var(--text)}
 .notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
 .notes div{min-width:0}
@@ -51,35 +55,43 @@ legend{font:12px var(--mono);letter-spacing:.08em;text-transform:uppercase;color
   <header>
     <p class="eyebrow">Nightfall · animation · shared motion module</p>
     <h1>Motion Lab</h1>
-    <p class="lede">Four squad members run <code>Motion.update(fig, state, dt)</code>, the module the streaming and combat pages now share. The loop climbs a 15% ramp, crosses a landing and goes down six steps. Each stride moves with the ground, so a planted foot stays where it landed.</p>
+    <p class="lede">Everyone here runs <code>Motion.update(fig, state, dt)</code>, the module the streaming and combat pages share. On the loop, four people climb a 15% ramp and go down six steps with a bolt-action rifle or a pistol, hands solved to the grips. On the course, two more vault a wall, climb a ladder, drop off a tower, turn on the spot, mantle a ledge and climb back down.</p>
   </header>
   <section class="lab">
-    <div class="stage" id="stage"><span class="hint">drag to turn the view</span></div>
+    <div class="stage" id="stage"><span class="hint">drag to turn · scroll to zoom · pick a person below to follow</span></div>
     <div class="side">
-      <fieldset><legend>Ground speed</legend>
-        <div class="speed"><input id="speed" type="range" min="0" max="4.5" step="0.05" value="1.4" aria-label="Ground speed in metres per second"><output id="speedOut" for="speed">1.40 m/s</output></div>
-        <div class="seg" id="presets"><button type="button" data-v="0">Stand</button><button type="button" data-v="0.7">Stroll</button><button type="button" data-v="1.4" aria-pressed="true">Walk</button><button type="button" data-v="3.4">Run</button></div>
+      <fieldset><legend>View</legend>
+        <div class="seg" id="view"><button type="button" data-v="loop" aria-pressed="true">Loop</button><button type="button" data-v="course">Course</button></div>
       </fieldset>
-      <fieldset><legend>Action</legend>
-        <div class="seg" id="act">
-          <button type="button" data-a="idle" aria-pressed="true">Relaxed</button><button type="button" data-a="ready">Ready</button><button type="button" data-a="aim">Aim</button><button type="button" data-a="reload">Reload</button>
-          <button type="button" data-a="crouch-walk">Crouch</button><button type="button" data-a="hunker">Hunker</button><button type="button" data-a="carry">Carry</button><button type="button" data-a="work">Dig</button>
-        </div>
+      <fieldset><legend>Weapon</legend>
+        <div class="seg" id="weapon"><button type="button" data-w="mixed" aria-pressed="true">Mixed</button><button type="button" data-w="rifle">Rifle</button><button type="button" data-w="pistol">Pistol</button><button type="button" data-w="none">None</button></div>
+      </fieldset>
+      <fieldset id="loopCtl" class="group">
+        <fieldset><legend>Ground speed</legend>
+          <div class="speed"><input id="speed" type="range" min="0" max="4.5" step="0.05" value="1.4" aria-label="Ground speed in metres per second"><output id="speedOut" for="speed">1.40 m/s</output></div>
+          <div class="seg" id="presets"><button type="button" data-v="0">Stand</button><button type="button" data-v="0.7">Stroll</button><button type="button" data-v="1.4" aria-pressed="true">Walk</button><button type="button" data-v="3.4">Run</button></div>
+        </fieldset>
+        <fieldset><legend>Action</legend>
+          <div class="seg" id="act">
+            <button type="button" data-a="idle" aria-pressed="true">Relaxed</button><button type="button" data-a="ready">Ready</button><button type="button" data-a="aim">Aim</button><button type="button" data-a="reload">Reload</button>
+            <button type="button" data-a="crouch-walk">Crouch</button><button type="button" data-a="hunker">Hunker</button><button type="button" data-a="carry">Carry</button><button type="button" data-a="work">Dig</button>
+          </div>
+        </fieldset>
+        <fieldset><legend>Events</legend>
+          <div class="acts"><button type="button" id="hit">Hit</button><button type="button" id="fire">Fire</button><button type="button" id="fall">Fall</button></div>
+        </fieldset>
       </fieldset>
       <fieldset><legend>State</legend>
         <div class="seg" id="mood"><button type="button" data-m="calm" aria-pressed="true">Calm</button><button type="button" data-m="wounded">Wounded</button><button type="button" data-m="panicked">Panicked</button></div>
-      </fieldset>
-      <fieldset><legend>Events</legend>
-        <div class="acts"><button type="button" id="hit">Hit</button><button type="button" id="fire">Fire</button><button type="button" id="fall">Fall</button></div>
       </fieldset>
       <div class="readout" id="readout" aria-live="off"></div>
     </div>
   </section>
   <div class="people" id="people"></div>
   <section class="notes">
-    <div><b>Feet move with the ground</b><span>The gait phase advances by the distance each root really moved, divided by that person's stride. A stance foot stays fixed while the body passes over it.</span></div>
-    <div><b>Legs are solved</b><span>Hip and knee come from a two-bone solve to each foot's own footing, so slopes and steps bend the knees instead of sinking a foot.</span></div>
-    <div><b>Upper body on top</b><span>Aim, reload and carry hold the arms while the legs keep walking. Mood changes the noise, the posture and the stride, and the ink follows it.</span></div>
+    <div><b>Feet stay where they land</b><span>A foot bearing weight is pinned to the world, and hip, knee and ankle are solved to reach it. Walking swaps feet by the gait phase. Turning or changing stance steps a foot that has drifted too far.</span></div>
+    <div><b>Hands on the weapon</b><span>Each hold places the weapon, from slung and low carry to port arms, ready and aim. The arms are solved to its grips. Firing the rifle works the bolt. Reloading loads a stripper clip into the rifle or changes the pistol's magazine and racks the slide.</span></div>
+    <div><b>Falls and get-ups</b><span>A fall is a ragdoll of 19 particles with the shove of the hit, and the skeleton follows it. Getting up starts from wherever the body lies, either sitting up from the back or pushing up from the front.</span></div>
   </section>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
