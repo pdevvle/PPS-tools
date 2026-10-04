@@ -32,6 +32,16 @@ if(Motion.busy(fig)) { /* a clip or ragdoll owns the root: read fig.root back in
   - Fingers wrap round a weapon grip, with the index finger on the trigger and the palm turned to the grip.
   - They pinch for a bolt, clip or magazine, hold a load or a tool, and make fists in panic.
   - They go limp in a fall, grab rungs and edges when climbing, and lie flat when pushing up off the ground. Otherwise they keep a loose, slowly changing curl.
+- **Grasping by contact.** On a weapon, each hand is seated and its fingers close until they touch.
+  - The palm is placed on the grip's real surface, found by probing from the grip point along the palm's direction.
+  - Each finger and the thumb close from the knuckle out. With the joints beyond it straight, a joint turns until one of its segments touches a part of the weapon, then the next joint closes.
+  - The colliders are the weapon's own parts (each mesh's box), so a new model brings its own.
+  - The thumb can also swing sideways to clear the grip.
+  - A carried pistol is slid along the palm's normal until its grip rests on the palm.
+  - A hand's result is reused while it sits the same way on the weapon (within 1.5 mm) and asks for the same curl.
+  - `Motion.grasp=false` turns contact off, leaving fixed curls.
+  - Measured with all five digits touching in every hold (rifle aim, ready and low; pistol aim and carried): worst sink 0.5–3.7 mm against 14–30 mm with fixed curls, fingertips within 0–6 mm of the surface. The cost is about 0.1 ms per armed figure per frame.
+- **Rifle stance.** Rifle aim, ready and reload are bladed: the body turns about 45° to the right so the left hand reaches the fore-end, and the neck turns the head back to the target.
 - **Ankle joint.** FigureKit has no ankle. `Motion` slips a group between each knee and its foot meshes (`fig.an`) the first time it sees a figure. It also sets `fig.hand` (the wrist groups) and neck yaw on `fig.head`.
 
 ## Weapons

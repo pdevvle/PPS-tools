@@ -62,7 +62,7 @@ function drawers(out,K,x0,x1,y0,y1,zf,rows,cols,col,hcol){
 function chair(out,K,cx,cz,dir,opt){
   const yaw=Math.atan2(-dir[0],dir[1])+(opt.yawJ||0);
   const down=opt.down;
-  const o={yaw,pv:[cx,cz]};
+  K.pc=(K.pc||0)+1; const o={yaw,pv:[cx,cz],piece:'c'+K.pc};
   if(down===1){ o.tilt=-Math.PI/2; o.pv=[cx,cz-.24]; } // on its back
   if(down===2){ o.roll=(K.r()<.5?1:-1)*Math.PI/2; o.pv=[cx,cz]; o.lift=.21; } // on its side
   const s=opt.style||'wood', c=opt.col, seat=opt.seat||c, leg=s==='diner'?CHROME:c;
@@ -406,7 +406,7 @@ function diningSet(P,K,opt){
     T.push(B(cx-sx/2-e,.765,cz-sz/2-e,sx+2*e,.01,sz+2*e,c),B(cx-sx/2-e,.765-h,cz-sz/2-e,sx+2*e,h,.01,c),B(cx-sx/2-e,.765-h,cz+sz/2+e-.01,sx+2*e,h,.01,c),B(cx-sx/2-e,.765-h,cz-sz/2-e,.01,h,sz+2*e,c),B(cx+sx/2+e-.01,.765-h,cz-sz/2-e,.01,h,sz+2*e,c));
     T.push(B(cx-.05,0,cz-.05,.1,.72,.1,CHROME)); }
   else if(opt.pedestal) T.push(C(cx-.05,0,cz-.05,.1,.72,.1,CHROME),C(cx-.28,0,cz-.28,.56,.03,.56,CHROME));
-  else for(const [a,b] of [[-1,-1],[1,-1],[-1,1],[1,1]]) T.push(B(cx+a*(sx/2-.08)-.03,0,cz+b*(sz/2-.08)-.03,.06,.72,.06,K.j(col,.08)));
+  else { const lx=opt.round?s*.3:sx/2-.08, lz=opt.round?s*.3:sz/2-.08; for(const [a,b] of [[-1,-1],[1,-1],[-1,1],[1,1]]) T.push(B(cx+a*lx-.03,0,cz+b*lz-.03,.06,.72,.06,K.j(col,.08))); }
   if(!over){
     if(opt.cond) T.push(...condiments(K,cx-.2,.76,cz-.05));
     if(opt.center){ T.push(B(cx-.15,.76,cz-.15,.3,.08,.3,'#d8d2c4')); for(let k=0;k<4;k++) T.push(B(cx-sx/2+.15+K.r()*(sx-.5),.76,cz-sz/2+.1+K.r()*(sz-.4),.3,.005,.25,K.j(K.st.fab,.1),{ry:(K.r()-.5)*.4})); }
@@ -691,3 +691,7 @@ Object.assign(DECOR_BY,{
   waiting:['poster','certificate','clock','photo'], exam:['certificate','poster'], salon:['poster','photo','neon'], bay:['plates','poster','neon','horseshoe'],
   rdining:st=>st.cuisine==='asian'?['lantern','lantern','scroll','photo']:st.cuisine==='mexican'?['papel','papel','skull','photo','flag']:st.cuisine==='pizza'?['photo','neon','menu','plates']:st.cuisine==='bar'?['neon','neon','screen','plates','flag','skull','wheel']:['neon','photo','flag','skull','plates','wheel','menu','horseshoe'],
 });
+
+// How props behave when pushed: heavy fittings stay put in a blast; these can be overturned for cover.
+const STATIC_PROPS=new Set(['car','liftcar','pump','range','grill','charbroil','fryer','dsink','counter','sinkc','stove','island','checkout','ffcounter','cafecounter','barcounter','pos','tellerwin','depositbox','pcounter','receptiondesk','tallshelf','mcase','cooler','reachin','heater','serverrack','keycut','paintcounter','pizzaoven','wok','washsink','dw','washer','dryer','tub','toilet','vanity','shower','booth','safe','atm','soda','shake','warmer','dipcase','pobox','station','fridge','barricade']);
+const FLIP_PROPS=new Set(['dtable','table4','table2','conftable','coffee','desk','prep','checkstand','dresser','bookcase','filing','vending','wardrobe','sofa','armchair','hutch','tvstand','shelf','hshelf','wallshelf','rshelf','gshelf','crate','nightstand','chairs3','showcase','produce','cubicle']);
