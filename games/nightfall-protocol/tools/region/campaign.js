@@ -1,7 +1,7 @@
 // ---------- campaign: the strategic layer's rules (clock, light and heat, travel, water, scavenging, raiders, saving) ----------
 // No rendering, so the same file runs in the pages and in Node (tools/region/test.js). The page draws what this holds.
 const Campaign=(()=>{
-const VERSION=1, SAVE_KEY='nightfall.campaign.v1';
+const VERSION=2, SAVE_KEY='nightfall.campaign.v2';   // v2: the 100-mile realm (a v1 save is for the corridor alone and is not loaded)
 const K={UNKNOWN:0,RUMOUR:1,SCOUT:2,CURRENT:3}, STALE=3*1440;   // scouted knowledge goes stale after 3 days
 const LOOT=['food','medicine','tools','fuel','gear','water','shelter','goods'];
 // what one unit of each loot category is and what it weighs; base.stock holds these units for the base (building.md)
@@ -28,22 +28,37 @@ const waterRate=(moving,heat)=>(moving?.5:.2)*(1+heat);
 function paceAt(min,off,heat,thirsty){ const dark=1-sunAt(min).daylight; return (off?1-.4*dark:1-.15*dark)*(1-.25*heat)*(thirsty?.6:1); }
 
 // ---------- the region: terrain, sectors, the travel graph ----------
-let R,D,G,adj,HX,HZ,SEC,homeSec,homeXZ,st=null;
-const hRaw=(x,z)=>{ const fx=(x-D.x0)/D.step, fz=(z-D.z0)/D.step, i=Math.max(0,Math.min(D.nx-2,Math.floor(fx))), j=Math.max(0,Math.min(D.nz-2,Math.floor(fz))), u=Math.min(1,Math.max(0,fx-i)), v=Math.min(1,Math.max(0,fz-j)), h=(a,b)=>D.h[b*D.nx+a];
+let R,D,DF,G,adj,HX,HZ,SEC,homeSec,homeXZ,ngrid,st=null;
+const sample=(D,x,z)=>{ const fx=(x-D.x0)/D.step, fz=(z-D.z0)/D.step, i=Math.max(0,Math.min(D.nx-2,Math.floor(fx))), j=Math.max(0,Math.min(D.nz-2,Math.floor(fz))), u=Math.min(1,Math.max(0,fx-i)), v=Math.min(1,Math.max(0,fz-j)), h=(a,b)=>D.h[b*D.nx+a];
   return (h(i,j)*(1-u)+h(i+1,j)*u)*(1-v)+(h(i,j+1)*(1-u)+h(i+1,j+1)*u)*v; };
+const inFine=(x,z)=>!!DF&&x>=DF.x0&&z>=DF.z0&&x<=DF.x0+(DF.nx-1)*DF.step&&z<=DF.z0+(DF.nz-1)*DF.step;
+const hRaw=(x,z)=>inFine(x,z)?sample(DF,x,z):sample(D,x,z);   // the corridor's 100 m terrain where it has it, the realm's 400 m elsewhere
 const elevAt=(x,z)=>hRaw(x,z)+D.base;
 const tempAt=(min,x,z)=>sunAt(min).tempC-LAPSE*(elevAt(x,z)-T_REF);   // high ground runs cooler
 const secAt=(x,z)=>{ const c=Math.floor((x+HX)/SEC), r=Math.floor((z+HZ)/SEC); return c>=0&&r>=0&&c<R.cols&&r<R.rows?[c,r]:null; };
 const secCentre=(c,r)=>[-HX+(c+.5)*SEC, -HZ+(r+.5)*SEC];
 const sameSec=(a,b)=>!!a&&!!b&&a[0]===b[0]&&a[1]===b[1];
-function init(region){ R=region; D=R.dem; G=R.graph; HX=R.half[0]; HZ=R.half[1]; SEC=R.sector;
-  adj=G.nodes.map(()=>[]);
+// the region file packs its sectors into columns (v2); give them back their per-sector shape once
+function unpack(R){ if(Array.isArray(R.sectors)) return;
+  const P=R.sectors, d=R.detail, T={t:'town',h:'homes',r:'rough',d:'desert'}; R.sectors=[];
+  for(let r=0;r<R.rows;r++){ const row=[]; for(let c=0;c<R.cols;c++){ const i=r*R.cols+c; row.push({b:P.b[i],sites:[],lo:P.lo[i],hi:P.hi[i],type:T[P.type[i]],fine:!!d&&c>=d.col&&r>=d.row&&c<d.col+d.cols&&r<d.row+d.rows}); } R.sectors.push(row); }
+  R.sites.forEach((s,i)=>{ const c=Math.min(R.cols-1,Math.max(0,Math.floor((s.p[0]+R.half[0])/R.sector))), r=Math.min(R.rows-1,Math.max(0,Math.floor((s.p[1]+R.half[1])/R.sector))); s.sector=[c,r]; R.sectors[r][c].sites.push(i); }); }
+function init(region){ R=region; unpack(R); D=R.dem; DF=R.demFine||null; G=R.graph; HX=R.half[0]; HZ=R.half[1]; SEC=R.sector;
+  adj=G.nodes.map(()=>[]); ngrid=new Map();
+  G.nodes.forEach(([x,z],i)=>{ const k=Math.floor(x/NCELL)+','+Math.floor(z/NCELL); if(!ngrid.has(k)) ngrid.set(k,[]); ngrid.get(k).push(i); });
   for(const [a,b,len,cls,inner=[]] of G.edges){ const t=len/1000/(SPEED[cls]||4), ha=hRaw(...G.nodes[a]), hb=hRaw(...G.nodes[b]);   // +1 h per 300 m climbed
     adj[a].push([b,t+Math.max(0,hb-ha)/300,inner]); adj[b].push([a,t+Math.max(0,ha-hb)/300,inner.slice().reverse()]); }   // inner: the road's shape between the two junctions
   homeSec=secAt(R.home[0]+700,R.home[1]);   // just east of New River, on the ranch side
   homeXZ=secCentre(...homeSec); }
-function nearestNodes(x,z,k=6){ const best=[]; for(let i=0;i<G.nodes.length;i++){ if(!adj[i].length) continue; const d=Math.hypot(G.nodes[i][0]-x,G.nodes[i][1]-z);
-  if(best.length<k||d<best[best.length-1][1]){ best.push([i,d]); best.sort((a,b)=>a[1]-b[1]); if(best.length>k) best.pop(); } } return best; }
+// the k junctions nearest a point, searching outward ring by ring through a 1 km grid
+const NCELL=1000;
+function nearestNodes(x,z,k=6){ const best=[], cx=Math.floor(x/NCELL), cz=Math.floor(z/NCELL);
+  for(let ring=0;ring<200;ring++){
+    for(let gx=cx-ring;gx<=cx+ring;gx++) for(let gz=cz-ring;gz<=cz+ring;gz++){ if(Math.max(Math.abs(gx-cx),Math.abs(gz-cz))!==ring) continue;
+      for(const i of ngrid.get(gx+','+gz)||[]){ if(!adj[i].length) continue; const d=Math.hypot(G.nodes[i][0]-x,G.nodes[i][1]-z);
+        if(best.length<k||d<best[best.length-1][1]){ best.push([i,d]); best.sort((a,b)=>a[1]-b[1]); if(best.length>k) best.pop(); } } }
+    if(best.length>=k&&best[best.length-1][1]<=ring*NCELL) break; }
+  return best; }
 const offTime=(x0,z0,x1,z1)=>Math.hypot(x1-x0,z1-z0)/1000/OFF+Math.max(0,hRaw(x1,z1)-hRaw(x0,z0))/300;
 function heap(){ const a=[]; return {get size(){ return a.length; },
   push(t,i){ a.push([t,i]); let k=a.length-1; while(k){ const p=(k-1)>>1; if(a[p][0]<=a[k][0]) break; [a[p],a[k]]=[a[k],a[p]]; k=p; } },
@@ -67,7 +82,7 @@ function route(x0,z0,x1,z1){
   return {pts,segs,hours:best,km}; }
 // a trip: progress is measured in base hours, and spent faster or slower as light and heat change
 function makeTrip(rt){ const cum=[0]; for(const s of rt.segs) cum.push(cum[cum.length-1]+s.h); return {pts:rt.pts,segs:rt.segs,cum,total:cum[cum.length-1],done:0}; }
-function segOf(tr,done){ let k=0; while(k<tr.segs.length-1&&tr.cum[k+1]<=done) k++; return k; }
+function segOf(tr,done){ let a=0, b=tr.segs.length-1; while(a<b){ const m=(a+b+1)>>1; if(tr.cum[m]<=done) a=m; else b=m-1; } return a; }   // last leg starting at or before done
 function tripPos(tr,done=tr.done){ const k=segOf(tr,done), a=tr.pts[k], b=tr.pts[k+1], f=tr.segs[k].h>1e-9?Math.min(1,Math.max(0,(done-tr.cum[k])/tr.segs[k].h)):1;
   return {x:a[0]+(b[0]-a[0])*f, z:a[1]+(b[1]-a[1])*f, seg:k}; }
 // what a trip will cost from now: arrival time, water and hours spent lying up in the heat (a forecast; raiders aside)
@@ -97,16 +112,19 @@ const stale=kk=>kk.k===K.SCOUT&&st.minutes-kk.seen>=STALE;
 // ---------- a new campaign ----------
 function newGame(seed=20261003){
   st={v:VERSION, minutes:7*60+30, rng:seed>>>0, seq:1, know:R.sectors.map(row=>row.map(()=>({k:0,seen:0}))), squads:[], sites:{}, bands:[], base:{stock:{}}, log:[], enc:null, waitUntil:0};
-  for(const p of R.places) if(['town','village','hamlet'].includes(p.kind)){ const s=p.sector; for(let dr=-2;dr<=2;dr++) for(let dc=-2;dc<=2;dc++){ const kk=st.know[s[1]+dr]?.[s[0]+dc]; if(kk) kk.k=Math.max(kk.k,K.RUMOUR); } }
+  const HEARD={city:8,town:3,village:2,hamlet:1};   // everyone has heard of the cities; small places only nearby
+  for(const p of R.places){ const n=HEARD[p.kind]; if(!n||p.kind==='hamlet'&&Math.hypot(p.p[0]-homeXZ[0],p.p[1]-homeXZ[1])>25000) continue; const s=p.sector;
+    for(let dr=-n;dr<=n;dr++) for(let dc=-n;dc<=n;dc++){ const kk=st.know[s[1]+dr]?.[s[0]+dc]; if(kk&&Math.hypot(dr,dc)<=n+.4) kk.k=Math.max(kk.k,K.RUMOUR); } }
   { const [c,r]=homeSec; for(let dr=-7;dr<=7;dr++) for(let dc=-7;dc<=7;dc++){ const kk=st.know[r+dr]?.[c+dc], d=Math.hypot(dr,dc); if(!kk||d>7.4) continue; if(d<=3.4){ kk.k=K.SCOUT; kk.seen=st.minutes; } else kk.k=Math.max(kk.k,K.RUMOUR); } }
   const [hx,hz]=homeXZ, sq=(name,people,c,x,z)=>({name,people,c,x,z,water:people*WATER_CAP,pack:{},restHeat:false,trip:null,task:null,thirsty:false});
   st.squads.push(sq('Ranch party',4,'#e0a526',hx,hz), sq('Scouts',2,'#5b9fc4',hx+120,hz+80));
-  spawnBands(4); reveal(hx,hz); refreshCurrent();
+  spawnBands(4,6000,15000); spawnBands(10,15000,75000); reveal(hx,hz); refreshCurrent();   // a few bands close by, more out across the realm
   note('The ranch is quiet. Two squads are ready.');
   return st; }
-// raider bands: lairs well away from the ranch, near a road, spread apart
-function spawnBands(n){ const nodes=[]; for(let i=0;i<G.nodes.length;i++) if(adj[i].length){ const [x,z]=G.nodes[i]; if(Math.hypot(x-homeXZ[0],z-homeXZ[1])>6000) nodes.push(i); }
-  const lairs=[]; for(let tries=0;lairs.length<n&&tries<400;tries++){ const [x,z]=G.nodes[nodes[Math.floor(rand()*nodes.length)]]; if(lairs.every(([a,b])=>Math.hypot(a-x,b-z)>4500)) lairs.push([x,z]); }
+// raider bands: lairs between rmin and rmax from the ranch, near a road, spread apart
+function spawnBands(n,rmin,rmax){ const nodes=[]; for(let i=0;i<G.nodes.length;i++) if(adj[i].length){ const [x,z]=G.nodes[i], d=Math.hypot(x-homeXZ[0],z-homeXZ[1]); if(d>rmin&&d<rmax&&secAt(x,z)) nodes.push(i); }
+  if(!nodes.length) return;
+  const lairs=[]; for(let tries=0;lairs.length<n&&tries<400;tries++){ const [x,z]=G.nodes[nodes[Math.floor(rand()*nodes.length)]]; if(lairs.every(([a,b])=>Math.hypot(a-x,b-z)>4500)&&st.bands.every(b=>Math.hypot(b.lair[0]-x,b.lair[1]-z)>4500)) lairs.push([x,z]); }
   for(const [x,z] of lairs){ const size=3+Math.floor(rand()*4); st.bands.push({id:'b'+st.seq++, size, boss:size>=5, x, z, lair:[x,z], trip:null, campUntil:st.minutes+rand()*300, seen:null, cool:{}}); } }
 function note(msg){ st.log.unshift({t:st.minutes,msg}); if(st.log.length>40) st.log.length=40; }
 const fmtT=m=>{ const d=Math.floor(m/1440)+1, h=Math.floor(mod(m)/60), mm=Math.floor(m%60); return `Day ${d} ${String(h).padStart(2,'0')}:${String(mm).padStart(2,'0')}`; };
