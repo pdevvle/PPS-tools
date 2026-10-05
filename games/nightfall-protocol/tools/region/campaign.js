@@ -40,8 +40,16 @@ const secCentre=(c,r)=>[-HX+(c+.5)*SEC, -HZ+(r+.5)*SEC];
 const sameSec=(a,b)=>!!a&&!!b&&a[0]===b[0]&&a[1]===b[1];
 // the region file packs its sectors into columns (v2); give them back their per-sector shape once
 function unpack(R){ if(Array.isArray(R.sectors)) return;
-  const P=R.sectors, d=R.detail, T={t:'town',h:'homes',r:'rough',d:'desert'}; R.sectors=[];
-  for(let r=0;r<R.rows;r++){ const row=[]; for(let c=0;c<R.cols;c++){ const i=r*R.cols+c; row.push({b:P.b[i],sites:[],lo:P.lo[i],hi:P.hi[i],type:T[P.type[i]],fine:!!d&&c>=d.col&&r>=d.row&&c<d.col+d.cols&&r<d.row+d.rows}); } R.sectors.push(row); }
+  const P=R.sectors, d=R.detail, T={t:'town',h:'homes',r:'rough',d:'desert'}; R.sectors=[]; let lo=0;
+  for(let r=0;r<R.rows;r++){ const row=[]; for(let c=0;c<R.cols;c++){ const i=r*R.cols+c; lo+=P.lo[i];   // lo is stored as steps from the sector before
+    row.push({b:P.b[i],sites:[],lo,hi:lo+P.rise[i],type:T[P.type[i]],fine:!!d&&c>=d.col&&r>=d.row&&c<d.col+d.cols&&r<d.row+d.rows}); } R.sectors.push(row); }
+  if(!Array.isArray(R.sites)){ const S=R.sites; R.sites=S.rows.map(([x,z,l,w,name])=>({name:name||'',what:S.what[w],loot:S.loot[l],p:[x,z]})); }
+  if(!R.graph.edges){ const g=R.graph, nodes=[], edges=[]; let x=0,z=0,k=0;   // the graph comes in columns; back to [x,z] junctions and [a,b,len,class,inner,dirt] edges
+    for(let i=0;i<g.nodes.length;i+=2){ x+=g.nodes[i]; z+=g.nodes[i+1]; nodes.push([x,z]); }
+    for(let e=0;e<g.a.length;e++){ let [px,pz]=nodes[g.a[e]]; const inner=[];
+      for(let q=0;q<g.ni[e];q++){ px+=g.inner[k++]; pz+=g.inner[k++]; inner.push([px,pz]); }
+      edges.push([g.a[e],g.b[e],g.len[e],g.classes[g.cls[e]],inner,+g.dirt[e]]); }
+    R.graph={nodes,edges}; }
   R.sites.forEach((s,i)=>{ const c=Math.min(R.cols-1,Math.max(0,Math.floor((s.p[0]+R.half[0])/R.sector))), r=Math.min(R.rows-1,Math.max(0,Math.floor((s.p[1]+R.half[1])/R.sector))); s.sector=[c,r]; R.sectors[r][c].sites.push(i); }); }
 function init(region){ R=region; unpack(R); D=R.dem; DF=R.demFine||null; G=R.graph; HX=R.half[0]; HZ=R.half[1]; SEC=R.sector;
   adj=G.nodes.map(()=>[]); ngrid=new Map();

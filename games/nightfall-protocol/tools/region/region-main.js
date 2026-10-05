@@ -90,7 +90,9 @@ function layer(Dm,size,{fine,sink}){
   for(const a of R.areas) if(AC[a.kind]&&over(a.bb||(a.bb=bboxOf(a.pts)))) poly(a.pts,AC[a.kind]);
   for(const w of R.water) if(over(w.bb||(w.bb=bboxOf(w.pts)))){ const big=w.kind==='river'; line(w.pts,big?60:22,'#b39c78'); line(w.pts,big?40:12,'#e3d2ad'); }
   for(const l of R.lakes) if(over(l.bb||(l.bb=bboxOf(l.pts)))) poly(l.pts,'#4aa6c8');
-  const byCls=new Map(); for(const rd of R.roads){ if(!fine&&rd.d&&(rd.cls==='residential'||rd.cls==='track'||!RW[rd.cls])) continue; if(!over(rd.bb||(rd.bb=bboxOf(rd.pts)))) continue; if(!byCls.has(rd.cls)) byCls.set(rd.cls,[]); byCls.get(rd.cls).push(rd); }
+  // the corridor draws its own road list; the realm draws the travel graph's edges (the same roads, major ones only)
+  const src=fine||!DF?R.roads:R.graph.edges.filter(e=>RW[e[3]]&&e[3]!=='residential'&&e[3]!=='track').map(e=>({cls:e[3],dirt:!!e[5],pts:[R.graph.nodes[e[0]],...e[4],R.graph.nodes[e[1]]]}));
+  const byCls=new Map(); for(const rd of src){ if(!over(rd.bb||(rd.bb=bboxOf(rd.pts)))) continue; if(!byCls.has(rd.cls)) byCls.set(rd.cls,[]); byCls.get(rd.cls).push(rd); }
   for(const k of ORDER) for(const rd of byCls.get(k)||[]){ const w=RW[k]||8;
     if(rd.dirt) line(rd.pts,w,'#a88d68',k==='track'?[w*px*2,w*px*1.4]:null); else { if(w>12&&fine) line(rd.pts,w+8,'#e8dcc4'); line(rd.pts,w,k==='motorway'?'#3b3a38':'#5e5a54'); } }
   // hillshade from the north-west
@@ -116,7 +118,7 @@ const skirt=new THREE.Mesh(new THREE.PlaneGeometry(2000000,2000000),new THREE.Me
 const secAt=C.secAt, secCentre=C.secCentre, home=C.home, [hx0,hz0]=C.homeXZ;
 const KC=document.createElement('canvas'); KC.width=R.cols; KC.height=R.rows; const kg=KC.getContext('2d');
 const UC=document.createElement('canvas'); UC.width=R.cols; UC.height=R.rows; const ug=UC.getContext('2d');
-const hatchTile=(()=>{ const c=document.createElement('canvas'); c.width=c.height=16; const g=c.getContext('2d'); g.strokeStyle='rgba(30,26,22,.35)'; g.lineWidth=1.4; g.beginPath(); g.moveTo(0,16); g.lineTo(16,0); g.stroke(); return c; })();
+const hatchTile=n=>{ const c=document.createElement('canvas'); c.width=c.height=n; const g=c.getContext('2d'); g.strokeStyle='rgba(30,26,22,.35)'; g.lineWidth=Math.max(1,n/11); g.beginPath(); g.moveTo(0,n); g.lineTo(n,0); g.stroke(); return c; };   // n px: one stroke every 200 m on every layer
 let hoverSec=null, selSec=null;
 function drawOverlay(){ const know=S().know, ki=kg.createImageData(R.cols,R.rows), ui=ug.createImageData(R.cols,R.rows);
   for(let r=0;r<R.rows;r++) for(let c=0;c<R.cols;c++){ const kk=know[r][c], o=(r*R.cols+c)*4, set=(d,rgb,a)=>{ d.data[o]=rgb[0]; d.data[o+1]=rgb[1]; d.data[o+2]=rgb[2]; d.data[o+3]=a*255; };
@@ -127,7 +129,7 @@ function drawOverlay(){ const know=S().know, ki=kg.createImageData(R.cols,R.rows
     og.fillStyle='rgba(40,34,28,.35)'; og.fillRect(0,0,TX,TZ); og.clearRect(x0,z0,w,h);   // outside the realm: a soft vignette
     og.drawImage(KC,x0,z0,w,h);
     const t=document.createElement('canvas'); t.width=TX; t.height=TZ; const tg=t.getContext('2d');   // the hatch, only over unknown sectors
-    tg.fillStyle=tg.createPattern(hatchTile,'repeat'); tg.fillRect(0,0,TX,TZ); tg.globalCompositeOperation='destination-in'; tg.imageSmoothingEnabled=false; tg.drawImage(UC,x0,z0,w,h); og.drawImage(t,0,0);
+    tg.fillStyle=tg.createPattern(hatchTile(Math.max(4,Math.round(200*L.px))),'repeat'); tg.fillRect(0,0,TX,TZ); tg.globalCompositeOperation='destination-in'; tg.imageSmoothingEnabled=false; tg.drawImage(UC,x0,z0,w,h); og.drawImage(t,0,0);
     if(L.fine){ og.strokeStyle='rgba(40,32,24,.22)'; og.lineWidth=1; og.beginPath();
       for(let c=0;c<=R.cols;c++){ const x=X(-HX+c*SEC); if(x<0||x>TX) continue; og.moveTo(x,Math.max(0,z0)); og.lineTo(x,Math.min(TZ,z0+h)); }
       for(let r=0;r<=R.rows;r++){ const z=Zc(-HZ+r*SEC); if(z<0||z>TZ) continue; og.moveTo(Math.max(0,x0),z); og.lineTo(Math.min(TX,x0+w),z); } og.stroke(); }
