@@ -28,6 +28,13 @@ button.pri{background:var(--gold);color:#211b10;border-color:var(--gold)}
 .pop{position:absolute;left:0;top:0;font:700 15px var(--mono);color:#fff;text-shadow:0 1px 3px #000;pointer-events:none;transform:translate(-50%,-100%);z-index:2}
 .pop.miss{color:#d9d4c8}.pop.crit{color:#ffcf5a}.pop.info{color:#9fd3e6;font-size:13px}
 .hint{color:var(--muted);font:12px var(--mono);padding:5px}
+.ctx{position:absolute;z-index:5;min-width:190px;max-width:280px;background:rgba(24,24,26,.96);border:1px solid var(--line);border-radius:6px;padding:4px;box-shadow:0 6px 18px rgba(0,0,0,.45)}
+.ctx h3{margin:2px 6px 4px;font:600 12px var(--mono);color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
+.ctx button{display:flex;justify-content:space-between;gap:10px;width:100%;text-align:left;margin:0;border:0;background:transparent;padding:6px 8px;border-radius:4px;font:600 13px var(--body)}
+.ctx button:hover:not(:disabled),.ctx button:focus-visible{background:#2d2f33;outline:none}.ctx button span{font:12px var(--mono);color:#f3d38a}.ctx button:disabled span{color:var(--muted)}
+.ctx p{margin:2px 8px 4px;font:11px var(--mono);color:var(--muted)}
+.badge.plan{border-color:#4aa3ff;color:#cfe6ff}.badge.ghost{border-color:#6c6a66;color:#b9b6ae;background:rgba(24,24,26,.6)}.badge.over{border-color:#e2b0a8;color:#e2b0a8}
+.unit small{display:block;font:11px var(--mono);color:#9fc6ec;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px}
 .badges{position:absolute;inset:0;pointer-events:none;z-index:2}.badge{position:absolute;transform:translate(-50%,-100%);font:600 12px var(--mono);background:rgba(24,24,26,.82);border:1px solid #6e1a10;color:#f1eee8;padding:1px 5px;border-radius:3px;white-space:nowrap}
 .badge.flank{border-color:var(--gold);color:#f3d38a}.badge .arm{color:#9fd3e6}.badge.evac{border-color:#3fae7f;color:#9fd3a8}.badge.loot{border-color:var(--gold);color:#f3d38a}
 #stage.fp .bar,#stage.fp .hud,#stage.fp .log,#stage.fp .banner,#stage.fp .badges,#stage.fp .hover,#stage.fp .pop{display:none}
@@ -60,6 +67,7 @@ button.pri{background:var(--gold);color:#211b10;border-color:var(--gold)}
   <div class="banner" id="banner" hidden></div>
   <div class="badges" id="badges" aria-hidden="true"></div>
   <div class="fps" id="fps" hidden><div class="fps-vig"></div><div class="fps-x" id="fpsX"><i></i><i></i><i></i><i></i><b></b></div><div class="fps-top"><b id="fpsWho"></b><span id="fpsInfo"></span><i class="fps-bar"><s id="fpsBar"></s></i></div><p class="fps-help">Overwatch: aim with the mouse, click to fire · Esc lets the roll decide</p></div>
+  <div class="ctx" id="ctx" hidden role="menu"></div>
   <div class="bar" id="bar"><div class="units" id="units"></div><div class="acts" id="acts"></div></div>
 </div>
 </div>

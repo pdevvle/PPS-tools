@@ -52,14 +52,14 @@ Fighting inside procedurally generated buildings (task 7 in `briefs/combat-tasks
 
   Then hand checks on the Roadrunner: range is round, any point can be stood on, snapping, angled cover and a seeded replay. Run `node tools/combat/test-space.js`, or add `--quick` for the Roadrunner only.
 - `demo-script.js` and `demo.src.html` are the playable page.
-  - **Range**: glowing outlines, blue for one action and gold for a dash.
-  - **Hover**: a ring where the unit would stand, the route there, and a marker toward each raider: tall gold for full cover, short gold for half, flat red for flanked.
-  - **Sight**: drawn as fans cut by walls.
-  - **Breach**: stack on the gold (door) and blue (window) rings, then breach with free shots.
-  - **Fight**: XCOM turns, overwatch on the move, doors that open as units walk through, and glass that breaks.
-  - **Abilities**: each role's ability is on the action bar. Pipe bombs preview their arc, blast ring and who gets hit, and blown furniture is drawn as rubble.
-  - **Odds**: hovering a target shows how the hit chance was worked out.
-  - **End**: the summary counts kills, escapes, the squad's wounds and dead, hits and the daylight spent.
+  - **Pacing**: exploring is real time. A fight runs in rounds: you give every soldier orders, then press Go and the whole squad carries them out at once; then the raiders all act at once. Shots resolve as each soldier gets there, so two soldiers sent onto the same raider can find the second shot has nothing left to hit (the log says so and the summary counts wasted shots). Each raider badge shows how many shots are planned on them and their HP, and turns pink when more than one is.
+  - **Orders**: left click moves the selected soldier, inside the blue outline (move, then act) or the gold one (dash, no action). Right click a raider for that soldier's attacks with odds from where they will stand (free shot, shoot, shooting through a thin wall, revolver, slash, pipe bomb). Right click a thing for what can be done to it (stash, overturn furniture, close a door, set a breaching charge on a wall, get out), the soldier for their own actions (overwatch, hunker, reload, run and gun, first aid), and the ground to move then overwatch or hunker. There is no separate action menu.
+  - **What you see**: only the raiders your squad can see are drawn. A raider who fires or is hit shows briefly; one who slips out of sight leaves a "last seen ?" mark. The camera is low with a narrow lens (26°), so you read the room from the squad's level.
+  - **Hover**: a ring where the unit would stand, the route there, and a marker toward each raider in sight: tall gold for full cover, short gold for half, flat red for flanked.
+  - **Breach**: stack on the gold (door) and blue (window) rings (right click one), then breach; free shots fire the moment you press Go.
+  - **Walls**: a Breacher's charge cracks, holes or breaches a wall by its build-up (the interiors decide); shots go through stud walls, frame walls and closed doors at a penalty, not block or concrete.
+  - **Motion**: the shared motion module poses the figures: crouch-walking while concealed, aiming, shooting, reloading, hunkering, falling, and vaulting through windows.
+  - **End**: the summary counts kills, escapes, the squad's wounds and dead, hits, wasted shots and the daylight spent.
 
   The interiors renderer draws the building, including its cutaway walls.
 

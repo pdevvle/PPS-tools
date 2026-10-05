@@ -10,6 +10,8 @@
 const DIRS=[[1,0],[0,1],[-1,0],[0,-1]];
 const R=.3, NS=.5, EYE=1.5, FY=.15, YARD=.8, PAVED=1, LOW=.6, BUCKET=2, LEAN=.7, COVER_REACH=1.1;
 const COV={none:0,half:1,full:2};
+// how much of a round's push a wall soaks up, by its build-up (the interiors' WALLMAT); 0: stops it. A round has 3.
+const PIERCE={stud:1,frame:2};
 const EPS=1e-9;
 function rngOf(str){ let h=2166136261>>>0; for(let i=0;i<str.length;i++){ h^=str.charCodeAt(i); h=Math.imul(h,16777619); } let a=h>>>0; return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
 
@@ -43,7 +45,7 @@ function fromGenerated(G,opt={}){
   const roads=(G.site.roads||[]).map(r=>({w:r.w,pts:r.pts.map(p=>M.toL(p[0],p[1]))}));
   // ---------- what each obstacle does, from its current state ----------
   // door states: the change record's doors, keyed by floor like the interiors renderer reads them ('0:v5,12')
-  const doorSt=opt.doors||{}, LV=(G.level||0)+':';
+  const doorSt=opt.doors||{}, wallSt=opt.walls||{}, LV=(G.level||0)+':';
   const doorState=e=>doorSt[LV+e.key]!==undefined?doorSt[LV+e.key]:(e.door.state==='broken'?'broken':e.door.state==='barricaded'?'barricaded':e.door.open?'open':'closed');
   // solid: keeps bodies R away. cross: a body may pass through it (at extra effective metres).
   function props(o){
@@ -52,10 +54,13 @@ function fromGenerated(G,opt={}){
     if(o.kind==='yard'){ const tall=o.h>=EYE; return {solid:true,sight:!tall,shot:!tall,cover:o.h>=1.2?2:1,cross:false}; }
     const e=o.e;
     switch(e.type){
-      case 'wall': return {solid:true,sight:false,shot:false,cover:2,cross:false};
+      case 'wall': { const dm=wallSt[LV+e.key], s=dm?dm.s||0:0;
+        if(s>=3) return {solid:false,sight:true,shot:true,cover:1,cross:true,extra:1,opening:true,breach:true};   // breached: a way through
+        if(s>=2) return {solid:true,sight:true,shot:true,cover:1,cross:false};                                   // holed: see and shoot through
+        return {solid:true,sight:false,shot:false,cover:2,cross:false,pierce:PIERCE[e.mat]||0}; }
       case 'door': case 'gdoor': { const s=doorState(e);
         if(s==='open'||s==='broken') return {solid:false,sight:true,shot:true,cover:0,cross:true,extra:0,opening:true};
-        if(s==='closed') return {solid:false,sight:false,shot:false,cover:2,cross:e.type==='door',extra:1,opens:true,opening:true};
+        if(s==='closed') return {solid:false,sight:false,shot:false,cover:2,cross:e.type==='door',extra:1,opens:true,opening:true,pierce:1};
         return {solid:true,sight:false,shot:false,cover:2,cross:false,opening:true}; }
       case 'window': { const s=e.win.state; if(s==='boarded') return {solid:true,sight:false,shot:false,cover:2,cross:false,opening:true};
         return {solid:false,sight:true,shot:true,cover:1,cross:true,extra:s==='intact'?5:4,glass:s==='intact',climb:true,opening:true}; }
@@ -80,6 +85,12 @@ function fromGenerated(G,opt={}){
   function sight(p,q,o2){ const shot=o2&&o2.shot, col=o2&&o2.collect; let ok=true;
     near(p[0],p[1],q[0],q[1],o=>{ const t=hitT(o,p[0],p[1],q[0],q[1]); if(t<0) return; const pr=props(o); if(!(shot?pr.shot:pr.sight)){ ok=false; return false; } if(col&&pr.opening) col.push(o); });
     return ok; }
+  // a round fired from p at q that may punch through thin walls and doors: null if something stops it, else how many it went through
+  function shotThrough(p,q){ let push=3, walls=0, ok=true; const hits=[];
+    near(p[0],p[1],q[0],q[1],o=>{ const t=hitT(o,p[0],p[1],q[0],q[1]); if(t>=0) hits.push([t,o]); });
+    hits.sort((a,b)=>a[0]-b[0]);
+    for(const [,o] of hits){ const pr=props(o); if(pr.shot) continue; if(!pr.pierce){ ok=false; break; } push-=pr.pierce; walls++; if(push<0){ ok=false; break; } }
+    return ok?{walls}:null; }
   // how far a ray goes before something stops sight (for drawing what a unit sees)
   function castRay(p,ang,maxD){ const qx=p[0]+Math.sin(ang)*maxD, qz=p[1]+Math.cos(ang)*maxD; let best=1;
     near(p[0],p[1],qx,qz,o=>{ const t=hitT(o,p[0],p[1],qx,qz); if(t>=0&&t<best&&!props(o).sight) best=t; }); return best*maxD; }
@@ -108,13 +119,14 @@ function fromGenerated(G,opt={}){
   // Openings are portals: a door, window or counter links the nearest nodes on its two sides through its middle.
   // Ordinary steps never cross an opening, so every route goes through the centre of a doorway, never across a jamb.
   const portals=new Map();   // node -> [[m, length, [obstacle]]]
-  for(const o of obs){ if(o.kind!=='edge'||o.e.type==='wall') continue; const mx=(o.seg[0]+o.seg[2])/2, mz=(o.seg[1]+o.seg[3])/2, n=DIRS[o.e.dir];
+  function addPortal(o){ const mx=(o.seg[0]+o.seg[2])/2, mz=(o.seg[1]+o.seg[3])/2, n=DIRS[o.e.dir];
     const side=s=>{ const px=mx+n[0]*.6*s, pz=mz+n[1]*.6*s, n0=nodeAt(px,pz); if(n0<0) return -1; let best=-1, bd=1e9; const i0=n0%NW, j0=(n0/NW)|0;
       for(let dj=-2;dj<=2;dj++) for(let di=-2;di<=2;di++){ const m=(j0+dj)*NW+i0+di; if(m<0||m>=NN||!free[m]) continue; const d=Math.hypot(nx(m)-px,nz(m)-pz); if(d>.9||d>=bd) continue; const w=walkGeom([nx(m),nz(m)],[mx,mz]); if(!w||w.some(x=>x!==o)) continue; best=m; bd=d; }
       return best; };
-    const a=side(1), b=side(-1); if(a<0||b<0) continue; const L=Math.hypot(nx(a)-mx,nz(a)-mz)+Math.hypot(nx(b)-mx,nz(b)-mz);
-    for(const [u,v] of [[a,b],[b,a]]){ if(!portals.has(u)) portals.set(u,[]); portals.get(u).push([v,L,[o]]); } }
-  const links=new Array(NN);   // geometry of each step, cached: [m, length, openings crossed]
+    const a=side(1), b=side(-1); if(a<0||b<0) return; const L=Math.hypot(nx(a)-mx,nz(a)-mz)+Math.hypot(nx(b)-mx,nz(b)-mz);
+    for(const [u,v] of [[a,b],[b,a]]){ if(!portals.has(u)) portals.set(u,[]); portals.get(u).push([v,L,[o]]); links[u]=undefined; } o.portal=true; }
+  const links=new Array(NN);
+  for(const o of obs) if(o.kind==='edge'&&o.e.type!=='wall') addPortal(o);   // geometry of each step, cached: [m, length, openings crossed]
   function linksOf(n){ let L=links[n]; if(L) return L; L=[]; const i=n%NW, j=(n/NW)|0, a=[nx(n),nz(n)];
     for(const [di,dj] of OFF){ const ii=i+di, jj=j+dj; if(ii<0||jj<0||ii>=NW||jj>=NH) continue; const m=jj*NW+ii; if(!free[m]) continue;
       const w=walkGeom(a,[nx(m),nz(m)]); if(!w||w.length) continue; L.push([m,Math.hypot(di,dj)*NS,w]); }
@@ -123,7 +135,7 @@ function fromGenerated(G,opt={}){
   // geometry-only step test between two field nodes (ignores door states, which change): null if a body walking it
   // would come within R of anything solid, else the openings it crosses
   function walkGeom(a,b){ let ok=true; const crossed=[], ax=a[0], az=a[1], bx=b[0], bz=b[1];
-    near(ax-R,az-R,bx+R,bz+R,o=>{ if(o.kind==='edge'&&o.e.type!=='wall'){ if(segSeg(ax,az,bx,bz,o.seg[0],o.seg[1],o.seg[2],o.seg[3])>=0) crossed.push(o); return; }
+    near(ax-R,az-R,bx+R,bz+R,o=>{ if(o.kind==='edge'&&(o.e.type!=='wall'||o.portal)){ if(segSeg(ax,az,bx,bz,o.seg[0],o.seg[1],o.seg[2],o.seg[3])>=0) crossed.push(o); return; }
       const hit=o.box?segBox(ax,az,bx,bz,grow(o.box,R-1e-6))>=0:segSegDist(ax,az,bx,bz,o.seg[0],o.seg[1],o.seg[2],o.seg[3])<(o.t||0)+R-1e-6;
       if(hit){ ok=false; return false; } });
     return ok?crossed:null; }
@@ -221,6 +233,10 @@ function fromGenerated(G,opt={}){
       const old=o.box; fileObs(o,false); o.mv=mv; const b=mv.box; o.box={x0:b[0]+.04,z0:b[2]+.04,x1:b[3]-.04,z1:b[5]-.04}; o.h=b[4]-FY; o.cover=mv.cover; o.flat=!mv.cells||!mv.cells.length;
       if(o.flat) lows.push(o.box); fileObs(o,true); refreshField(old); refreshField(o.box); n++; }
     return n; }
+  // Follow wall damage from the change record (rec.walls['level:key'] = {s}: 2 holed, 3 breached). A breached wall
+  // becomes a way through; nodes near it are re-checked.
+  function syncWalls(){ let n=0; for(const o of obs){ if(o.kind!=='edge'||o.e.type!=='wall'||o.portal) continue; const dm=wallSt[LV+o.e.key]; if(!dm||(dm.s||0)<3) continue;
+      addPortal(o); const b=bboxOf(o); refreshField({x0:b.x0,z0:b.z0,x1:b.x1,z1:b.z1}); n++; } return n; }
   // what a blast at c reaches within r: furniture, doors and windows the blast can see (walls and closed doors shelter)
   function blastReach(c,r){ const items=[], openings=[], cand=[];
     near(c[0]-r,c[1]-r,c[0]+r,c[1]+r,o=>{ cand.push(o); });   // gather first: sight() searches the hash too, so it can't run inside near()
@@ -231,7 +247,7 @@ function fromGenerated(G,opt={}){
     return {items,openings}; }
   // doors between rooms, for watching doorways
   const innerDoors=()=>obs.filter(o=>o.kind==='edge'&&!o.ext&&/door/.test(o.e.type));
-  return {G,R,EYE,FY,LV,destroyItem,blastReach,innerDoors,syncMoves,X0,Z0,X1,Z1,obs,props,doorSt,doorState,sight,castRay,coverFrom,clearAt,walk,speedAt,field,costTo,pathTo,snap,nearestCover,coverSpots,leans,entries,setDoor,setWindow,people,posted,frontApproach,
+  return {G,R,EYE,FY,LV,destroyItem,blastReach,innerDoors,syncMoves,syncWalls,shotThrough,wallSt,X0,Z0,X1,Z1,obs,props,doorSt,doorState,sight,castRay,coverFrom,clearAt,walk,speedAt,field,costTo,pathTo,snap,nearestCover,coverSpots,leans,entries,setDoor,setWindow,people,posted,frontApproach,
     insideAt, floorY:(x,z)=>insideAt(x,z)?FY:0, NS, NW, NH, nodeX:nx, nodeZ:nz, nodeAt, free};
 }
 return {fromGenerated,R,EYE,DIRS,segSeg,segBox,ptSeg};

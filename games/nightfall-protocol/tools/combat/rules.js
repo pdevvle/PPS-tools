@@ -5,7 +5,7 @@
 (function(root,factory){ const m=factory(); if(typeof module==='object'&&module.exports) module.exports=m; else root.CombatRules=m; })(this,function(){
 const V={aim:{squad:72,raider:60},halfCover:20,fullCover:40,hunker:20,reaction:15,free:10,steady:15,
   crit:10,critFlanked:40,move:12,sight:16,cone:Math.PI*.36,around:5,spot:30,overwatch:28,minutesPerTurn:5,
-  throwRange:12,blastRadius:3,blastDmg:3,bleed:3,aidHeal:3,runGunCooldown:3,doorway:1.3};
+  throwRange:12,blastRadius:3,throughWall:20,blastDmg:3,bleed:3,aidHeal:3,runGunCooldown:3,doorway:1.3};
 
 // Range profiles: how aim changes with distance. Short weapons want to be close, long ones want room.
 const PROFILES={
@@ -54,7 +54,9 @@ const dist=(a,b)=>Math.hypot(a.x-b.x,a.z-b.z);
 // can a see b, with both allowed to lean out of cover; returns the two points that worked
 function lineOfFire(w,a,b,opt){ const shot=!opt||opt.shot!==false, pa=P(a), pb=P(b);
   const as=[pa,...w.leans(pa,pb)], bs=[pb,...w.leans(pb,pa)];
-  for(const x of as) for(const y of bs) if(w.sight(x,y,{shot})) return {from:x,to:y};
+  for(const x of as) for(const y of bs) if(w.sight(x,y,{shot})) return {from:x,to:y,walls:0};
+  // a round can punch through drywall, stucco and doors at someone the squad knows is there (opt.pierce)
+  if(opt&&opt.pierce&&w.shotThrough){ const t=w.shotThrough(pa,pb); if(t&&t.walls) return {from:pa,to:pb,walls:t.walls}; }
   return null; }
 
 // Hit and crit chance for one shot, with the reasons, so the page can show where the number comes from.
@@ -70,6 +72,7 @@ function odds(w,a,b,o={}){ const W=o.weapon||a.weapon||WEAPONS.carbine, melee=!!
   if(o.free) why.push(['First strike',V.free]);
   if(o.steady) why.push(['Steady aim',V.steady]);
   if(o.mod) why.push([o.modLabel||'Entry',o.mod]);
+  if(o.walls) why.push([o.walls>1?`Through ${o.walls} walls`:'Through a wall',-V.throughWall*o.walls]);
   if(b.def) why.push(['Defence',-b.def]);
   let aim=0; for(const [,v] of why) aim+=v; aim=Math.max(5,Math.min(95,Math.round(aim)));
   return {aim,crit:Math.min(100,(cv===0?V.critFlanked:V.crit)+(W.crit||0)),cover:cv,flanked:cv===0,d,why}; }
@@ -143,6 +146,13 @@ function meleeSpot(w,F,u,f,units){ if(dist(u,f)<=MELEE&&w.sight(P(u),P(f),{shot:
   for(let k=0;k<12;k++){ const a=k/12*Math.PI*2, p=[f.x+Math.sin(a)*.9,f.z+Math.cos(a)*.9]; if(occ.some(x=>Math.hypot(x.x-p[0],x.z-p[1])<.65)) continue;
     const c=w.costTo(F,p); if(!c||c.over) continue; if(!w.sight(p,P(f),{shot:true})) continue; if(!best||c.cost<best.cost) best={p,cost:c.cost}; }
   if(best) best.path=w.pathTo(F,best.p); return best&&best.path?best:null; }
+// Both of a unit's actions decided at once, for a side that plays all its units together: decide the first from
+// where it stands, then the second from where the first move leaves it. Returns up to two decisions.
+function planAI(w,u,units,r,opt={}){ const out=[], x0=u.x, z0=u.z, ap0=u.ap; u.ap=opt.scramble?1:2;
+  for(let k=0;k<(opt.scramble?1:2)&&u.ap>0;k++){ const a=decide(w,u,units,r,opt); out.push(a);
+    if(a.type==='move'){ u.x=a.to[0]; u.z=a.to[1]; u.ap--; if(a.flee) continue; continue; }
+    break; }
+  u.x=x0; u.z=z0; u.ap=ap0; return out; }
 // A whole fight with no rendering: both sides use decide(). Moves are instant; overwatch fires at the end of a move.
 // The tests use it to show a seeded fight replays exactly.
 function simulate(w,units,seed,maxRounds){ const r=rng(seed), log=[]; maxRounds=maxRounds||30; let minutes=0;
@@ -166,5 +176,5 @@ function simulate(w,units,seed,maxRounds){ const r=rng(seed), log=[]; maxRounds=
       if(!standing('squad')||!standing('raider')) return {winner:standing('squad')?'squad':'raider',rounds:round,minutes,log}; } }
   return {winner:null,rounds:maxRounds,minutes,log}; }
 
-return {V,PROFILES,WEAPONS,ROLES,SECONDARY,RANKS,XP_REQ,rankOf,MELEE,meleeSpot,makeUnit,rng,hash32,dist,lineOfFire,odds,roll,hurt,blastHits,sees,atDoorway,morale,decide,simulate};
+return {V,planAI,PROFILES,WEAPONS,ROLES,SECONDARY,RANKS,XP_REQ,rankOf,MELEE,meleeSpot,makeUnit,rng,hash32,dist,lineOfFire,odds,roll,hurt,blastHits,sees,atDoorway,morale,decide,simulate};
 });

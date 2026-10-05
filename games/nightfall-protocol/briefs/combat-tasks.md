@@ -343,6 +343,8 @@ Also done:
 
 After reviewing the original game and the outdoor demo, the features they had are folded in; see the table in `tools/combat/README.md`. Loot (7g) has started: the stash objective uses the generator's stash contents.
 
+**Pacing (planned rounds)**: a fight is now a round of orders for the whole squad, carried out at once when you press Go, then the raiders all at once. Attacks on the same target can be wasted, which is part of the tactics. Attacks come from right clicking a raider or a thing; vision is the squad's (fog of war), with a low, narrow camera.
+
 Still to do: holdouts (7f), the result record back to the map (task 5), and joining the streamed world (step 3).
 
 ### 7h. Order of work for 7
