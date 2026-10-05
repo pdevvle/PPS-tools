@@ -1,6 +1,6 @@
 # Build the pilot region file: 600 m sector grid, sites, a travel graph from real roads, terrain and scenery.
 # Map data (c) OpenStreetMap contributors, ODbL. Elevation: Mapzen Terrain Tiles on AWS.
-import json, math, glob, collections
+import json, math, glob, collections, os
 from prep import elev   # zoom-aware elevation sampler from the sector pipeline
 
 S,W,N,E = 33.80, -112.24, 34.09, -112.04
@@ -9,9 +9,20 @@ P=lambda la,lo:(round((lo-lon0)*kx,1), round(-(la-lat0)*ky,1))
 HX=round((E-W)/2*kx); HZ=round((N-S)/2*ky); SEC=600
 COLS=int(2*HX//SEC); ROWS=int(2*HZ//SEC); HX=COLS*SEC/2; HZ=ROWS*SEC/2
 
-els={}
+# Downloads overlap, and some (the sector and context files) clip way geometry to their own box, leaving nulls.
+# Keep every coordinate any copy knows, per OSM node id, so a clipped copy never hides a road another file has whole.
+els={}; ncoord={}
 for f in sorted(glob.glob('reg_*.json'))+['anthem.json','newriver.json','places.json','pois.json','context.json']:   # earlier sector downloads fill gaps
-    for e in json.load(open(f))['elements']: els[(e['type'],e['id'])]=e
+    if not os.path.exists(f): print('missing',f); continue
+    for e in json.load(open(f))['elements']:
+        k=(e['type'],e['id'])
+        if e['type']=='way' and e.get('nodes') and e.get('geometry'):
+            for n,q in zip(e['nodes'],e['geometry']):
+                if q: ncoord[n]=(q['lat'],q['lon'])
+        if k in els and e['type']=='way' and len([q for q in e.get('geometry',[]) if q])<len([q for q in els[k].get('geometry',[]) if q]): continue   # keep the fuller copy's tags and centre
+        els[k]=e
+for (typ,_),e in els.items():   # rebuild each way's geometry from the merged node coordinates
+    if typ=='way' and e.get('nodes'): e['geometry']=[{'lat':ncoord[n][0],'lon':ncoord[n][1]} if n in ncoord else None for n in e['nodes']]
 print(len(els),'elements')
 
 def simp(pts,tol):
@@ -53,8 +64,14 @@ for (typ,_),e in els.items():
         sites.append({'name':t.get('name',''),'what':v,'loot':loot_of(v),'p':c});
         if 'building' not in t: continue
     if typ!='way' or not g: continue
-    if 'highway' in t:
-        ways.append({'nodes':e.get('nodes',[]),'pts':g,'cls':t['highway'],'surface':t.get('surface','')}); continue
+    if 'highway' in t:   # a way with nodes nobody downloaded is split at the gap rather than dropped
+        run_n=[]; run_p=[]
+        for n,q in zip(e.get('nodes',[]),e.get('geometry',[])):
+            if q: run_n.append(n); run_p.append(P(q['lat'],q['lon'])); continue
+            if len(run_p)>=2: ways.append({'nodes':run_n,'pts':run_p,'cls':t['highway'],'surface':t.get('surface','')})
+            run_n=[]; run_p=[]
+        if len(run_p)>=2: ways.append({'nodes':run_n,'pts':run_p,'cls':t['highway'],'surface':t.get('surface','')})
+        continue
     if 'building' in t:
         if inside(*c):
             xs=[p[0] for p in g]; zs=[p[1] for p in g]; w=max(4,min(60,max(xs)-min(xs))); d=max(4,min(60,max(zs)-min(zs)))
@@ -64,7 +81,7 @@ for (typ,_),e in els.items():
     if t.get('natural')=='water': lakes.append({'pts':[list(map(round,p)) for p in simp(g,6)]}); continue
     if 'landuse' in t: areas.append({'kind':t['landuse'],'pts':[list(map(round,p)) for p in simp(g,8)]}); continue
 
-# travel graph: split ways at shared OSM nodes; edge = (a, b, length m, class)
+# travel graph: split ways at shared OSM nodes; edge = (a, b, length m, class, [inner points along the road, a to b])
 use=collections.Counter()
 for w in ways:
     for i,n in enumerate(w['nodes']): use[n]+= 2 if i in (0,len(w['nodes'])-1) else 1
@@ -73,14 +90,42 @@ def node(osm,p):
     if osm not in nid: nid[osm]=len(nodes); nodes.append([round(p[0]),round(p[1])])
     return nid[osm]
 for w in ways:
-    if len(w['nodes'])!=len(w['pts']) or len(w['pts'])<2: continue
     start=0; L=0
     for i in range(1,len(w['pts'])):
         L+=math.dist(w['pts'][i-1],w['pts'][i])
         if use[w['nodes'][i]]>1 or i==len(w['pts'])-1:
             a=node(w['nodes'][start],w['pts'][start]); b=node(w['nodes'][i],w['pts'][i])
-            if a!=b: edges.append([a,b,round(L),w['cls']])
+            inner=[list(map(round,p)) for p in simp(w['pts'][start:i+1],4)[1:-1]]
+            if a!=b: edges.append([a,b,round(L),w['cls'],inner])
             start=i; L=0
+# join loose ends: a dead end within SNAP m of another piece of the network (a seam between downloads, a road
+# mapped to stop just short of the one it meets) gets a short link, so the pieces route as one
+SNAP=12
+deg=collections.Counter(); 
+for e in edges: deg[e[0]]+=1; deg[e[1]]+=1
+parent=list(range(len(nodes)))
+def find(i):
+    while parent[i]!=i: parent[i]=parent[parent[i]]; i=parent[i]
+    return i
+for e in edges: parent[find(e[0])]=find(e[1])
+grid=collections.defaultdict(list)
+for i,(x,z) in enumerate(nodes):
+    if deg[i]: grid[(int(x//SNAP),int(z//SNAP))].append(i)
+snapped=0
+for i,(x,z) in enumerate(nodes):
+    if deg[i]!=1: continue
+    best=None; bd=SNAP
+    for gx in range(int(x//SNAP)-1,int(x//SNAP)+2):
+        for gz in range(int(z//SNAP)-1,int(z//SNAP)+2):
+            for j in grid[(gx,gz)]:
+                if find(j)==find(i): continue
+                d=math.dist(nodes[i],nodes[j])
+                if d<bd: bd=d; best=j
+    if best is not None:
+        edges.append([i,best,max(1,round(bd)),'link',[]]); parent[find(i)]=find(best); snapped+=1
+comp=collections.Counter(find(i) for i in range(len(nodes)) if deg[i])
+sizes=sorted(comp.values(),reverse=True)
+print('graph:',len(nodes),'nodes',len(edges),'edges,',snapped,'loose ends joined,',len(sizes),'pieces, largest',sizes[:5],f'({100*sizes[0]/sum(sizes):.0f}% of junctions)')
 # drawable roads, simplified by class
 TOL={'motorway':6,'motorway_link':4,'trunk':6,'primary':6,'secondary':5,'tertiary':5,'unclassified':5,'residential':4,'track':6}
 for w in ways:

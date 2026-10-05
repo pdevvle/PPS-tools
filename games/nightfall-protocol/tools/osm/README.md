@@ -10,7 +10,13 @@ The sectors in `data/sectors/` are 600 m squares around Anthem's town centre (Sa
 
 ## The pilot region
 
-`regionfetch.sh` downloads the region box (33.80 to 34.09 N, 112.24 to 112.04 W) from Overpass in eight tiles, retrying each until the server answers. `prep_region.py` merges those tiles with the earlier sector downloads and writes `../../data/region/region_i17.json`: a 600 m sector grid with building counts, sites, elevation range and ground type per sector; a 100 m height grid with a 3 km apron; drawable roads, washes, lakes and land use; towns and peaks; and a travel graph built by splitting roads at shared OSM nodes. The committed file has seven of the eight tiles; the south-east corner (east of Anthem) comes only from the earlier Anthem sector download. Rerun both scripts once that tile downloads.
+`regionfetch.sh` downloads the region box (33.80 to 34.09 N, 112.24 to 112.04 W) from Overpass in eight tiles, retrying each until the server answers. `prep_region.py` merges those tiles with the earlier sector downloads and writes `../../data/region/region_i17.json`: a 600 m sector grid with building counts, sites, elevation range and ground type per sector; a 100 m height grid with a 3 km apron; drawable roads, washes, lakes and land use; towns and peaks; and a travel graph built by splitting roads at shared OSM nodes.
+
+How the graph is built:
+- **Merging downloads**: the sector and context downloads clip way geometry to their own box, so a road can arrive with gaps. Before splitting, every coordinate any download has for an OSM node is merged, so a clipped copy can't hide a road that a tile has whole. A road that still has gaps is split at them rather than dropped.
+- **Shapes**: each link stores its inner points (simplified to 4 m) as a fifth field, so travel on the map follows the bends.
+- **Loose ends**: a dead end within 12 m of a separate piece of the network gets a short `link` edge.
+- **Health check**: the script prints how many separate pieces the graph has and the share of junctions in the largest one. Check that line after a rebuild. The committed file has seven of the eight tiles; the south-east corner (east of Anthem) comes only from the earlier Anthem sector download. Rerun both scripts once that tile downloads.
 
 `prep_block.py` cuts a block of sectors out of the same download for the streaming prototype; see `../stream/README.md`.
 

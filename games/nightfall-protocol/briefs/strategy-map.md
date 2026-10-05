@@ -94,7 +94,7 @@ The region map as the strategic layer: several squads at once on real roads, tim
 
 ## Known gaps
 
-- The south-east tile (east Anthem) failed to download. Rerun `regionfetch.sh` and then `prep_region.py`.
+- **Road graph in the committed data is broken into 91 pieces.** Anthem, Desert Hills and New River village are cut off from the ranch, so squads walk there overland. `prep_region.py` is fixed: it merges clipped downloads, splits roads at gaps instead of dropping them, joins loose ends and keeps each link's shape, and `campaign.js` follows those shapes. On a New River test it cut 33 pieces to 6. `region_i17.json` still needs rebuilding: run `regionfetch.sh` (which also brings in the missing south-east tile, east Anthem), then `prep_region.py`, from a machine that can reach Overpass.
 - Saving uses the viewer's browser only, and the standalone map and the zoom page share it when they're served from the same origin.
 - Fights off the baked block are a quick placeholder until the tactical ground covers more of the corridor.
 - No weather beyond the daily heat curve, no moon, no traders, no seasons. Night has no extra danger yet.

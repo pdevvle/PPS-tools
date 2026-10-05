@@ -109,7 +109,7 @@ const LOOT=['food','medicine','tools','fuel','gear','water','shelter','goods'];
 // what one unit of each loot category is and what it weighs; base.stock holds these units for the base (building.md)
 const UNIT={food:{name:'rations',kg:1},medicine:{name:'med kits',kg:.5},tools:{name:'parts',kg:2},fuel:{name:'L fuel',kg:.8},gear:{name:'gear',kg:2},water:{name:'L water',kg:1},shelter:{name:'materials',kg:5},goods:{name:'trade goods',kg:1}};
 const CARRY=25, WATER_CAP=6;   // kg a person carries, water included; litres of water a person carries at most
-const SPEED={motorway:5,motorway_link:5,trunk:5,primary:5,secondary:5,tertiary:5,unclassified:5,residential:5,track:4}, OFF=2.5;
+const SPEED={motorway:5,motorway_link:5,trunk:5,primary:5,secondary:5,tertiary:5,unclassified:5,residential:5,track:4,link:4}, OFF=2.5;   // link: a short join between pieces of the network (prep_region.py)
 const STEP=5;   // game minutes per simulation step at most
 
 // ---------- light and heat: early summer in the Sonoran desert ----------
@@ -140,8 +140,8 @@ const secCentre=(c,r)=>[-HX+(c+.5)*SEC, -HZ+(r+.5)*SEC];
 const sameSec=(a,b)=>!!a&&!!b&&a[0]===b[0]&&a[1]===b[1];
 function init(region){ R=region; D=R.dem; G=R.graph; HX=R.half[0]; HZ=R.half[1]; SEC=R.sector;
   adj=G.nodes.map(()=>[]);
-  for(const [a,b,len,cls] of G.edges){ const t=len/1000/(SPEED[cls]||4), ha=hRaw(...G.nodes[a]), hb=hRaw(...G.nodes[b]);   // +1 h per 300 m climbed
-    adj[a].push([b,t+Math.max(0,hb-ha)/300]); adj[b].push([a,t+Math.max(0,ha-hb)/300]); }
+  for(const [a,b,len,cls,inner=[]] of G.edges){ const t=len/1000/(SPEED[cls]||4), ha=hRaw(...G.nodes[a]), hb=hRaw(...G.nodes[b]);   // +1 h per 300 m climbed
+    adj[a].push([b,t+Math.max(0,hb-ha)/300,inner]); adj[b].push([a,t+Math.max(0,ha-hb)/300,inner.slice().reverse()]); }   // inner: the road's shape between the two junctions
   homeSec=secAt(R.home[0]+700,R.home[1]);   // just east of New River, on the ranch side
   homeXZ=secCentre(...homeSec); }
 function nearestNodes(x,z,k=6){ const best=[]; for(let i=0;i<G.nodes.length;i++){ if(!adj[i].length) continue; const d=Math.hypot(G.nodes[i][0]-x,G.nodes[i][1]-z);
@@ -152,15 +152,17 @@ function heap(){ const a=[]; return {get size(){ return a.length; },
   pop(){ const top=a[0], last=a.pop(); if(a.length){ a[0]=last; let k=0; for(;;){ const l=2*k+1, r=l+1; let m=k; if(l<a.length&&a[l][0]<a[m][0]) m=l; if(r<a.length&&a[r][0]<a[m][0]) m=r; if(m===k) break; [a[m],a[k]]=[a[k],a[m]]; k=m; } } return top; } }; }
 // fastest way on the road graph (Dijkstra), walking off-road to and from it; each leg keeps its base hours and whether it is off-road
 function route(x0,z0,x1,z1){
-  const direct=offTime(x0,z0,x1,z1), B=new Set(nearestNodes(x1,z1).map(([i])=>i)), dist=new Map(), prev=new Map(), h=heap();
+  const direct=offTime(x0,z0,x1,z1), B=new Set(nearestNodes(x1,z1).map(([i])=>i)), dist=new Map(), prev=new Map(), via=new Map(), h=heap();
   for(const [i] of nearestNodes(x0,z0)){ const t=offTime(x0,z0,...G.nodes[i]); if(!dist.has(i)||t<dist.get(i)){ dist.set(i,t); prev.set(i,-1); h.push(t,i); } }
   let best=direct, bestEnd=-1;
   while(h.size){ const [t,i]=h.pop(); if(t>dist.get(i)||t>=best) continue;
     if(B.has(i)){ const tt=t+offTime(...G.nodes[i],x1,z1); if(tt<best){ best=tt; bestEnd=i; } }
-    for(const [j,et] of adj[i]){ const nt=t+et; if(!dist.has(j)||nt<dist.get(j)){ dist.set(j,nt); prev.set(j,i); h.push(nt,j); } } }
+    for(const [j,et,inner] of adj[i]){ const nt=t+et; if(!dist.has(j)||nt<dist.get(j)){ dist.set(j,nt); prev.set(j,i); via.set(j,inner); h.push(nt,j); } } }
   const pts=[[x0,z0]], segs=[];
   if(bestEnd>=0){ const chain=[]; for(let i=bestEnd;i!==-1;i=prev.get(i)) chain.push(i); chain.reverse();
-    let tp=0; chain.forEach((i,k)=>{ const t=dist.get(i); pts.push(G.nodes[i].slice()); segs.push({h:t-tp,off:k===0}); tp=t; });
+    let tp=0; chain.forEach((i,k)=>{ const t=dist.get(i), shape=k?[...(via.get(i)||[]),G.nodes[i]]:[G.nodes[i]];   // follow the road's bends, sharing the leg's time by length
+      let L=0; const ls=shape.map((p,q)=>{ const a=q?shape[q-1]:pts[pts.length-1], l=Math.hypot(p[0]-a[0],p[1]-a[1]); L+=l; return l; });
+      shape.forEach((p,q)=>{ pts.push(p.slice()); segs.push({h:(t-tp)*(L>0?ls[q]/L:1/shape.length),off:k===0}); }); tp=t; });
     pts.push([x1,z1]); segs.push({h:best-tp,off:true}); }
   else { pts.push([x1,z1]); segs.push({h:direct,off:true}); }
   let km=0; for(let i=1;i<pts.length;i++) km+=Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1])/1000;
