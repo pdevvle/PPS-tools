@@ -8,7 +8,7 @@
 // around the footprint. Runs in Node for tests; no rendering in here.
 (function(root,factory){ const m=factory(); if(typeof module==='object'&&module.exports) module.exports=m; else root.InteriorSpace=m; })(this,function(){
 const DIRS=[[1,0],[0,1],[-1,0],[0,-1]];
-const R=.3, NS=.5, EYE=1.5, FY=.15, YARD=.8, PAVED=1, LOW=.6, BUCKET=2, LEAN=.7, COVER_REACH=1.1;
+const R=.3, NS=.5, EYE=1.5, FY=.15, YARD=.8, PAVED=1, LOW=.6, BUCKET=2, LEAN=.7, COVER_REACH=1.1, VAULT=1.3;   // windows with a sill above VAULT are too high to climb through
 const COV={none:0,half:1,full:2};
 // how much of a round's push a wall soaks up, by its build-up (the interiors' WALLMAT); 0: stops it. A round has 3.
 const PIERCE={stud:1,frame:2};
@@ -63,7 +63,7 @@ function fromGenerated(G,opt={}){
         if(s==='closed') return {solid:false,sight:false,shot:false,cover:2,cross:e.type==='door',extra:1,opens:true,opening:true,pierce:1};
         return {solid:true,sight:false,shot:false,cover:2,cross:false,opening:true}; }
       case 'window': { const s=e.win.state; if(s==='boarded') return {solid:true,sight:false,shot:false,cover:2,cross:false,opening:true};
-        return {solid:false,sight:true,shot:true,cover:1,cross:true,extra:s==='intact'?5:4,glass:s==='intact',climb:true,opening:true}; }
+        return {solid:false,sight:true,shot:true,cover:1,cross:(e.win.sill==null?.9:e.win.sill)<=VAULT,extra:s==='intact'?5:4,glass:s==='intact',climb:true,opening:true}; }
       case 'counter': return {solid:false,sight:true,shot:true,cover:1,cross:true,extra:3,climb:true,opening:true};
       default: return {solid:true,sight:false,shot:false,cover:2,cross:false};
     } }

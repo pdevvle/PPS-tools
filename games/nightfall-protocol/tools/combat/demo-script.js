@@ -226,7 +226,7 @@ const others=except=>S.units.filter(u=>u.alive&&u!==except).map(P).concat(S.unit
 function select(u){ if(!u||!u.alive||u.evac) return; S.sel=u; S.mode='move'; closeMenu(); arc.visible=false; inkAll(); S.camGoal={x:u.x,z:u.z}; drawReach(); drawSight(); drawOrders(); drawBar(); drawHud(); if(S.phase==='explore') drawEntries(); }
 const squad=()=>S.units.filter(u=>u.team==='squad');
 const standing=()=>squad().filter(u=>u.alive&&!u.evac);
-function usable(e,u){ if(!S.w.clearAt(e.out[0],e.out[1])) return false; if(S.w.props(e.o).cross&&e.kind!=='garage') return true; return !!(u&&u.role==='breacher'&&u.kit.charge>0&&(e.kind!=='garage')); }
+function usable(e,u){ if(!S.w.clearAt(e.out[0],e.out[1])) return false; if(e.kind==='window'&&(e.e.win.sill==null?.9:e.e.win.sill)>1.3) return false; if(S.w.props(e.o).cross&&e.kind!=='garage') return true; return !!(u&&u.role==='breacher'&&u.kit.charge>0&&(e.kind!=='garage')); }
 const entryAt=u=>S.w.entries().find(e=>Math.hypot(e.out[0]-u.x,e.out[1]-u.z)<1.1&&usable(e,u)&&!squad().some(v=>v!==u&&v.stack===e));
 const itemName=k=>k.replace(/\d+$/,'').replace(/([a-z])([A-Z])/g,'$1 $2').toLowerCase();
 const boxDist=(b,x,z)=>Math.hypot(Math.max(b.x0-x,0,x-b.x1),Math.max(b.z0-z,0,z-b.z1));
@@ -244,7 +244,7 @@ function drawBar(){ const u=S.sel;
     actsEl.innerHTML=(nearStash(u)?'<button type="button" class="pri" data-a="search">Take the stash</button>':'')+(e?`<button type="button" data-a="stack" aria-pressed="${!!u.stack}">${u.stack?'Unstack':(blown?'Set charge on ':'Stack at ')+(e.kind==='window'?'window':e.role==='front'?'front door':e.role==='back'?'back door':'side door')}</button>`:'')+
       `<button type="button" class="pri" data-a="breach" ${stacked.length&&!S.busy?'':'disabled'}>Breach${stacked.length?' ('+stacked.length+')':''} [B]</button><button type="button" data-a="fire" ${anyLine?'':'disabled'}>Open fire</button><button type="button" data-a="wait" ${S.busy?'disabled':''}>Wait</button>`; return; }
   const n=standing().filter(v=>v.order&&(v.order.move||v.order.act||v.order.free)).length;
-  actsEl.innerHTML=`<span class="hint">Left click: move · right click a raider, a thing or ${u?u.name:'a soldier'}: what to do</span><button type="button" data-a="clear" ${u&&u.order?'':'disabled'}>Clear ${u?u.name+"'s":''} orders [⌫]</button><button type="button" class="pri" data-a="go">Go: ${n} of ${standing().length} with orders [Space]</button>`; }
+  actsEl.innerHTML=`<span class="hint">Left click: move · click a raider, or right click a thing or ${u?u.name:'a soldier'}: what to do · WASD: camera</span><button type="button" data-a="clear" ${u&&u.order?'':'disabled'}>Clear ${u?u.name+"'s":''} orders [⌫]</button><button type="button" class="pri" data-a="go">Go: ${n} of ${standing().length} with orders [Space]</button>`; }
 function drawHud(){ const left=S.units.filter(u=>u.team==='raider'&&u.alive&&u.vis).length, M=S.mission;
   const obj=!M?'':M.stashTaken?`Stash taken: get everyone to the way out (${M.evacuated.length} out)`:M.stash?'Objective: take the stash, or clear the building':'Objective: clear the building';
   const rf=M&&M.reinforceIn!=null&&M.reinforceIn>0?` · <span style="color:#e2b0a8">reinforcements in ${M.reinforceIn}</span>`:'';
@@ -270,14 +270,16 @@ function standBeside(u,box,maxCost){ const F=S.F; if(!F) return null; let best=n
   if(best&&best.cost>0){ best.path=S.w.pathTo(F,best.p); if(!best.path) return null; } return best; }
 function moveFor(u,spot){ if(spot&&spot.cost>0) setMove(u,spot.p,spot.cost,spot.path); else if(spot) orderOf(u).move=null; }
 const besideBudget=u=>(u.move||CR.V.move)*(apTotal(u)-1);
-function rightClick(ev,p){ const u=S.sel; if(!u||!u.alive||!p) return;
+function rightClick(ev,p,hit){ const u=S.sel; if(!u||!u.alive) return; if(hit&&!p) p=[hit.x,hit.z]; if(!p) return;
   const near=(x,z,r)=>Math.hypot(x-p[0],z-p[1])<r;
-  const t=S.units.find(v=>v.team==='raider'&&v.alive&&v.vis&&near(v.x,v.z,.75));
+  if(hit===undefined) hit=S.units.find(v=>v.team==='raider'&&v.alive&&v.vis&&near(v.x,v.z,.75))||S.units.find(v=>v.team==='squad'&&(v.alive||v.down&&!v.dead)&&!v.evac&&near(...planned(v),.6));
+  const t=hit&&hit.team==='raider'&&hit.alive&&hit.vis?hit:null;
   if(S.phase==='explore'){
     if(t) openMenu(ev,t.name,[{label:'Engage: first strike',sub:'everyone',fn:()=>startFight('squad','The squad opens fire.')}],'They have not seen you.');
+    else if(hit&&hit.team==='squad'&&hit.alive) select(hit);
     else { const e=S.w.entries().find(x=>near(x.out[0],x.out[1],.9)&&usable(x,u)); if(e) openMenu(ev,e.kind==='window'?'Window':(e.role||'side')+' door',[{label:!S.w.props(e.o).cross?'Set charge here':'Stack here',sub:u.name,fn:async()=>{ const path=S.F&&S.w.pathTo(S.F,e.out); S.busy=true; await walk(u,path?path.points:[{x:u.x,z:u.z},{x:e.out[0],z:e.out[1]}]); if(S.phase!=='explore') return; S.busy=false; u.stack=e; u.face=Math.atan2(e.in[0]-e.out[0],e.in[1]-e.out[1]); drawReach(); drawBar(); }}]); }
     return; }
-  if(!planning()) return; const items=[], g=ghostAt(u), o=orderOf(u);
+  if(!planning()){ if(S.phase==='exec'||S.phase==='raiders') log('Orders are given between rounds.'); return; } const items=[], g=ghostAt(u), o=orderOf(u);
   // raiders: what this soldier can do to them, with odds from where the soldier will stand
   if(t){ const lf=CR.lineOfFire(S.w,g,t,{pierce:true});
     if(u.free){ const lf0=CR.lineOfFire(S.w,u,t,{pierce:true}), fo=lf0&&CR.odds(S.w,u,t,{free:true,walls:lf0.walls,mod:u.entryMod||0,modLabel:'Through a window'}); items.push({label:'Free shot',sub:fo?fo.aim+'%':'',off:lf0?null:'no line',why:fo&&whyHtml(fo,u.weapon),fn:()=>{ o.free={target:t}; afterOrder(u); }}); }
@@ -287,7 +289,7 @@ function rightClick(ev,p){ const u=S.sel; if(!u||!u.alive||!p) return;
     if(u.role==='breacher'){ const q=landing(g,P(t)); items.push({label:'Pipe bomb on them',sub:'×'+u.kit.pipe,off:u.kit.pipe<=0?'none left':!q?'no clear throw':null,fn:()=>{ setAct(u,{type:'throw',point:q}); afterOrder(u); }}); }
     openMenu(ev,`${u.name} → ${t.name} (${t.hp} HP${t.armor?', armour '+t.armor:''})`,items,'Odds are from where '+u.name+' will stand. Others ordered onto them may leave nothing to hit.'); return; }
   // a soldier: the selected one's own actions, or first aid for someone else
-  const ally=squad().find(v=>(v.alive||v.down&&!v.dead)&&!v.evac&&near(...planned(v),.6));
+  const ally=hit&&hit.team==='squad'&&(hit.alive||hit.down&&!hit.dead)&&!hit.evac?hit:null;
   if(ally&&ally===u){ items.push({label:'Overwatch',sub:'react to movement',off:u.ammo<=0?'empty':null,fn:()=>{ setAct(u,{type:'ow'}); afterOrder(u); }},{label:'Hunker down',sub:'cover counts more',fn:()=>{ setAct(u,{type:'hunker'}); afterOrder(u); }},{label:'Reload',sub:u.ammo+'/'+u.weapon.ammo,off:u.ammo>=u.weapon.ammo?'full':null,fn:()=>{ setAct(u,{type:'reload'}); afterOrder(u); }});
     if(u.role==='ranger') items.push({label:o.rungun?'Cancel run and gun':'Run and gun',sub:'+1 action',off:u.cooldown?'ready in '+u.cooldown:null,fn:()=>{ o.rungun=!o.rungun; afterOrder(u); }});
     if(u.role==='medic'&&u.hp<u.max) items.push({label:'First aid: self',sub:'+'+CR.V.aidHeal,off:u.kit.aid<=0?'none left':null,fn:()=>{ setAct(u,{type:'aid',target:u}); afterOrder(u); }});
@@ -526,7 +528,10 @@ async function act(a){ const u=S.sel;
   if(a==='fire'){ startFight('squad','The squad opens fire.'); return; }
   if(a==='search'){ takeStash(u); drawBar(); return; }
   if(a==='wait'){ S.minutes+=1; raidersLook(4); drawHud(); return; } }
+const held=new Set();
+addEventListener('keyup',e=>held.delete(e.key.toLowerCase())); addEventListener('blur',()=>held.clear());
 addEventListener('keydown',e=>{ if(e.target.tagName==='SELECT') return; const k=e.key;
+  if(!FP&&/^[wasd]$/i.test(k)&&!e.ctrlKey&&!e.metaKey){ held.add(k.toLowerCase()); return; }
   if(FP){ if(k==='Escape') fpsEnd(null); if(k===' '){ e.preventDefault(); fpsFire(); } return; }
   if(k==='Escape'){ if(!ctxEl.hidden){ closeMenu(); return; } act('back'); return; }
   if(k==='q'||k==='Q') view.az-=Math.PI/2; else if(k==='e'||k==='E') view.az+=Math.PI/2;
@@ -537,21 +542,33 @@ addEventListener('keydown',e=>{ if(e.target.tagName==='SELECT') return; const k=
   if(k==='Tab'){ e.preventDefault(); const sq=standing(); select(sq[(sq.indexOf(S.sel)+1)%sq.length]); } });
 const canvas3=renderer.domElement, ray=new THREE.Raycaster(), ndc=new THREE.Vector2(), plane=new THREE.Plane(new THREE.Vector3(0,1,0),-.08), hitP=new THREE.Vector3();
 function pointUnder(ev){ const r=canvas3.getBoundingClientRect(); ndc.set((ev.clientX-r.left)/r.width*2-1,-(ev.clientY-r.top)/r.height*2+1); ray.setFromCamera(ndc,camera); return ray.ray.intersectPlane(plane,hitP)?[hitP.x,hitP.z]:null; }
+// the unit under the pointer, picked on screen along its figure (feet to head), not on the ground behind it
+function pickUnit(ev,filter){ const r=canvas3.getBoundingClientRect(), mx=ev.clientX-r.left, my=ev.clientY-r.top; let best=null;
+  for(const u of S.units){ if(u.fled||u.evac||!u.fig.root.visible||(filter&&!filter(u))) continue; const y0=yOf(u.x,u.z), standing=u.alive&&!u.down;
+    const a=screenOf(u.x,y0+(standing?.1:.05),u.z), b=screenOf(u.x,y0+(standing?1.75:.4),u.z); if(!a||!b) continue;
+    const hgt=Math.hypot(b[0]-a[0],b[1]-a[1]), wid=Math.max(14,hgt*.22), q=SP.ptSeg(mx,my,a[0],a[1],b[0],b[1]);
+    if(q.d<=wid&&(!best||q.d<best.d)) best={u,d:q.d}; }
+  return best&&best.u; }
 function target(p){ if(!p||!S.F) return null; const q=S.w.snap(p), ct=S.w.costTo(S.F,q); if(ct&&!ct.over) return {p:q,cost:ct.cost,snapped:q!==p};
   const c2=S.w.costTo(S.F,p); return c2&&!c2.over?{p,cost:c2.cost,snapped:false}:null; }
 function landing(u,p){ if(!p) return null; const d=Math.hypot(p[0]-u.x,p[1]-u.z); let q=p; if(d>CR.V.throwRange){ q=[u.x+(p[0]-u.x)/d*CR.V.throwRange,u.z+(p[1]-u.z)/d*CR.V.throwRange]; }
   const from=[[u.x,u.z],...S.w.leans([u.x,u.z],q)]; return from.some(f=>S.w.sight(f,q,{shot:true}))?q:null; }
 let drag=null;
 canvas3.addEventListener('pointerdown',e=>{ drag={x:e.clientX,y:e.clientY,btn:e.button,pan:e.button===2||e.shiftKey,moved:0}; canvas3.setPointerCapture(e.pointerId); });
-canvas3.addEventListener('pointermove',e=>{ if(!drag){ hover(pointUnder(e)); return; } const dx=e.clientX-drag.x, dy=e.clientY-drag.y; drag.x=e.clientX; drag.y=e.clientY; drag.moved+=Math.abs(dx)+Math.abs(dy);
-  if(drag.moved<6) return; S.camGoal=null; S.camHold=performance.now()+5000; closeMenu();
+canvas3.addEventListener('pointermove',e=>{ if(!drag){ const h=S.w&&!FP?pickUnit(e,v=>v.team==='squad'||v.vis):null; canvas3.style.cursor=h?'pointer':'';
+    if(h&&h.team==='raider'&&h.alive&&ctxEl.hidden){ hideHover(); hoverEl.textContent=`${h.name} · ${h.hp}/${h.max} HP${h.armor?' · armour '+h.armor:''}${planning()?'\nClick or right click: what '+(S.sel?S.sel.name:'your soldier')+' can do to them':S.phase==='explore'?'\nRight click: engage':''}`; hoverEl.style.whiteSpace='pre-line'; return; }
+    hover(pointUnder(e)); return; } const dx=e.clientX-drag.x, dy=e.clientY-drag.y; drag.x=e.clientX; drag.y=e.clientY; drag.moved+=Math.abs(dx)+Math.abs(dy);
+  if(drag.moved<(drag.btn===2?12:6)) return; S.camGoal=null; S.camHold=performance.now()+5000; closeMenu();
   if(drag.pan){ const s=view.dist*.0011, ca=Math.cos(view.az), sa=Math.sin(view.az); view.target.x-=(dx*ca-dy*sa)*s; view.target.z-=(-dx*sa-dy*ca)*s; }
   else { view.az-=dx*.008; view.el=clamp(view.el+dy*.006,.32,1.2); } });
-canvas3.addEventListener('pointerup',e=>{ const click=drag&&drag.moved<6, btn=drag&&drag.btn; drag=null; if(!click||S.prompt) return; const p=pointUnder(e); if(!p) return;
-  if(btn===2){ rightClick(e,p); return; }
+canvas3.addEventListener('pointerup',e=>{ const click=drag&&drag.moved<(drag.btn===2?12:6), btn=drag&&drag.btn; drag=null; if(!click||S.prompt) return; const p=pointUnder(e);
+  const hit=pickUnit(e,v=>v.team==='squad'||v.vis);
+  if(btn===2){ rightClick(e,p,hit||null); return; }
   closeMenu();
   if(S.mode==='throw'&&S.sel){ const q=landing(ghostAt(S.sel),p); if(q){ setAct(S.sel,{type:'throw',point:q}); S.mode='move'; afterOrder(S.sel); } else log('No clear throw there.'); return; }
-  const u=S.units.find(v=>v.alive&&!v.evac&&v.team==='squad'&&(Math.hypot(v.x-p[0],v.z-p[1])<.55||S.phase==='plan'&&Math.hypot(planned(v)[0]-p[0],planned(v)[1]-p[1])<.55)); if(u&&!S.busy){ select(u); return; }
+  if(hit&&hit.team==='raider'&&planning()){ rightClick(e,p,hit); return; }   // a left click on a raider opens the same options
+  if(!p) return;
+  const u=hit&&hit.team==='squad'&&hit.alive&&!hit.evac?hit:S.units.find(v=>v.alive&&!v.evac&&v.team==='squad'&&S.phase==='plan'&&Math.hypot(planned(v)[0]-p[0],planned(v)[1]-p[1])<.55); if(u&&!S.busy){ select(u); return; }
   if(S.busy||!S.sel) return; const t=target(p);
   if(S.phase==='explore'){ if(t) walkTo(S.sel,t.p); return; }
   if(S.phase==='plan'){ if(!t){ log('Out of reach this round.'); return; } const sel=S.sel, mv=sel.move||CR.V.move;
@@ -605,7 +622,7 @@ function frame(now){ requestAnimationFrame(frame); const real=Math.min(.05,(now-
         if(q.through&&!q.opened&&d<.75){ q.opened=true; opening(u,q.through);
           // a window: climb through it with the motion module's vault
           if(q.through.e&&q.through.e.type==='window'&&f.root.visible&&!Motion.reduce&&d>.3){ const mid=[(q.through.seg[0]+q.through.seg[2])/2,(q.through.seg[1]+q.through.seg[3])/2], yaw=Math.atan2(dx,dz);
-            const dur=Motion.traverse(f,{type:'vault',x:mid[0],z:mid[1],yaw,height:(q.through.e.win.sill||.9)+yOf(...mid),depth:.25},motionState(u,'ready')); if(dur){ u.face=yaw; u.route.shift(); acting.push(u); continue; } } }
+            const dur=Motion.traverse(f,{type:'vault',x:mid[0]-Math.sin(yaw)*.12,z:mid[1]-Math.cos(yaw)*.12,yaw,height:Math.max(.4,S.w.FY+(q.through.e.win.sill||.9)-yOf(u.x,u.z)),depth:.25},motionState(u,'ready')); if(dur){ u.face=yaw; u.route.shift(); acting.push(u); continue; } } }
         const step=Math.min(d,sp); if(d>1e-6){ u.x+=dx/d*step; u.z+=dz/d*step; u.face=Math.atan2(dx,dz); } u.trav+=step; if(d<=sp) u.route.shift();
         if(u.trav>=.3){ u.trav=0; if(S.phase==='exec'||S.phase==='raiders') overwatchCheck(u); } } }
     if(moving||u.aiming) acting.push(u);
@@ -620,6 +637,9 @@ function frame(now){ requestAnimationFrame(frame); const real=Math.min(.05,(now-
   // while orders play out, the camera follows whoever is moving or shooting (the middle of them)
   if((S.phase==='exec'||S.phase==='raiders'||S.phase==='breach')&&now>S.camHold){ const vis=acting.filter(u=>u.team==='squad'||u.vis); if(vis.length){ let x=0,z=0; for(const u of vis){ x+=u.x; z+=u.z; } S.camGoal={x:x/vis.length,z:z/vis.length}; } }
   if(S.camGoal&&now>S.camHold){ view.target.x+=(S.camGoal.x-view.target.x)*Math.min(1,real*2.2); view.target.z+=(S.camGoal.z-view.target.z)*Math.min(1,real*2.2); if(S.sel&&(S.phase==='plan'||S.phase==='explore')&&!S.busy&&S.sel.alive) S.camGoal={x:S.sel.x,z:S.sel.z}; }
+  // WASD moves the camera over the ground, relative to the way it faces
+  if(held.size&&!FP){ const f=(held.has('w')?1:0)-(held.has('s')?1:0), rt=(held.has('d')?1:0)-(held.has('a')?1:0), sp=view.dist*.9*real, sa=Math.sin(view.az), ca=Math.cos(view.az);
+    if(f||rt){ view.target.x+=(-sa*f+ca*rt)*sp; view.target.z+=(-ca*f-sa*rt)*sp; S.camGoal=null; S.camHold=now+5000; } }
   placeCamera(); if(shake>0){ shake=Math.max(0,shake-real); const k=shake*.35; camera.position.x+=(Math.random()-.5)*k; camera.position.y+=(Math.random()-.5)*k; } applyView(); drawBadges(); renderer.render(scene,camera); }
 
 // ---------- header ----------
