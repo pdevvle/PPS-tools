@@ -198,7 +198,7 @@ pre{margin:0;font:12px/1.45 var(--mono);background:var(--bg);border:1px solid va
       <div><span class="q">3 · Grid</span><p>A 1 m interior grid with walls on cell edges. Each outside door links its outside cell to one 2 m movement cell (the gold squares). Interior cells never touch the 2 m grid anywhere else.</p></div>
       <div><span class="q">4 · Storeys</span><p>One plan per storey from the same footprint. Stair and lift cores are chosen once (a main stair and lift near the middle, fire stairs at the far ends) and stay in the same cells on every floor. Upper floors get windows but no street doors. Floors below the one in view draw as shells, floors above are hidden, and the roof is its own level. Try the 42015 N Venture Dr offices.</p></div>
       <div><span class="q">5 · Decay</span><p>Decay is a separate seed stream layered on the plan, so a change of history never moves a wall. The strategy layer chooses the history (looted, holdout, den), and the seed picks which windows and doors were hit.</p></div>
-      <div><span class="q">Cutaway</span><p>Drawn like a building section. Walls between the camera and the cursor drop to a 0.9 m stub (under half-cover height) and slope back up around it. The cut faces are filled by build-up: light for drywall, brown for frame, near black for block and concrete. A faint outline keeps the full height. Outside walls facing the camera are always cut.</p></div>
+      <div><span class="q">Cutaway</span><p>Drawn like a building section. Walls between the camera and the cursor drop to a 0.9 m stub (under half-cover height) and slope back up around it. The cut faces are filled by build-up: light for drywall, brown for frame, near black for block and concrete. Doors show as the leaf swung open with its arc. Windows show as a glazing bar on the cut: blue when glazed, grey when broken, brown when boarded. Outside walls facing the camera are always cut.</p></div>
       <div><span class="q">Walls</span><p>Each wall has a build-up, and that decides how it breaks. Drywall partitions take bullets through and open to a sledge or a nearby grenade. Stucco-over-frame house walls give way more slowly. Concrete block (shop and office exteriors, stair and lift shafts, walls between shops) stops rounds and opens only to a breaching charge; a vault takes two. Hover a wall to read it. Damage goes cracked, holed, breached, and stays in the change record.</p></div>
       <div><span class="q">6 · Lifetime</span><p>Generation takes about 5 to 20 ms for a house (the time shows in the view), so build near the squad and drop it on leaving. Only the change record persists. It is keyed by the generator version, because item ids are stable only while the rules are.</p></div>
     </div>
@@ -1430,23 +1430,30 @@ float cutH(vec3 p){
   s=mix(s,0.,uLow);
   return uFloorY+uStub+s*(uTop-uStub);
 }`;
-function cutMat(base,kind){ // kind: 'solid' (caps and cut line), 'ghost' (ink: faint above the cut), 'plain' (just cut)
+// kind: 'solid' (caps and cut line), 'ghost' (wall ink: nothing above the cut, and inside the cut only level
+// lines, so seams and jambs don't clutter the section), 'plain' (just cut), 'plan' (door and window symbols:
+// drawn only where the walls are cut right down)
+function cutMat(base,kind){
   const m=base.clone(); m.userData.uLow={value:0};
   if(kind==='solid'){ m.side=THREE.DoubleSide; m.extensions={derivatives:true}; }
-  if(kind==='ghost') m.transparent=true;
-  m.onBeforeCompile=sh=>{
+    m.onBeforeCompile=sh=>{
     Object.assign(sh.uniforms,CUT.u,{uLow:m.userData.uLow});
-    sh.vertexShader=sh.vertexShader.replace('void main() {','varying vec3 vCutW;'+(kind==='solid'?'attribute vec3 capc; varying vec3 vCap;':'')+'\nvoid main() {')
-      .replace('#include <project_vertex>','#include <project_vertex>\nvCutW=(modelMatrix*vec4(transformed,1.)).xyz;'+(kind==='solid'?'vCap=capc;':''));
-    sh.fragmentShader=sh.fragmentShader.replace('void main() {',CUT_GLSL+(kind==='solid'?'varying vec3 vCap;':'')+'\nvoid main() {\nfloat cH=cutH(vCutW);'+(kind==='ghost'?'':'\nif(vCutW.y>cH) discard;'))
+    const vx=kind==='solid'?'attribute vec3 capc; varying vec3 vCap;':kind==='ghost'?'attribute float hz; varying float vHz;':'';
+    sh.vertexShader=sh.vertexShader.replace('void main() {','varying vec3 vCutW;'+vx+'\nvoid main() {')
+      .replace('#include <project_vertex>','#include <project_vertex>\nvCutW=(modelMatrix*vec4(transformed,1.)).xyz;'+(kind==='solid'?'vCap=capc;':kind==='ghost'?'vHz=hz;':''));
+    const head={solid:'\nif(vCutW.y>cH) discard;',plain:'\nif(vCutW.y>cH) discard;',plan:'\nif(cH>uFloorY+uStub+.06) discard;',
+      ghost:'\nbool cut=cH<uFloorY+uTop-.05;'+
+        '\nif(vCutW.y>cH+.004) discard;'+
+        '\nelse if(cut&&vHz<.5) discard;'}[kind];
+    sh.fragmentShader=sh.fragmentShader.replace('void main() {',CUT_GLSL+(kind==='solid'?'varying vec3 vCap;':kind==='ghost'?'varying float vHz;':'')+'\nvoid main() {\nfloat cH=cutH(vCutW);'+head)
       .replace('#include <dithering_fragment>','#include <dithering_fragment>\n'+(kind==='solid'?
-        'if(!gl_FrontFacing) gl_FragColor=vec4(vCap,1.); else if(cH<uFloorY+uTop-.02&&vCutW.y>cH-1.6*fwidth(vCutW.y)) gl_FragColor.rgb=uInk;':
-        kind==='ghost'?'if(vCutW.y>cH+.004) gl_FragColor.a*=.16;':''));
+        'if(!gl_FrontFacing) gl_FragColor=vec4(vCap,1.); else if(cH<uFloorY+uTop-.02&&vCutW.y>cH-2.6*fwidth(vCutW.y)) gl_FragColor.rgb=uInk;':
+        ''));
   };
   m.customProgramCacheKey=()=>'cut-'+kind;
   return m;
 }
-const WM={}; for(const bk of ['e0','e1','e2','e3','int']){ WM[bk]={solid:cutMat(solidMat,'solid'),ink:cutMat(inkMat,'ghost'),glass:cutMat(glassMat,'plain')}; for(const k in WM[bk]) WM[bk][k].userData.uLow=WM[bk].solid.userData.uLow; }
+const WM={}; for(const bk of ['e0','e1','e2','e3','int']){ WM[bk]={solid:cutMat(solidMat,'solid'),ink:cutMat(inkMat,'ghost'),glass:cutMat(glassMat,'plain'),plan:cutMat(solidMat,'plan')}; for(const k in WM[bk]) WM[bk][k].userData.uLow=WM[bk].solid.userData.uLow; }
 // JS twin of cutH for picking: height above the floor where this bucket's walls are cut at (x, z)
 function cutTop(x,z,bk){
   if(!CUT.on) return Infinity; const F=CUT.focus, D=CUT.dir, ss=(a,b,v)=>{ const t=clamp((v-a)/(b-a),0,1); return t*t*(3-2*t); };
@@ -1543,8 +1550,8 @@ class Batch{
   inkLines(){
     const E=this.e, n=E.length/6, cnt=new Map(), key=new Array(n), R=x=>Math.round(x*500);
     for(let k=0;k<n;k++){ const o=k*6; let a=R(E[o])+','+R(E[o+1])+','+R(E[o+2]), b=R(E[o+3])+','+R(E[o+4])+','+R(E[o+5]); if(a===b){ key[k]=null; continue; } const kk=a<b?a+'|'+b:b+'|'+a; key[k]=kk; cnt.set(kk,(cnt.get(kk)||0)+1); }
-    const out=[], done=new Set(); for(let k=0;k<n;k++){ const kk=key[k]; if(!kk||done.has(kk)) continue; done.add(kk); const c=cnt.get(kk); if(c===2||c===4) continue; for(let a=0;a<6;a++) out.push(E[k*6+a]); }
-    const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(out,3)); return g;
+    const out=[], hz=[], done=new Set(); for(let k=0;k<n;k++){ const kk=key[k]; if(!kk||done.has(kk)) continue; done.add(kk); const c=cnt.get(kk); if(c===2||c===4) continue; for(let a=0;a<6;a++) out.push(E[k*6+a]); const f=Math.abs(E[k*6+1]-E[k*6+4])<1e-4?1:0; hz.push(f,f); }
+    const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(out,3)); g.setAttribute('hz',new THREE.Float32BufferAttribute(hz,1)); return g;
   }
   mesh(mat,ink){
     const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(this.p,3)); g.setAttribute('color',new THREE.Float32BufferAttribute(this.c,3)); g.computeVertexNormals();
@@ -1708,7 +1715,10 @@ function build(G,rec){
   const groups={}, broken=[];
   let segMat='stud';
   function seg(bk,o,fixed,along,y0,y1,a0,a1,ext,col){ const k=bk+'|'+o+'|'+fixed+'|'+y0+'|'+y1+'|'+a0+'|'+a1+'|'+col+'|'+segMat; (groups[k]=groups[k]||{bk,o,fixed,y0,y1,a0,a1,ext,col,mat:segMat,al:[]}).al.push(along); }
-  const glassBy={}, boardBy={};
+  const glassBy={}, boardBy={}, planB={}, PB=bk=>planB[bk]=planB[bk]||new Batch();
+  // a flat two-tone ribbon (dark edge, light core) through points on the floor plane, readable on any floor
+  const ribbon=(B,pts,y,w,dark,light)=>{ for(const [ww,col,dy] of [[w,dark,0],[w*.45,light,.004]]) for(let k=0;k<pts.length-1;k++){ const [ax,az]=pts[k],[bx,bz]=pts[k+1], dx=bx-ax,dz=bz-az,L=Math.hypot(dx,dz)||1, ux=dx/L*ww*.5, uz=dz/L*ww*.5, nx=-uz, nz=ux, x0=ax-ux,z0=az-uz,x1=bx+ux,z1=bz+uz;
+      B.quad([x0+nx,y+dy,z0+nz],[x1+nx,y+dy,z1+nz],[x1-nx,y+dy,z1-nz],[x0-nx,y+dy,z0-nz],col); B.quad([x0-nx,y+dy,z0-nz],[x1-nx,y+dy,z1-nz],[x1+nx,y+dy,z1+nz],[x0+nx,y+dy,z0+nz],col); } };
   const stucco=G.stucco||'#cfc3ae', inner='#e6dccb';
   for(const e of O.edges.values()){
     const o=e.key[0], [p,q]=e.key.slice(1).split(',').map(Number);
@@ -1732,6 +1742,11 @@ function build(G,rec){
       const L=o==='v'?[cx(fixed),cz(along)]:[cx(along),cz(fixed)];
       (glassBy[bk]=glassBy[bk]||[]).push([o,L,e.win.sill,e.win.head,e.win.state]);
     }
+    if(e.type==='window'){ // in section: a raised glazing bar with a dark rim, sitting on the cut
+      const bw=REC&&REC.windows&&REC.windows[G.level+':'+e.key]||e.win.state==='broken', y=FY+CUT.stub, B=PB(bk);
+      const bar=(a0,a1,f,y0,y1,col)=>{ if(o==='v') B.box(cx(fixed)-f,y0,cz(along+a0),cx(fixed)+f,y1,cz(along+a1),col); else B.box(cx(along+a0),y0,cz(fixed)-f,cx(along+a1),y1,cz(fixed)+f,col); };
+      bar(-.005,1.005,t+.05,y+.004,y+.03,'#1d1814');
+      bar(.07,.93,t-.01,y+.004,y+.045,e.win.state==='boarded'?'#8a6a4a':bw?'#5a5650':'#8fd0e6'); }
     if(e.type==='window'&&e.win.state==='boarded'){ const L=o==='v'?[cx(fixed),cz(along)]:[cx(along),cz(fixed)]; (boardBy[bk]=boardBy[bk]||[]).push([o,L,e.win.sill,e.win.head,e.dir]); }
   }
   const wallB={};
@@ -1823,6 +1838,12 @@ function build(G,rec){
     let geo, mesh;
     const inward=e.ext?(e.dir+2)%4:e.dir; // swing into the room on the a side for outside doors
     const n=DIRS[inward];
+    { // plan symbol: the leaf drawn open and its swing arc; a garage door as a dashed line where it rolls up
+      const bk=e.ext?'e'+e.dir:'int', B=PB(bk), y=FY+.012, P2=(a,f)=>o==='v'?[cx(fixed)+n[0]*f,cz(a)]:[cx(a),cz(fixed)+n[1]*f], lw0=width>1&&!isG?len/2:len;
+      if(isG){ for(let k=0;k<6;k++) ribbon(B,[P2(along+.1+k*(width-.2)/6,.6),P2(along+.1+(k+.55)*(width-.2)/6,.6)],y,.07,'#1d1814','#f1ede4'); }
+      else if(st!=='broken') for(const [h,sg] of (width>1?[[along+.06,1],[along+width-.06,-1]]:[[along+.06,1]])){
+        const arc=[]; for(let k=0;k<=12;k++){ const a=k/12*Math.PI/2; arc.push(P2(h+sg*Math.cos(a)*lw0,Math.sin(a)*lw0)); }
+        ribbon(B,arc,y,.05,'#1d1814','#f1ede4'); ribbon(B,[P2(h,0),P2(h,lw0)],y,.09,'#1d1814','#f1ede4'); } }
     if(isG){
       geo=new THREE.BoxGeometry(o==='v'?.08:len,st==='closed'||st==='barricaded'?2.25:.08,o==='v'?len:.08);
       mesh=new THREE.Mesh(geo,gMat);
@@ -1929,6 +1950,7 @@ function build(G,rec){
   const roof=rb.mesh(solidMat,false); roof.name='roof'; if(G.fk===G.levels-1) fg.add(roof);
   // everything that hangs on a wall bucket draws with that bucket's cut material; so do the door leaves
   for(const bk in buckets){ const W2=WM[bk]; buckets[bk].full.traverse(o=>{ if(o.isLineSegments) o.material=W2.ink; else if(o.isMesh) o.material=o.material===glassMat?W2.glass:W2.solid; }); }
+  for(const bk in planB){ const m=planB[bk].mesh(WM[bk].plan,false); buckets[bk].full.add(m); }
   for(const l of leaves){ const bk=l.userData.bucket, W2=WM[bk]; l.traverse(o=>{ if(o.isLineSegments) o.material=W2.ink; else if(o.isMesh){ if(!o.geometry.attributes.capc){ const n=o.geometry.attributes.position.count, c=new THREE.Color(o.material.color).multiplyScalar(.45), arr=new Float32Array(n*3); for(let k=0;k<n;k++){ arr[k*3]=c.r; arr[k*3+1]=c.g; arr[k*3+2]=c.b; } o.geometry.setAttribute('capc',new THREE.BufferAttribute(arr,3)); } o.material=doorCut(bk,o.material.color); } }); }
   CUT.u.uFloorY.value=fg.position.y+FY; CUT.u.uTop.value=WH+.2;
   if(!CUT.placed){ CUT.goal.set(cx(W/2),0,cz(H/2)); CUT.focus.copy(CUT.goal); CUT.placed=true; }

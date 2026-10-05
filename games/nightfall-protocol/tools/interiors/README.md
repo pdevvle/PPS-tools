@@ -62,6 +62,9 @@ Cutaway: walls are cut in the shader (`cutMat`, `CUT`), not swapped for low copi
 - **Outside walls** facing the camera are cut along their whole length, and "Low walls" cuts every wall.
 - **The section look:**
   - the inside of a cut wall draws as one flat tone per build-up (`CAPCOL`: drywall light, frame brown, block and concrete near black), like the poché of a section drawing;
-  - an ink line runs along the cut;
-  - the ink above the cut stays as a faint outline of the full wall.
+  - a heavy ink line runs along the cut;
+  - wall ink above the cut is dropped, and inside the cut only level lines stay (no seams or jambs).
+- **Plan symbols** (material kind `plan`, drawn only where walls are cut right down):
+  - doors as the leaf drawn open with its swing arc, and garage doors as a dashed line where they roll up, all in two-tone ribbons that read on light and dark floors;
+  - windows as a raised glazing bar on the cut with a dark rim: blue when glazed, grey when broken, brown when boarded.
 - **Motion:** the focus and the lowering ease in. Picking uses the same cut (`cutTop`), so you click what you see.
