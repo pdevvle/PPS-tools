@@ -9,10 +9,12 @@
 const fs=require('fs'), zlib=require('zlib'), C=require('./sector-core.js');
 const [dir,osmFile,powerArg]=process.argv.slice(2), powerFile=powerArg||osmFile.replace(/osm_([^/]*)$/,'osm_power_$1');
 const IDX=JSON.parse(fs.readFileSync(`${dir}/index.json`,'utf8')), SEC=IDX.sector, NB=IDX.n, HALF=IDX.half, NS=IDX.navStep, NK=C.NAVKIND;
+// the block's sectors: a rectangle nx by nz with its north-west corner at (x0,z0); older square blocks give only n and half
+const NBX=IDX.nx||NB, NBZ=IDX.nz||NB, BX0=IDX.x0??-HALF, BZ0=IDX.z0??-HALF, BX1=BX0+NBX*SEC, BZ1=BZ0+NBZ*SEC, inB=(x,z,m=0)=>x>BX0-m&&x<BX1+m&&z>BZ0-m&&z<BZ1+m;
 const [LAT0,LON0]=IDX.center, kx=111320*Math.cos(LAT0*Math.PI/180), ky=110574, r1=v=>Math.round(v*10)/10, r2=v=>Math.round(v*100)/100;
 const P=(la,lo)=>[r1((lo-LON0)*kx),r1(-(la-LAT0)*ky)];
-const S=[]; for(let r=0;r<NB;r++) for(let c=0;c<NB;c++) S.push(JSON.parse(fs.readFileSync(`${dir}/s_${c}_${r}.json`,'utf8')));
-const secAt=(x,z)=>{ const c=Math.floor((x+HALF)/SEC), r=Math.floor((z+HALF)/SEC); return c>=0&&r>=0&&c<NB&&r<NB?S[r*NB+c]:null; };
+const S=[]; for(let r=0;r<NBZ;r++) for(let c=0;c<NBX;c++) S.push(JSON.parse(fs.readFileSync(`${dir}/s_${c}_${r}.json`,'utf8')));
+const secAt=(x,z)=>{ const c=Math.floor((x-BX0)/SEC), r=Math.floor((z-BZ0)/SEC); return c>=0&&r>=0&&c<NBX&&r<NBZ?S[r*NBX+c]:null; };
 const unb64=(s,T)=>{ const b=Buffer.from(s,'base64'); return new T(b.buffer,b.byteOffset,b.byteLength/T.BYTES_PER_ELEMENT); };
 const b64=a=>Buffer.from(a.buffer,a.byteOffset,a.byteLength).toString('base64');
 const hash=n=>{ let x=(n*2654435761)>>>0; x^=x>>>15; x=Math.imul(x,2246822519)>>>0; x^=x>>>13; return (x>>>0)/4294967296; };
@@ -73,7 +75,7 @@ function paintRoad(rd,pts,s){ const kind=!rd.drive?NK.path:rd.paved?NK.asphalt:N
 for(const s of S) for(const rd of s.roads){ const paved=rd.surf==='asphalt'||rd.surf==='concrete'; if(rd.bridge<0&&rd.drive&&paved!==rd.paved){ rd.pv0=rd.paved; rd.paved=paved; paintRoad(rd,rd.pts,s); } }
 // the roads the region download left out
 let added=0;
-for(const w of ways){ if(matched.has(w)||w.len<4||w.rank<1&&w.drive) continue; if(!w.pts.some(([x,z])=>Math.abs(x)<HALF&&Math.abs(z)<HALF)) continue;
+for(const w of ways){ if(matched.has(w)||w.len<4||w.rank<1&&w.drive) continue; if(!w.pts.some(([x,z])=>inB(x,z))) continue;
   for(const s of S){ for(const p of C.clipLine(w.pts,s.x0,s.z0,s.x0+SEC,s.z0+SEC)){
     const rd={cls:w.cls,surface:w.t.surface||'',oneway:w.oneway?'yes':'',name:w.name,paved:w.paved,drive:w.drive,w:w.w,bridge:-1,pts:p.pts.map(q=>[r1(q[0]),r1(q[1])]),cutStart:p.cutStart,cutEnd:p.cutEnd,added:1,id:w.id,surf:w.surf,ms:w.ms||MPH[w.cls]||15};
     s.roads.push(rd); paintRoad(rd,rd.pts,s); added++;
@@ -97,7 +99,7 @@ for(const b of IDX.bridges){ const d=b.d, n=d.length, len=b.L[n-1];
 const at=new Map(); ways.forEach(w=>{ if(w.rank<0) return; w.nodes.forEach((n,k)=>{ if(!at.has(n)) at.set(n,[]); at.get(n).push([w,k]); }); });
 const junctions=[];
 for(const [nid,list] of at){ const arms=[]; for(const [w,k] of list){ if(k>0) arms.push({w,k,sg:-1}); if(k<w.nodes.length-1) arms.push({w,k,sg:1}); }
-  if(arms.length<3) continue; const J=list[0][0].pts[list[0][1]]; if(Math.abs(J[0])>HALF+40||Math.abs(J[1])>HALF+40) continue;
+  if(arms.length<3) continue; const J=list[0][0].pts[list[0][1]]; if(!inB(J[0],J[1],40)) continue;
   for(const a of arms){ const w=a.w, s0=w.L[a.k], q=along(w,s0+a.sg*Math.min(6,a.sg>0?w.len-s0:s0)); let dx=q.x-J[0], dz=q.z-J[1]; const l=Math.hypot(dx,dz)||1; a.ax=dx/l; a.az=dz/l;
     a.incoming=!w.oneway||a.sg<0; a.hw=w.sec.pave/2; a.paved=w.paved; }
   junctions.push({id:nid,x:J[0],z:J[1],arms,maxR:Math.max(...arms.map(a=>a.w.rank))}); }
@@ -228,7 +230,7 @@ function addLine(pts,t){ const P=pts.map((p,i)=>{ const a=pts[Math.max(0,i-1)], 
   for(let i=0;i<P.length-1;i++){ const a=P[i], b=P[i+1]; add(a.x,a.z,'spans',[r2(a.x),r2(a.z),r2(a.y),r2(b.x),r2(b.z),r2(b.y),t]); }
   return P; }
 const POW=fs.existsSync(powerFile)?JSON.parse(fs.readFileSync(powerFile,'utf8')).elements:[];
-for(const e of POW){ if(e.type!=='way'||!e.geometry) continue; const pts=e.geometry.map(g=>P(g.lat,g.lon)); if(!pts.some(([x,z])=>Math.abs(x)<HALF+60&&Math.abs(z)<HALF+60)) continue;
+for(const e of POW){ if(e.type!=='way'||!e.geometry) continue; const pts=e.geometry.map(g=>P(g.lat,g.lon)); if(!pts.some(([x,z])=>inB(x,z,60))) continue;
   if(e.tags.power==='line') addLine(pts,e.tags.circuits==='2'?0:1);
   if(e.tags.power==='substation'&&pts.length>=4){ const ring=pts.slice(0,-1); add(...C.centroid(ring),'lights',{k:'sub',pts:ring.map(p=>[r1(p[0]),r1(p[1])])});
     // the fence closes the yard to the squad
@@ -239,7 +241,7 @@ const distLines=[];
 for(const w of ways){ if(w.rank<3||w.cls==='motorway'||/_link/.test(w.cls)||w.len<80) continue; const side=hash(w.id*7)<.5?-1:1, off=edgeOf(w)+1.7; let line=[];
   const flush=()=>{ if(line.length>=2) distLines.push(addLine(line,2)); line=[]; };
   for(let s0=10+hash(w.id)*25;s0<w.len-6;s0+=46+hash(w.id+Math.floor(s0))*12){ const q=along(w,s0), x=q.x-q.tz*side*off, z=q.z+q.tx*side*off;
-    if(Math.abs(x)>HALF+30||Math.abs(z)>HALF+30||nearBridge(x,z,25)){ flush(); continue; }
+    if(!inB(x,z,30)||nearBridge(x,z,25)){ flush(); continue; }
     if(!clearAt(x,z,.4)||inBuilding(x,z,1)||!farFromPoles(x,z,9)||[NK.water,NK.wall,NK.steep].includes(kindAt(x,z))) continue;
     if(line.length&&Math.hypot(x-line[line.length-1][0],z-line[line.length-1][1])>95) flush(); line.push([x,z]); }
   flush(); }
@@ -268,7 +270,7 @@ function markCar(x,z,yaw,type){ const [L,W]=C.CARDIM[type], fx=Math.sin(yaw), fz
     if(!s.undoNav.has(id)) s.undoNav.set(id,[s.kindA[id],s.spA[id]]); s.kindA[id]=NK.car; s.spA[id]=0; }
   const s=secAt(x,z); if(s){ const keep=[]; for(const pl of s.plants){ const u=(pl[1]-x)*fx+(pl[3]-z)*fz, v=(pl[1]-x)*fz-(pl[3]-z)*fx; if(Math.abs(u)<L/2+.8&&Math.abs(v)<W/2+.8) s.undoPlants.push(pl); else keep.push(pl); } s.plants=keep; } }
 // flags: 1 burnt out, 2 flat tyres, 4 a wheel gone (on a block), 8 bonnet up, 16 glass broken, 32 driver's door open, 64 dusty, 128 rusty
-function placeCar(x,z,yaw,o={}){ if(Math.abs(x)>HALF-3||Math.abs(z)>HALF-3||nearBridge(x,z,6)||inBuilding(x,z,1.2)) return false;
+function placeCar(x,z,yaw,o={}){ if(!inB(x,z,-3)||nearBridge(x,z,6)||inBuilding(x,z,1.2)) return false;
   if(placedCars.some(c=>Math.hypot(c[0]-x,c[1]-z)<(o.gap||5.2))) return false; const k=kindAt(x,z); if([NK.water,NK.building,NK.wall,NK.steep,NK.pier,NK.low,NK.car,255].includes(k)) return false;
   const type=o.type||TYPES[Math.floor(CR()*TYPES.length)], col=Math.floor(CR()*12); let f=0;
   if(o.burnt||CR()<.07) f|=1; if(CR()<.35) f|=2; if(CR()<.07) f|=4; if(CR()<.13) f|=8; if(CR()<.3) f|=16; if(CR()<.16) f|=32; if(CR()<.65) f|=64; if(CR()<.35) f|=128;
@@ -298,6 +300,16 @@ for(const w of ways){ if(w.t.service!=='driveway'||w.len<10) continue; const deg
   const [cx,cz]=C.centroid(ar.pts), ca=Math.sin(ang), sa=Math.cos(ang); let n=0;
   for(let u=-60;u<60&&n<6;u+=2.8) for(let v=-60;v<60&&n<6;v+=6.5){ const x=cx+u*ca+v*sa, z=cz+u*sa-v*ca; if(x<s.x0||x>=s.x0+SEC||z<s.z0||z>=s.z0+SEC||!C.inPoly(x,z,ar.pts)||CR()>.12) continue;
     if(placeCar(x,z,ang+Math.PI/2+(CR()<.5?0:Math.PI)+jit(.06),{gap:2.6})) n++; } } }
+
+// ---------- solid plants: saguaros, palo verde trunks, shrubs and boulders block the cells they stand in ----------
+// (reeds don't). The containing cell always; neighbours whose centre is within the plant's reach plus half a body.
+{ const REACH=[.35,.3,.75,.85,0]; let solid=0;
+  for(const s of S){ const ns=s.nav.n; for(const p of s.plants){ const rr=REACH[p[0]]*(p[0]===2||p[0]===3?Math.max(p[4],p[6]):1); if(!rr) continue; const reach=rr+.35;
+    for(let dz=-1;dz<=1;dz++) for(let dx=-1;dx<=1;dx++){ const i=Math.floor((p[1]-s.x0)/NS)+dx, j=Math.floor((p[3]-s.z0)/NS)+dz; if(i<0||j<0||i>=ns||j>=ns) continue;
+      const cx=s.x0+(i+.5)*NS, cz=s.z0+(j+.5)*NS; if((dx||dz)&&Math.hypot(cx-p[1],cz-p[3])>reach) continue; const id=j*ns+i, k=s.kindA[id];
+      if(KEEP.has(k)||k===NK.car||k===NK.plant||k===NK.asphalt||k===NK.dirt||k===NK.path||k===NK.lot) continue;
+      if(!s.undoNav.has(id)) s.undoNav.set(id,[k,s.spA[id]]); s.kindA[id]=NK.plant; s.spA[id]=0; solid++; } } }
+  console.log('solid plant cells',solid); }
 
 // ---------- write ----------
 let sum={added,signs:0,signals:0,junctions:junctionOut.length,medians:0,changed:0};

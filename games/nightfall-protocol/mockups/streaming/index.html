@@ -73,7 +73,7 @@ dt{color:var(--muted)} dd{margin:0;text-align:right}
   <header>
     <p class="eyebrow">Nightfall · streaming prototype</p>
     <h1>New River, walking between sectors</h1>
-    <p class="lede">A 3 km block of real New River, Arizona, baked offline into 25 sectors of 600 m that share their edges exactly. The page keeps the 3 by 3 sectors around your squad loaded: the one they stand in at full detail with ink outlines, the eight around it lighter. Walk toward an edge and the next row loads while the far one is dropped. Click the ground to move; paths cross sector edges.</p>
+    <p class="lede">A 3 by 6 km corridor of real New River, Arizona, and the desert north of it along I-17, baked offline into 50 sectors of 600 m that share their edges exactly. The page keeps the 3 by 3 sectors around your squad loaded: the one they stand in at full detail with ink outlines, the eight around it lighter. Walk toward an edge and the next row loads while the far one is dropped. Click the ground to move; paths cross sector edges. Plants and boulders are solid.</p>
   </header>
   <div class="studio">
     <div id="stage" aria-label="3D view of the streaming sectors">
@@ -87,7 +87,7 @@ dt{color:var(--muted)} dd{margin:0;text-align:right}
         <div class="key"><span style="--k:#6f8f58">centre</span><span style="--k:#4f6a4a">loaded</span><span style="--k:#8a6a2a">building</span><span style="--k:#2b2c2f">dropped</span></div></div>
       <div class="group"><span>Live cost</span><dl id="cost"></dl></div>
       <div class="group"><span>View</span><div class="seg" id="segView"><button type="button" data-v="tactical" aria-pressed="true">Tactical</button><button type="button" data-v="street" aria-pressed="false">Street</button><button type="button" data-v="high" aria-pressed="false">High</button></div></div>
-      <div class="group"><span>Places</span><div class="places" id="places"><button type="button" data-p="-585,470,2.6,0.45,34">Dead signals at the I-17 ramps</button><button type="button" data-p="-205,395,0.8,0.6,45">I-17 interchange, stop signs</button><button type="button" data-p="-640,800,0.3,0.55,60">Freeway, median barrier</button><button type="button" data-p="-150,-160,0.6,0.6,35">Roadrunner parking lot</button><button type="button" data-p="200,-30,-1.6,0.14,26">Power lines on New River Rd</button><button type="button" data-p="-1044.9,652.4,1.2,0.45,16">Dirt road and cattle guard</button><button type="button" data-p="-1180,744,2.4,0.3,10">Burnt-out pickup</button></div></div>
+      <div class="group"><span>Places</span><div class="places" id="places"><button type="button" data-p="-585,470,2.6,0.45,34">Dead signals at the I-17 ramps</button><button type="button" data-p="-205,395,0.8,0.6,45">I-17 interchange, stop signs</button><button type="button" data-p="-640,800,0.3,0.55,60">Freeway, median barrier</button><button type="button" data-p="-150,-160,0.6,0.6,35">Roadrunner parking lot</button><button type="button" data-p="200,-30,-1.6,0.14,26">Power lines on New River Rd</button><button type="button" data-p="-1044.9,652.4,1.2,0.45,16">Dirt road and cattle guard</button><button type="button" data-p="-1180,744,2.4,0.3,10">Burnt-out pickup</button><button type="button" data-p="600,-3000,0.6,0.6,70">Homes north of New River</button></div></div>
       <div class="group"><span>Layers</span>
         <label class="tg"><input type="checkbox" id="tglSwim"> Swim gear</label>
         <label class="tg"><input type="checkbox" id="tglSeams"> Show sector edges</label></div>
@@ -176,12 +176,14 @@ class BoxIndex{ constructor(cell=48){ this.c=cell; this.m=new Map(); }
 // ---------- the bake ----------
 function bake(D,log=()=>{}){
   const T=D.terrain, H=Float32Array.from(T.h), st=T.step, NXg=T.nx, NZg=T.nz, X0=T.x0, Z0=T.z0, HALF=D.half;
+  // the block's edges (a rectangle of sectors; older square blocks give only half)
+  const BX0=D.x0??-HALF, BZ0=D.z0??-HALF, BX1=BX0+(D.nx||D.n)*D.sector, BZ1=BZ0+(D.nz||D.n)*D.sector, inB=(x,z,m=0)=>x>BX0-m&&x<BX1+m&&z>BZ0-m&&z<BZ1+m;
   const heightAt=(x,z)=>{ const fx=(x-X0)/st, fz=(z-Z0)/st, i=Math.max(0,Math.min(NXg-2,Math.floor(fx))), j=Math.max(0,Math.min(NZg-2,Math.floor(fz))), u=Math.min(1,Math.max(0,fx-i)), v=Math.min(1,Math.max(0,fz-j)), h=(a,b)=>H[b*NXg+a];
     return (h(i,j)*(1-u)+h(i+1,j)*u)*(1-v)+(h(i,j+1)*(1-u)+h(i+1,j+1)*u)*v; };
   const forCells=(a,b,c,d,fn)=>{ const i0=Math.max(0,Math.floor((a-X0)/st)), i1=Math.min(NXg-1,Math.ceil((c-X0)/st)), j0=Math.max(0,Math.floor((b-Z0)/st)), j1=Math.min(NZg-1,Math.ceil((d-Z0)/st)); for(let j=j0;j<=j1;j++) for(let i=i0;i<=i1;i++) fn(j*NXg+i,X0+i*st,Z0+j*st); };
   const cellsNear=(pts,pad,fn)=>{ for(let k=0;k<pts.length-1;k++){ const a=pts[k], b=pts[k+1]; forCells(Math.min(a[0],b[0])-pad,Math.min(a[1],b[1])-pad,Math.max(a[0],b[0])+pad,Math.max(a[1],b[1])+pad,(id,x,z)=>{ const [dd,px,pz,t]=segDist(x,z,a,b); if(dd<pad) fn(id,dd,px,pz,k,t); }); } };
   const slopeAt=(x,z)=>{ const e=2, gx=(heightAt(x+e,z)-heightAt(x-e,z))/(2*e), gz=(heightAt(x,z+e)-heightAt(x,z-e))/(2*e); return Math.atan(Math.hypot(gx,gz))*180/Math.PI; };
-  const lim=[-HALF,-HALF,HALF,HALF], rivers=D.water.filter(w=>w.kind==='river');
+  const lim=[BX0,BZ0,BX1,BZ1], rivers=D.water.filter(w=>w.kind==='river');
   // features
   const F={beds:[],lakes:[],pools:[],bridges:[],culverts:[]};
   for(const a of D.areas){
@@ -192,7 +194,7 @@ function bake(D,log=()=>{}){
   const WASH=w=>w.kind==='river'?(F.beds.length&&w.name==='New River'?{hw:7,depth:.9}:{hw:11,depth:2.6}):{hw:5,depth:1.6};
   D.roads.forEach((r,i)=>{ r.id=i; if(isBridge(r)&&isDrive(r)) F.bridges.push({road:i,pts:r.pts,w:roadW(r),name:r.name||''}); });
   for(const w of D.water) for(const r of D.roads){ if(!isDrive(r)||isBridge(r)||!isPaved(r)||r.tunnel) continue;
-    for(let i=1;i<w.pts.length;i++) for(let k=1;k<r.pts.length;k++){ const p=segX(w.pts[i-1],w.pts[i],r.pts[k-1],r.pts[k]); if(!p||Math.abs(p[0])>HALF||Math.abs(p[1])>HALF) continue;
+    for(let i=1;i<w.pts.length;i++) for(let k=1;k<r.pts.length;k++){ const p=segX(w.pts[i-1],w.pts[i],r.pts[k-1],r.pts[k]); if(!p||!inB(p[0],p[1])) continue;
       const rl=Math.hypot(r.pts[k][0]-r.pts[k-1][0],r.pts[k][1]-r.pts[k-1][1])||1;
       F.culverts.push({x:p[0],z:p[1],rx:(r.pts[k][0]-r.pts[k-1][0])/rl,rz:(r.pts[k][1]-r.pts[k-1][1])/rl,rhw:roadW(r)/2,...WASH(w)}); } }
   // 1. river beds
@@ -202,13 +204,13 @@ function bake(D,log=()=>{}){
   const core=new Uint8Array(H.length), chan=new Uint8Array(H.length);
   for(const r of D.roads){ if(!isDrive(r)||isBridge(r)||!isPaved(r)||r.tunnel) continue; cellsNear(r.pts,roadW(r)/2+1.5,id=>{ core[id]=1; }); }
   // 3. washes run downhill
-  for(const w of D.water){ const {hw,depth}=WASH(w), d=densify(w.pts,2).filter(([x,z])=>Math.abs(x)<HALF+D.margin&&Math.abs(z)<HALF+D.margin); if(d.length<2) continue;
+  for(const w of D.water){ const {hw,depth}=WASH(w), d=densify(w.pts,2).filter(([x,z])=>inB(x,z,D.margin)); if(d.length<2) continue;
     const raw=d.map(([x,z])=>heightAt(x,z)), bed=raw.map((_,i)=>{ let s=0,c=0; for(let q=-4;q<=4;q++){ s+=raw[Math.max(0,Math.min(raw.length-1,i+q))]; c++; } return s/c-depth; });
     for(let i=1;i<bed.length;i++) bed[i]=Math.min(bed[i],bed[i-1]);
     cellsNear(d,hw,(id,dd,px,pz,k,t)=>{ if(core[id]) return; const tg=bed[k]+(bed[k+1]-bed[k])*t+depth*(dd/hw)**2; if(tg<H[id]){ H[id]=tg; chan[id]=1; } }); }
   log('washes');
   // 4. lakes
-  for(const L of F.lakes){ let lv=1e9; for(const [x,z] of L.raw) if(Math.abs(x)<HALF&&Math.abs(z)<HALF) lv=Math.min(lv,heightAt(x,z)); if(lv>1e8) lv=heightAt(...centroid(L.raw)); L.level=lv-.35;
+  for(const L of F.lakes){ let lv=1e9; for(const [x,z] of L.raw) if(inB(x,z)) lv=Math.min(lv,heightAt(x,z)); if(lv>1e8) lv=heightAt(...centroid(L.raw)); L.level=lv-.35;
     const [a,b,c,d]=bbox(L.raw); forCells(a-6,b-6,c+6,d+6,(id,x,z)=>{ const e=polyDist(x,z,L.raw); if(inPoly(x,z,L.raw)) H[id]=Math.min(H[id],L.level-Math.min(2.6,.5+e*.35)); else if(e<6){ const want=L.level+.35; if(H[id]<want) H[id]+=(want-H[id])*(1-e/6); } }); }
   // 5. bridges
   for(const b of F.bridges){ const d=densify(b.pts,2), L=[0]; for(let i=1;i<d.length;i++) L.push(L[i-1]+Math.hypot(d[i][0]-d[i-1][0],d[i][1]-d[i-1][1]));
@@ -268,12 +270,12 @@ function bake(D,log=()=>{}){
     const fmin=Math.min(...Fv), fmax=Math.max(...Fv), smin=Math.min(...Sd)-1.6, smax=Math.max(...Sd)+1.6, back=fmin-8.5, side=fmin+(fmax-fmin)*.35, Wp=(s,f)=>[cx+sx*s+fx*f, cz+sz*s+fz*f];
     for(const [a,b] of [[Wp(smin,side),Wp(smin,back)],[Wp(smin,back),Wp(smax,back)],[Wp(smax,back),Wp(smax,side)]]){ const L=Math.hypot(b[0]-a[0],b[1]-a[1]), n=Math.max(1,Math.round(L/2));
       for(let i=0;i<n;i++){ const p=[a[0]+(b[0]-a[0])*i/n,a[1]+(b[1]-a[1])*i/n], q=[a[0]+(b[0]-a[0])*(i+1)/n,a[1]+(b[1]-a[1])*(i+1)/n], mx=(p[0]+q[0])/2, mz=(p[1]+q[1])/2;
-        if(Math.abs(mx)>HALF-1||Math.abs(mz)>HALF-1||nearRoad(mx,mz,.8)||inAnyBuilding(mx,mz)) continue; walls.push([...p,...q,1.8,.2,0]); } } }
+        if(!inB(mx,mz,-1)||nearRoad(mx,mz,.8)||inAnyBuilding(mx,mz)) continue; walls.push([...p,...q,1.8,.2,0]); } } }
   log('walls');
 
   // ---------- plants ----------
   const r=rng(23), plants=[], step=6.5, P=(t,x,y,z,sx,sy,sz,rx,ry)=>plants.push([t,+x.toFixed(2),+y.toFixed(2),+z.toFixed(2),+sx.toFixed(2),+sy.toFixed(2),+sz.toFixed(2),+rx.toFixed(2),+ry.toFixed(2)]);
-  for(let x=-HALF+3;x<HALF-3;x+=step) for(let z=-HALF+3;z<HALF-3;z+=step){
+  for(let x=BX0+3;x<BX1-3;x+=step) for(let z=BZ0+3;z<BZ1-3;z+=step){
     const px=x+(r()-.5)*step, pz=z+(r()-.5)*step;
     if(nearBuilding(px,pz,1.5) || areaAt(px,pz,a=>blockedA.has(a.kind)) || nearRoad(px,pz,1.2)){ r(); r(); continue; }
     const tame=areaAt(px,pz,a=>a.kind==='residential'||a.kind==='park'||a.kind==='grass'), v=r(), y=heightAt(px,pz), s=.75+r()*.5, rot=r()*TAU, sl=slopeAt(px,pz), wd=washDist(px,pz);
@@ -285,13 +287,13 @@ function bake(D,log=()=>{}){
     if(!tame && sl>9){ if(v<.3) P(3,px,y,pz,s*(1+r()),s*(.8+r()*.7),s*(1+r()),r(),rot); else if(v<.42) P(0,px,y-.2,pz,s,s*(.8+r()*.5),s,0,rot); else if(v<.62) P(2,px,y,pz,s*.8,s*.8,s*.8,0,rot); continue; }
     if(tame){ if(v<.2) P(1,px,y,pz,s,s,s,0,rot); else if(v<.36) P(2,px,y,pz,s*.8,s*.8,s*.8,0,rot); else if(v<.4) P(3,px,y,pz,s*.6,s*.6,s*.6,0,rot); continue; }
     if(v<.06) P(0,px,y-.2,pz,s,s*(.8+r()*.5),s,0,rot); else if(v<.2) P(1,px,y,pz,s*1.1,s*1.1,s*1.1,0,rot); else if(v<.62) P(2,px,y,pz,s,s,s,0,rot); else if(v<.7) P(3,px,y,pz,s*(.6+r()),s*(.6+r()*.6),s*(.6+r()),0,rot); }
-  for(const t of D.trees){ if(Math.abs(t[0])<HALF&&Math.abs(t[1])<HALF) P(1,t[0],heightAt(t[0],t[1]),t[1],1.2,1.2,1.2,0,r()*TAU); }
+  for(const t of D.trees){ if(inB(t[0],t[1])) P(1,t[0],heightAt(t[0],t[1]),t[1],1.2,1.2,1.2,0,r()*TAU); }
   log('plants '+plants.length);
 
   // ---------- movement grid (2 m) over the block ----------
-  const NS=2, NX=Math.round(2*HALF/NS), N=NX*NX, surf=new Float32Array(N), kind=new Uint8Array(N), brush=new Float32Array(N), sp=new Float32Array(N);
-  const NK=NAVKIND, cX=i=>-HALF+(i+.5)*NS;
-  const cells=(a0,b0,c0,d0,fn)=>{ const i0=Math.max(0,Math.floor((a0+HALF)/NS)), i1=Math.min(NX-1,Math.floor((c0+HALF)/NS)), j0=Math.max(0,Math.floor((b0+HALF)/NS)), j1=Math.min(NX-1,Math.floor((d0+HALF)/NS)); for(let j=j0;j<=j1;j++) for(let i=i0;i<=i1;i++) fn(j*NX+i,cX(i),cX(j)); };
+  const NS=2, NX=Math.round((BX1-BX0)/NS), NZ=Math.round((BZ1-BZ0)/NS), N=NX*NZ, surf=new Float32Array(N), kind=new Uint8Array(N), brush=new Float32Array(N), sp=new Float32Array(N);
+  const NK=NAVKIND, cX=i=>BX0+(i+.5)*NS, cZ=j=>BZ0+(j+.5)*NS;
+  const cells=(a0,b0,c0,d0,fn)=>{ const i0=Math.max(0,Math.floor((a0-BX0)/NS)), i1=Math.min(NX-1,Math.floor((c0-BX0)/NS)), j0=Math.max(0,Math.floor((b0-BZ0)/NS)), j1=Math.min(NZ-1,Math.floor((d0-BZ0)/NS)); for(let j=j0;j<=j1;j++) for(let i=i0;i<=i1;i++) fn(j*NX+i,cX(i),cZ(j)); };
   const line=(pts,pad,fn)=>{ for(let k=0;k<pts.length-1;k++){ const a=pts[k], b=pts[k+1]; cells(Math.min(a[0],b[0])-pad,Math.min(a[1],b[1])-pad,Math.max(a[0],b[0])+pad,Math.max(a[1],b[1])+pad,(id,x,z)=>{ if(segDist(x,z,a,b)[0]<pad) fn(id,x,z); }); } };
   const set=(id,k,s)=>{ kind[id]=k; surf[id]=s; };
   for(let id=0;id<N;id++) set(id,NK.open,.72);
@@ -301,7 +303,7 @@ function bake(D,log=()=>{}){
   for(const rd of [...D.roads].sort((a,b)=>roadW(a)-roadW(b))){ if(isBridge(rd)) continue; const k=!isDrive(rd)?NK.path:isPaved(rd)?NK.asphalt:NK.dirt; line(rd.pts,roadW(rd)/2+.3,id=>set(id,k,k===NK.asphalt?1:k===NK.path?.95:.86)); }
   const PW=[.25,.1,.16,.14,.2];
   for(const p of plants){ const rr=p[0]===1?1.8:1.2; cells(p[1]-rr,p[3]-rr,p[1]+rr,p[3]+rr,id=>{ brush[id]+=PW[p[0]]; }); }
-  for(let j=0;j<NX;j++) for(let i=0;i<NX;i++){ const id=j*NX+i, x=cX(i), z=cX(j), sl=slopeAt(x,z), k=kind[id], road=k===NK.asphalt||k===NK.dirt||k===NK.path||k===NK.lot;
+  for(let j=0;j<NZ;j++) for(let i=0;i<NX;i++){ const id=j*NX+i, x=cX(i), z=cZ(j), sl=slopeAt(x,z), k=kind[id], road=k===NK.asphalt||k===NK.dirt||k===NK.path||k===NK.lot;
     const slopeF=sl<4?1:Math.max(.28,1-(sl-4)/30), brushF=road?1:Math.max(.42,1-brush[id]);
     if(!road&&brush[id]>.12&&(k===NK.open||k===NK.wash)) kind[id]=NK.brush; else if(!road&&sl>14&&k===NK.open) kind[id]=NK.hill;
     sp[id]=surf[id]*slopeF*brushF; if(sl>36&&!road){ kind[id]=NK.steep; sp[id]=0; } }
@@ -320,10 +322,10 @@ function bake(D,log=()=>{}){
   log('nav');
   // camps in the undercroft of long bridges
   const camps=F.bridges.filter(b=>b.len>90).map(b=>{ const s=b.ab+9; let k=0; while(k<b.d.length-1&&b.L[k+1]<s) k++; return {bridge:F.bridges.indexOf(b),k}; });
-  return {H,NXg,NZg,X0,Z0,st,F,walls,plants,nav:{NS,NX,sp,kind},houses:new Set(houses),camps,WASH};
+  return {H,NXg,NZg,X0,Z0,st,F,walls,plants,nav:{NS,NX,NZ,BX0,BZ0,sp,kind},houses:new Set(houses),camps,WASH};
 }
-const NAVKIND={open:0,asphalt:1,dirt:2,path:3,lot:4,yard:5,wash:6,brush:7,hill:8,water:9,building:10,wall:11,steep:12,low:13,pier:14,car:15};
-const NAVLABEL=['Open desert','Asphalt','Dirt road','Footpath','Paved lot','Yard','Sand wash','Brush','Hillside','Water','Building','Wall','Too steep','No headroom','Bridge pier','Wreck'];
+const NAVKIND={open:0,asphalt:1,dirt:2,path:3,lot:4,yard:5,wash:6,brush:7,hill:8,water:9,building:10,wall:11,steep:12,low:13,pier:14,car:15,plant:16};
+const NAVLABEL=['Open desert','Asphalt','Dirt road','Footpath','Paved lot','Yard','Sand wash','Brush','Hillside','Water','Building','Wall','Too steep','No headroom','Bridge pier','Wreck','Plant or boulder'];
 // abandoned cars: length and width in metres, shared by the road pass (movement grid) and the car models
 const CARDIM={sedan:[4.8,1.84],hatch:[4.15,1.76],suv:[4.85,1.94],pickup:[5.6,2.0],van:[5.1,2.0]};
 const SWIM=.2;
@@ -1961,13 +1963,15 @@ function inkOff(group){ const kill=[]; group.traverse(o=>{ if(o.userData.ink) ki
 
 // ---------- the block ----------
 const IDX=await (await fetch('block/index.json')).json();
-const SEC=IDX.sector, NB=IDX.n, HALF=IDX.half, NS=IDX.navStep, SN=SEC/NS, GN=NB*SN, GNN=GN*GN;
+const SEC=IDX.sector, NB=IDX.n, HALF=IDX.half, NS=IDX.navStep, SN=SEC/NS;
+// the baked area is a rectangle of sectors, NBX across and NBZ down, its north-west corner at (BX0,BZ0); GN cells across, GZ down
+const NBX=IDX.nx||NB, NBZ=IDX.nz||NB, BX0=IDX.x0??-HALF, BZ0=IDX.z0??-HALF, BX1=BX0+NBX*SEC, BZ1=BZ0+NBZ*SEC, GN=NBX*SN, GZ=NBZ*SN, GNN=GN*GZ;
 for(const b of IDX.bridges){ const d=b.d; b.yAt=t=>C.bridgeY(b,t); b.tan=k=>{ const p=d[Math.max(0,k-1)], q=d[Math.min(d.length-1,k+1)], l=Math.hypot(q[0]-p[0],q[1]-p[1])||1; return [(q[0]-p[0])/l,(q[1]-p[1])/l]; }; b.nrm=k=>{ const [tx,tz]=b.tan(k); return [tz,-tx]; };
-  b.sec=[Math.floor((b.mid[0]+HALF)/SEC),Math.floor((b.mid[1]+HALF)/SEC)]; b.bb=C.bbox(d); }
+  b.sec=[Math.floor((b.mid[0]-BX0)/SEC),Math.floor((b.mid[1]-BZ0)/SEC)]; b.bb=C.bbox(d); }
 const RK=RoadKit({THREE,C,heightAt:(x,z)=>heightAt(x,z),IDX,renderer,mat,SHAPES,sectorGeo:(g,s)=>sectorGeo(g,s),kindAt:(x,z)=>{ const c=cellOf(x,z); return c<0?255:kindG[c]; }});   // road surfaces, paint, signs and signals
 const sectors=new Map(), key=(c,r)=>c+','+r;
-const secAt=(x,z)=>{ const c=Math.floor((x+HALF)/SEC), r=Math.floor((z+HALF)/SEC); return c>=0&&r>=0&&c<NB&&r<NB?[c,r]:null; };
-const CX=IDX.context, ctxH=(x,z)=>{ const fx=(x+CX.half)/CX.step, fz=(z+CX.half)/CX.step, i=Math.max(0,Math.min(CX.n-2,Math.floor(fx))), j=Math.max(0,Math.min(CX.n-2,Math.floor(fz))), u=fx-i, v=fz-j, h=(a,b)=>CX.h[b*CX.n+a]; return (h(i,j)*(1-u)+h(i+1,j)*u)*(1-v)+(h(i,j+1)*(1-u)+h(i+1,j+1)*u)*v; };
+const secAt=(x,z)=>{ const c=Math.floor((x-BX0)/SEC), r=Math.floor((z-BZ0)/SEC); return c>=0&&r>=0&&c<NBX&&r<NBZ?[c,r]:null; };
+const CX=IDX.context, CCX=CX.cx||0, CCZ=CX.cz||0, ctxH=(x,z)=>{ const fx=(x-CCX+CX.half)/CX.step, fz=(z-CCZ+CX.half)/CX.step, i=Math.max(0,Math.min(CX.n-2,Math.floor(fx))), j=Math.max(0,Math.min(CX.n-2,Math.floor(fz))), u=fx-i, v=fz-j, h=(a,b)=>CX.h[b*CX.n+a]; return (h(i,j)*(1-u)+h(i+1,j)*u)*(1-v)+(h(i,j+1)*(1-u)+h(i+1,j+1)*u)*v; };
 function heightAt(x,z){ const q=secAt(x,z), s=q&&sectors.get(key(...q)); if(!s||!s.Hf) return ctxH(x,z);
   const n=s.hn, fx=(x-s.x0+4)/4, fz=(z-s.z0+4)/4, i=Math.max(0,Math.min(n-2,Math.floor(fx))), j=Math.max(0,Math.min(n-2,Math.floor(fz))), u=fx-i, v=fz-j, H=s.Hf, h=(a,b)=>H[b*n+a];
   return (h(i,j)*(1-u)+h(i+1,j)*u)*(1-v)+(h(i,j+1)*(1-u)+h(i+1,j+1)*u)*v; }
@@ -1977,18 +1981,18 @@ function deckAt(x,z,pad=0){ for(const b of IDX.bridges){ if(x<b.bb[0]-b.hw-pad||
     if(Math.hypot(x-a[0]-dx*t,z-a[1]-dz*t)>b.hw+pad) continue; const s=b.L[k]+t*Math.sqrt(l2); return {b,s,y:b.yAt(Math.max(0,Math.min(1,s/b.len)))}; } } return null; }
 // the landscape around the block; inside the block it sits a little low so loaded sectors always cover it
 { const n=CX.n, g=new THREE.PlaneGeometry(CX.half*2,CX.half*2,n-1,n-1); g.rotateX(-Math.PI/2); const p=g.attributes.position;
-  for(let i=0;i<p.count;i++){ const x=p.getX(i), z=p.getZ(i), inB=Math.abs(x)<HALF+60&&Math.abs(z)<HALF+60; p.setY(i,CX.h[i]-(inB?14:0)); }   // well below the real ground: its 50 m grid would otherwise poke through washes and cuts g.computeVertexNormals();
+  for(let i=0;i<p.count;i++){ const x=p.getX(i)+CCX, z=p.getZ(i)+CCZ, inB=x>BX0-60&&x<BX1+60&&z>BZ0-60&&z<BZ1+60; p.setY(i,CX.h[i]-(inB?14:0)); }   // well below the real ground: its 50 m grid would otherwise poke through washes and cuts g.computeVertexNormals();
   const c=document.createElement('canvas'); c.width=c.height=1024; const x2=c.getContext('2d'); x2.fillStyle='#c9ae86'; x2.fillRect(0,0,1024,1024);
   const sh=document.createElement('canvas'); sh.width=sh.height=n; const sg=sh.getContext('2d'), img=sg.createImageData(n,n), L=[-.5,.7,-.5], ll=Math.hypot(...L), flat=L[1]/ll;
   for(let j=0;j<n;j++) for(let i=0;i<n;i++){ const h=(a,b)=>CX.h[Math.min(n-1,Math.max(0,b))*n+Math.min(n-1,Math.max(0,a))], dx=(h(i+1,j)-h(i-1,j))/(2*CX.step), dz=(h(i,j+1)-h(i,j-1))/(2*CX.step), nn=[-dx,1,-dz], nl=Math.hypot(...nn), v=((nn[0]*L[0]+nn[1]*L[1]+nn[2]*L[2])/(nl*ll)-flat)*2.2, o=(j*n+i)*4;
     if(v<0) img.data.set([70,45,25,Math.min(.6,-v)*255],o); else img.data.set([255,248,230,Math.min(.4,v)*255],o); }
   sg.putImageData(img,0,0); x2.drawImage(sh,0,0,1024,1024);
-  const me=new THREE.Mesh(g,new THREE.MeshLambertMaterial({map:new THREE.CanvasTexture(c)})); me.receiveShadow=true; scene.add(me);
+  const me=new THREE.Mesh(g,new THREE.MeshLambertMaterial({map:new THREE.CanvasTexture(c)})); me.position.set(CCX,0,CCZ); me.receiveShadow=true; scene.add(me);
   const skirt=new THREE.Mesh(new THREE.PlaneGeometry(60000,60000),new THREE.MeshLambertMaterial({color:0xc4aa82})); skirt.rotation.x=-Math.PI/2; skirt.position.y=Math.min(...CX.h)-4; scene.add(skirt); }
 
 // ---------- movement: one grid over the whole block, filled in as sectors load ----------
 const kindG=new Uint8Array(GNN).fill(255), spG=new Uint8Array(GNN);
-const cellOf=(x,z)=>{ const i=Math.floor((x+HALF)/NS), j=Math.floor((z+HALF)/NS); return i>=0&&j>=0&&i<GN&&j<GN?j*GN+i:-1; };
+const cellOf=(x,z)=>{ const i=Math.floor((x-BX0)/NS), j=Math.floor((z-BZ0)/NS); return i>=0&&j>=0&&i<GN&&j<GZ?j*GN+i:-1; };
 const deck=[], link=new Map();
 for(const [bi,b] of IDX.bridges.entries()){ const lanes=Math.max(2,Math.round((b.w-1)/2)), base=GNN+deck.length, n=b.d.length;
   for(let k=0;k<n;k++){ const [nx,nz]=b.nrm(k); for(let l=0;l<lanes;l++){ const o=(l/(lanes-1)-.5)*(b.w-1.2); deck.push({x:b.d[k][0]+nx*o,z:b.d[k][1]+nz*o,b:bi,nb:[]}); } }
@@ -1996,9 +2000,9 @@ for(const [bi,b] of IDX.bridges.entries()){ const lanes=Math.max(2,Math.round((b
   for(const [k,sg] of [[0,-1],[n-1,1]]){ const [tx,tz]=b.tan(k); for(let l=0;l<lanes;l++){ const dn=base+k*lanes+l, p=deck[dn-GNN], c=cellOf(p.x+tx*sg*2.2,p.z+tz*sg*2.2); if(c<0) continue; if(!link.has(c)) link.set(c,[]); link.get(c).push(dn); p.nb.push(c); } } }
 const ui={view:'tactical', swim:false, seams:false};
 const nodeSpeed=n=>{ if(n>=GNN){ const b=IDX.bridges[deck[n-GNN].b], s=sectors.get(key(...b.sec)); return s&&s.state==='built'?1:0; } const k=kindG[n]; if(k===255) return 0; if(k===NK.water) return ui.swim?SWIM:0; return spG[n]/250; };
-const nodePos=n=>{ if(n>=GNN){ const d=deck[n-GNN]; return {x:d.x,z:d.z,l:1}; } return {x:-HALF+(n%GN+.5)*NS,z:-HALF+(Math.floor(n/GN)+.5)*NS,l:0}; };
+const nodePos=n=>{ if(n>=GNN){ const d=deck[n-GNN]; return {x:d.x,z:d.z,l:1}; } return {x:BX0+(n%GN+.5)*NS,z:BZ0+(Math.floor(n/GN)+.5)*NS,l:0}; };
 function nearestDeckNode(x,z){ let best=-1,bd=1e9; deck.forEach((d,i)=>{ const dd=Math.hypot(d.x-x,d.z-z); if(dd<bd){ bd=dd; best=i; } }); return best<0?-1:GNN+best; }
-function nearestPassable(c){ const ci=c%GN, cj=Math.floor(c/GN); for(let r=1;r<40;r++){ let best=-1,bd=1e9; for(let dj=-r;dj<=r;dj++) for(let di=-r;di<=r;di++){ if(Math.max(Math.abs(di),Math.abs(dj))!==r) continue; const i=ci+di, j=cj+dj; if(i<0||j<0||i>=GN||j>=GN) continue; const id=j*GN+i; if(nodeSpeed(id)>0){ const dd=di*di+dj*dj; if(dd<bd){ bd=dd; best=id; } } } if(best>=0) return best; } return -1; }
+function nearestPassable(c){ const ci=c%GN, cj=Math.floor(c/GN); for(let r=1;r<40;r++){ let best=-1,bd=1e9; for(let dj=-r;dj<=r;dj++) for(let di=-r;di<=r;di++){ if(Math.max(Math.abs(di),Math.abs(dj))!==r) continue; const i=ci+di, j=cj+dj; if(i<0||j<0||i>=GN||j>=GZ) continue; const id=j*GN+i; if(nodeSpeed(id)>0){ const dd=di*di+dj*dj; if(dd<bd){ bd=dd; best=id; } } } if(best>=0) return best; } return -1; }
 const TOT=GNN+deck.length, gA=new Float32Array(TOT).fill(Infinity), came=new Int32Array(TOT).fill(-1), closed=new Uint8Array(TOT);
 function findPath(from,to){
   const touched=[], heap=[], goal=nodePos(to);
@@ -2009,7 +2013,7 @@ function findPath(from,to){
   while(heap.length && guard++<600000){ const [,n]=pop(); if(closed[n]) continue; closed[n]=1; if(n===to){ found=true; break; }
     const sa=Math.max(nodeSpeed(n),.05), pa=nodePos(n), nbrs=[];
     if(n<GNN){ const i=n%GN, j=Math.floor(n/GN);
-      for(let dj=-1;dj<=1;dj++) for(let di=-1;di<=1;di++){ if(!di&&!dj) continue; const i2=i+di, j2=j+dj; if(i2<0||j2<0||i2>=GN||j2>=GN) continue; if(di&&dj&&(nodeSpeed(j*GN+i2)<=0||nodeSpeed(j2*GN+i)<=0)) continue; nbrs.push(j2*GN+i2); }
+      for(let dj=-1;dj<=1;dj++) for(let di=-1;di<=1;di++){ if(!di&&!dj) continue; const i2=i+di, j2=j+dj; if(i2<0||j2<0||i2>=GN||j2>=GZ) continue; if(di&&dj&&(nodeSpeed(j*GN+i2)<=0||nodeSpeed(j2*GN+i)<=0)) continue; nbrs.push(j2*GN+i2); }
       const L=link.get(n); if(L) nbrs.push(...L); }
     else nbrs.push(...deck[n-GNN].nb);
     for(const m of nbrs){ if(closed[m]) continue; const sb=nodeSpeed(m); if(sb<=0) continue; const pb=nodePos(m), c=gA[n]+Math.hypot(pb.x-pa.x,pb.z-pa.z)/((sa+sb)/2);
@@ -2146,8 +2150,8 @@ const stats={lastBuild:0,maxStep:0,lastFetch:0,loads:0,drops:0,frame:16,steps:[]
 const jobs=[]; let centre=null;
 function want(c,r){ return centre && Math.max(Math.abs(c-centre[0]),Math.abs(r-centre[1]))<=1; }
 function ensureWindow(){
-  for(let dr=-1;dr<=1;dr++) for(let dc=-1;dc<=1;dc++){ const c=centre[0]+dc, r=centre[1]+dr; if(c<0||r<0||c>=NB||r>=NB) continue; const k=key(c,r); if(sectors.has(k)) continue;
-    const s={c,r,x0:-HALF+c*SEC,z0:-HALF+r*SEC,state:'fetching',buildMs:0}; sectors.set(k,s); const t0=performance.now();
+  for(let dr=-1;dr<=1;dr++) for(let dc=-1;dc<=1;dc++){ const c=centre[0]+dc, r=centre[1]+dr; if(c<0||r<0||c>=NBX||r>=NBZ) continue; const k=key(c,r); if(sectors.has(k)) continue;
+    const s={c,r,x0:BX0+c*SEC,z0:BZ0+r*SEC,state:'fetching',buildMs:0}; sectors.set(k,s); const t0=performance.now();
     fetchSector(c,r).then(d=>{ stats.lastFetch=performance.now()-t0; if(s.state!=='fetching') return; s.data=d; s.state='queued'; jobs.push({s,it:buildSector(s)}); jobs.sort((a,b)=>(a.s.c===centre[0]&&a.s.r===centre[1]?-1:0)-(b.s.c===centre[0]&&b.s.r===centre[1]?-1:0)); })
       .catch(e=>{ console.error(e); s.state='failed'; }); }
   for(const [k,s] of sectors){ if(want(s.c,s.r)) continue; const i=jobs.findIndex(j=>j.s===s); if(i>=0) jobs.splice(i,1); disposeSector(s); sectors.delete(k); stats.drops++; }
@@ -2208,13 +2212,14 @@ document.getElementById('places')?.addEventListener('click',e=>{ const b=e.targe
 document.getElementById('tglSeams').addEventListener('change',e=>{ ui.seams=e.target.checked; for(const s of sectors.values()) if(s.seam) s.seam.visible=ui.seams; });
 
 // ---------- panels ----------
-const cells=[]; for(let r=0;r<NB;r++) for(let c=0;c<NB;c++){ const i=document.createElement('i'); i.title=`Sector ${c+1},${r+1}: go there`; i.addEventListener('click',()=>jumpTo(c,r)); miniEl.appendChild(i); cells.push(i); } const dot=document.createElement('b'); miniEl.appendChild(dot);
+miniEl.style.gridTemplateColumns=`repeat(${NBX},1fr)`; miniEl.style.aspectRatio=`${NBX}/${NBZ}`;
+const cells=[]; for(let r=0;r<NBZ;r++) for(let c=0;c<NBX;c++){ const i=document.createElement('i'); i.title=`Sector ${c+1},${r+1}: go there`; i.addEventListener('click',()=>jumpTo(c,r)); miniEl.appendChild(i); cells.push(i); } const dot=document.createElement('b'); miniEl.appendChild(dot);
 const tot=IDX.sectors.reduce((a,s)=>a+s.bytes,0);
-blockEl.innerHTML=`<div><dt>Size</dt><dd>${NB} × ${NB} sectors, ${(NB*SEC/1000).toFixed(1)} km square</dd></div><div><dt>Sector files</dt><dd>${(tot/1e6).toFixed(1)} MB of JSON, about ${Math.round(IDX.sectors.reduce((a,s)=>a+s.gz,0)/IDX.sectors.length/1000)} KB each compressed</dd></div>
+blockEl.innerHTML=`<div><dt>Size</dt><dd>${NBX} × ${NBZ} sectors, ${(NBX*SEC/1000).toFixed(1)} by ${(NBZ*SEC/1000).toFixed(1)} km</dd></div><div><dt>Sector files</dt><dd>${(tot/1e6).toFixed(1)} MB of JSON, about ${Math.round(IDX.sectors.reduce((a,s)=>a+s.gz,0)/IDX.sectors.length/1000)} KB each compressed</dd></div>
   <div><dt>Buildings</dt><dd>${IDX.sectors.reduce((a,s)=>a+s.b,0)}</dd></div><div><dt>Plants</dt><dd>${IDX.sectors.reduce((a,s)=>a+s.plants,0).toLocaleString()}</dd></div><div><dt>Bridges</dt><dd>${IDX.bridges.length}</dd></div>`;
 function updatePanels(){
-  for(let r=0;r<NB;r++) for(let c=0;c<NB;c++){ const s=sectors.get(key(c,r)); cells[r*NB+c].dataset.s=!s?'':s.state==='built'?(centre[0]===c&&centre[1]===r?'centre':'ring'):s.state==='building'?'building':'queued'; }
-  dot.style.left=((squad.x+HALF)/(NB*SEC)*100)+'%'; dot.style.top=((squad.z+HALF)/(NB*SEC)*100)+'%';
+  for(let r=0;r<NBZ;r++) for(let c=0;c<NBX;c++){ const s=sectors.get(key(c,r)); cells[r*NBX+c].dataset.s=!s?'':s.state==='built'?(centre[0]===c&&centre[1]===r?'centre':'ring'):s.state==='building'?'building':'queued'; }
+  dot.style.left=((squad.x-BX0)/(NBX*SEC)*100)+'%'; dot.style.top=((squad.z-BZ0)/(NBZ*SEC)*100)+'%';
   const inf=renderer.info, built=[...sectors.values()].filter(s=>s.state==='built').length, mem=performance.memory?Math.round(performance.memory.usedJSHeapSize/1e6)+' MB':'n/a';
   costEl.innerHTML=`<div><dt>Loaded</dt><dd>${built} of 9 · ${jobs.length} queued</dd></div><div><dt>Last sector build</dt><dd>${Math.round(stats.lastBuild)} ms</dd></div><div><dt>Longest single step</dt><dd>${Math.round(stats.maxStep)} ms</dd></div>
     <div><dt>Centre swap</dt><dd>${Math.round(stats.swap||0)} ms</dd></div><div><dt>Last fetch</dt><dd>${Math.round(stats.lastFetch)} ms</dd></div><div><dt>Frame</dt><dd>${stats.frame.toFixed(1)} ms</dd></div><div><dt>Draw calls</dt><dd>${inf.render.calls}</dd></div><div><dt>Triangles</dt><dd>${(inf.render.triangles/1e6).toFixed(2)} M</dd></div>
@@ -2235,7 +2240,7 @@ window.addEventListener('keydown',e=>{ if(e.target.closest&&e.target.closest('in
 let clkShown='';
 function drawClock(){ const m=TM.base+TM.sec/60, d=Math.floor(m/1440)+1, h=Math.floor((m%1440)/60), mm=Math.floor(m%60), ss=Math.floor((m*60)%60), t=`Day ${d} ${String(h).padStart(2,'0')}:${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`; if(t!==clkShown){ clkShown=t; clkEl.textContent=t; } }
 // jump to a sector from the overview: the squad is set down at its middle, then on the nearest walkable cell once it has loaded
-function jumpTo(c,r){ const x=-HALF+(c+.5)*SEC, z=-HALF+(r+.5)*SEC;
+function jumpTo(c,r){ const x=BX0+(c+.5)*SEC, z=BZ0+(r+.5)*SEC;
   if(figs.length){ Object.assign(squad,{x,z,l:0,path:null,trail:[{x,z,l:0}]}); figs.forEach((f,i)=>{ f.x=x; f.z=z+i*.01; f.y=undefined; }); follow=true; TM.snap=true; }
   else { follow=false; }
   target.set(x,heightAt(x,z),z); }
@@ -2280,7 +2285,8 @@ function loop(now){
   if((panelT+=raw)>400){ panelT=0; updatePanels(); }
 }
 window.__stream={scene,squad,sectors,stats,orderMove:(x,z,deck)=>orderMove({p:new THREE.Vector3(x,heightAt(x,z),z),deck}),boost:k=>{ boost=k; },heightAt,ui,look:(x,z,yaw,pitch,dist)=>{ follow=false; target.set(x,heightAt(x,z),z); camT.yaw=yaw; VIEWS[ui.view].pitch=pitch; VIEWS[ui.view].dist=dist; },follow:()=>{ follow=true; },renderer,teleport:(x,z)=>{ Object.assign(squad,{x,z,l:0,path:null,trail:[{x,z,l:0}]}); figs.forEach((f,i)=>{ f.x=x; f.z=z+i*.01; f.y=undefined; }); target.set(x,heightAt(x,z),z); follow=true; },lowfi:()=>{ renderer.shadowMap.enabled=false; renderer.setPixelRatio(1); resize(); }};
-setCentre(Math.floor(NB/2),Math.floor(NB/2)); requestAnimationFrame(loop);
+// start where the frame is centred: the New River sector
+setCentre(...(secAt(0,0)||[Math.floor(NBX/2),Math.floor(NBZ/2)])); requestAnimationFrame(loop);
 })();
 
 </script>

@@ -31,7 +31,7 @@ const CB=(()=>{
   const plantCover=new Map();   // cell -> 1 for saguaros, palo verdes and boulders
   C.onBuilt=s=>{ for(const p of s.data.plants){ if(p[0]===0||p[0]===1||(p[0]===3&&p[4]>.8)){ const c=cellOf(p[1],p[3]); if(c>=0) plantCover.set(c,1); } } };
   C.onDropped=s=>{ for(const p of s.data.plants){ const c=cellOf(p[1],p[3]); plantCover.delete(c); } };
-  const cx=c=>-HALF+(c%GN+.5)*NS, cz=c=>-HALF+(Math.floor(c/GN)+.5)*NS;
+  const cx=c=>BX0+(c%GN+.5)*NS, cz=c=>BZ0+(Math.floor(c/GN)+.5)*NS;
   const coverVal=c=>c<0||kindG[c]===255?0:BLOCKING.has(kindG[c])?2:plantCover.get(c)||0;
   function coverFrom(c,sx,sz){ const x=cx(c), z=cz(c), dx=sx-x, dz=sz-z, i=c%GN, j=Math.floor(c/GN), out=[];
     const di=Math.abs(dx)>1.2?Math.sign(dx):0, dj=Math.abs(dz)>1.2?Math.sign(dz):0;

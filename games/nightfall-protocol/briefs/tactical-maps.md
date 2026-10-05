@@ -22,6 +22,7 @@ The real ground at walking scale, everywhere in the region: baked offline from O
 - Paved roads cross washes through culverts; dirt tracks ford them. Cars are left out for now (the data put too many in).
 - Roads come from the full OSM road download for the block, matched to the baked pieces way by way. Real control first: mapped stops and give ways win. Where nothing is mapped, signals go where three or more secondary-or-bigger arms meet; otherwise the straightest pair of the biggest roads runs through and the rest stop; equal roads crossing get an all-way stop. Junction nodes within 30 m of each other are one crossing.
 - Untagged driveways are gravel (50%), dirt (30%) or asphalt (20%), chosen from the way id so it never changes; untagged residential roads are asphalt. A road whose surface turns out unpaved is repainted as dirt in the movement grid.
+- The tactical ground is now a corridor: New River and the block north of it, 5 × 10 sectors in one frame centred on New River (`index.json` gives `nx`, `nz`, `x0`, `z0`), shaped in one bake so the join matches. More blocks extend the same rectangle. Plants and boulders are solid (movement kind 16, `Plant or boulder`).
 - Decay is generated at run time from seeds (potholes, alligator cracking, sand drifts from the WSW and at wash crossings, weeds). Tactical time runs 1:1 with real time, with pause and 4×; the map clock catches up by the game seconds spent tactical (`NF.tacSeconds`).
 - Signals and street lights are dark: the power is out. The 69 kV lines are real; distribution lines, transformers, service drops and street lights are inferred. Cars are placed with intent: queued at dead signals, on shoulders, crashed on the freeway, parked at houses and in lots, burnt out in the desert; about 140 in the block. Road paint and sign faces are clean but grimy; wear beyond that is for the decay pass.
 
@@ -36,7 +37,7 @@ The real ground at walking scale, everywhere in the region: baked offline from O
 
 - Single build steps over 100 ms (ground texture, plant instancing): split them or build in a worker.
 - Ring sectors use full terrain (151 × 151); use coarser terrain and texture in the ring, sharper texture in the centre.
-- Only one block baked; bake the whole corridor and stream across block edges.
+- Two blocks baked (New River and the one north of it, as one 5 × 10 corridor); bake the rest of the corridor north to Black Canyon City and south to Anthem the same way.
 - Building heights and roofs are guesses; no interiors; no doors or windows except shop glass.
 - Anthem's OSM bridges overlap and clutter the area under West Anthem Way.
 - Context terrain sits 14 m low inside the block to stay hidden; unloaded parts of the block look sunken from far away.

@@ -68,12 +68,14 @@ class BoxIndex{ constructor(cell=48){ this.c=cell; this.m=new Map(); }
 // ---------- the bake ----------
 function bake(D,log=()=>{}){
   const T=D.terrain, H=Float32Array.from(T.h), st=T.step, NXg=T.nx, NZg=T.nz, X0=T.x0, Z0=T.z0, HALF=D.half;
+  // the block's edges (a rectangle of sectors; older square blocks give only half)
+  const BX0=D.x0??-HALF, BZ0=D.z0??-HALF, BX1=BX0+(D.nx||D.n)*D.sector, BZ1=BZ0+(D.nz||D.n)*D.sector, inB=(x,z,m=0)=>x>BX0-m&&x<BX1+m&&z>BZ0-m&&z<BZ1+m;
   const heightAt=(x,z)=>{ const fx=(x-X0)/st, fz=(z-Z0)/st, i=Math.max(0,Math.min(NXg-2,Math.floor(fx))), j=Math.max(0,Math.min(NZg-2,Math.floor(fz))), u=Math.min(1,Math.max(0,fx-i)), v=Math.min(1,Math.max(0,fz-j)), h=(a,b)=>H[b*NXg+a];
     return (h(i,j)*(1-u)+h(i+1,j)*u)*(1-v)+(h(i,j+1)*(1-u)+h(i+1,j+1)*u)*v; };
   const forCells=(a,b,c,d,fn)=>{ const i0=Math.max(0,Math.floor((a-X0)/st)), i1=Math.min(NXg-1,Math.ceil((c-X0)/st)), j0=Math.max(0,Math.floor((b-Z0)/st)), j1=Math.min(NZg-1,Math.ceil((d-Z0)/st)); for(let j=j0;j<=j1;j++) for(let i=i0;i<=i1;i++) fn(j*NXg+i,X0+i*st,Z0+j*st); };
   const cellsNear=(pts,pad,fn)=>{ for(let k=0;k<pts.length-1;k++){ const a=pts[k], b=pts[k+1]; forCells(Math.min(a[0],b[0])-pad,Math.min(a[1],b[1])-pad,Math.max(a[0],b[0])+pad,Math.max(a[1],b[1])+pad,(id,x,z)=>{ const [dd,px,pz,t]=segDist(x,z,a,b); if(dd<pad) fn(id,dd,px,pz,k,t); }); } };
   const slopeAt=(x,z)=>{ const e=2, gx=(heightAt(x+e,z)-heightAt(x-e,z))/(2*e), gz=(heightAt(x,z+e)-heightAt(x,z-e))/(2*e); return Math.atan(Math.hypot(gx,gz))*180/Math.PI; };
-  const lim=[-HALF,-HALF,HALF,HALF], rivers=D.water.filter(w=>w.kind==='river');
+  const lim=[BX0,BZ0,BX1,BZ1], rivers=D.water.filter(w=>w.kind==='river');
   // features
   const F={beds:[],lakes:[],pools:[],bridges:[],culverts:[]};
   for(const a of D.areas){
@@ -84,7 +86,7 @@ function bake(D,log=()=>{}){
   const WASH=w=>w.kind==='river'?(F.beds.length&&w.name==='New River'?{hw:7,depth:.9}:{hw:11,depth:2.6}):{hw:5,depth:1.6};
   D.roads.forEach((r,i)=>{ r.id=i; if(isBridge(r)&&isDrive(r)) F.bridges.push({road:i,pts:r.pts,w:roadW(r),name:r.name||''}); });
   for(const w of D.water) for(const r of D.roads){ if(!isDrive(r)||isBridge(r)||!isPaved(r)||r.tunnel) continue;
-    for(let i=1;i<w.pts.length;i++) for(let k=1;k<r.pts.length;k++){ const p=segX(w.pts[i-1],w.pts[i],r.pts[k-1],r.pts[k]); if(!p||Math.abs(p[0])>HALF||Math.abs(p[1])>HALF) continue;
+    for(let i=1;i<w.pts.length;i++) for(let k=1;k<r.pts.length;k++){ const p=segX(w.pts[i-1],w.pts[i],r.pts[k-1],r.pts[k]); if(!p||!inB(p[0],p[1])) continue;
       const rl=Math.hypot(r.pts[k][0]-r.pts[k-1][0],r.pts[k][1]-r.pts[k-1][1])||1;
       F.culverts.push({x:p[0],z:p[1],rx:(r.pts[k][0]-r.pts[k-1][0])/rl,rz:(r.pts[k][1]-r.pts[k-1][1])/rl,rhw:roadW(r)/2,...WASH(w)}); } }
   // 1. river beds
@@ -94,13 +96,13 @@ function bake(D,log=()=>{}){
   const core=new Uint8Array(H.length), chan=new Uint8Array(H.length);
   for(const r of D.roads){ if(!isDrive(r)||isBridge(r)||!isPaved(r)||r.tunnel) continue; cellsNear(r.pts,roadW(r)/2+1.5,id=>{ core[id]=1; }); }
   // 3. washes run downhill
-  for(const w of D.water){ const {hw,depth}=WASH(w), d=densify(w.pts,2).filter(([x,z])=>Math.abs(x)<HALF+D.margin&&Math.abs(z)<HALF+D.margin); if(d.length<2) continue;
+  for(const w of D.water){ const {hw,depth}=WASH(w), d=densify(w.pts,2).filter(([x,z])=>inB(x,z,D.margin)); if(d.length<2) continue;
     const raw=d.map(([x,z])=>heightAt(x,z)), bed=raw.map((_,i)=>{ let s=0,c=0; for(let q=-4;q<=4;q++){ s+=raw[Math.max(0,Math.min(raw.length-1,i+q))]; c++; } return s/c-depth; });
     for(let i=1;i<bed.length;i++) bed[i]=Math.min(bed[i],bed[i-1]);
     cellsNear(d,hw,(id,dd,px,pz,k,t)=>{ if(core[id]) return; const tg=bed[k]+(bed[k+1]-bed[k])*t+depth*(dd/hw)**2; if(tg<H[id]){ H[id]=tg; chan[id]=1; } }); }
   log('washes');
   // 4. lakes
-  for(const L of F.lakes){ let lv=1e9; for(const [x,z] of L.raw) if(Math.abs(x)<HALF&&Math.abs(z)<HALF) lv=Math.min(lv,heightAt(x,z)); if(lv>1e8) lv=heightAt(...centroid(L.raw)); L.level=lv-.35;
+  for(const L of F.lakes){ let lv=1e9; for(const [x,z] of L.raw) if(inB(x,z)) lv=Math.min(lv,heightAt(x,z)); if(lv>1e8) lv=heightAt(...centroid(L.raw)); L.level=lv-.35;
     const [a,b,c,d]=bbox(L.raw); forCells(a-6,b-6,c+6,d+6,(id,x,z)=>{ const e=polyDist(x,z,L.raw); if(inPoly(x,z,L.raw)) H[id]=Math.min(H[id],L.level-Math.min(2.6,.5+e*.35)); else if(e<6){ const want=L.level+.35; if(H[id]<want) H[id]+=(want-H[id])*(1-e/6); } }); }
   // 5. bridges
   for(const b of F.bridges){ const d=densify(b.pts,2), L=[0]; for(let i=1;i<d.length;i++) L.push(L[i-1]+Math.hypot(d[i][0]-d[i-1][0],d[i][1]-d[i-1][1]));
@@ -160,12 +162,12 @@ function bake(D,log=()=>{}){
     const fmin=Math.min(...Fv), fmax=Math.max(...Fv), smin=Math.min(...Sd)-1.6, smax=Math.max(...Sd)+1.6, back=fmin-8.5, side=fmin+(fmax-fmin)*.35, Wp=(s,f)=>[cx+sx*s+fx*f, cz+sz*s+fz*f];
     for(const [a,b] of [[Wp(smin,side),Wp(smin,back)],[Wp(smin,back),Wp(smax,back)],[Wp(smax,back),Wp(smax,side)]]){ const L=Math.hypot(b[0]-a[0],b[1]-a[1]), n=Math.max(1,Math.round(L/2));
       for(let i=0;i<n;i++){ const p=[a[0]+(b[0]-a[0])*i/n,a[1]+(b[1]-a[1])*i/n], q=[a[0]+(b[0]-a[0])*(i+1)/n,a[1]+(b[1]-a[1])*(i+1)/n], mx=(p[0]+q[0])/2, mz=(p[1]+q[1])/2;
-        if(Math.abs(mx)>HALF-1||Math.abs(mz)>HALF-1||nearRoad(mx,mz,.8)||inAnyBuilding(mx,mz)) continue; walls.push([...p,...q,1.8,.2,0]); } } }
+        if(!inB(mx,mz,-1)||nearRoad(mx,mz,.8)||inAnyBuilding(mx,mz)) continue; walls.push([...p,...q,1.8,.2,0]); } } }
   log('walls');
 
   // ---------- plants ----------
   const r=rng(23), plants=[], step=6.5, P=(t,x,y,z,sx,sy,sz,rx,ry)=>plants.push([t,+x.toFixed(2),+y.toFixed(2),+z.toFixed(2),+sx.toFixed(2),+sy.toFixed(2),+sz.toFixed(2),+rx.toFixed(2),+ry.toFixed(2)]);
-  for(let x=-HALF+3;x<HALF-3;x+=step) for(let z=-HALF+3;z<HALF-3;z+=step){
+  for(let x=BX0+3;x<BX1-3;x+=step) for(let z=BZ0+3;z<BZ1-3;z+=step){
     const px=x+(r()-.5)*step, pz=z+(r()-.5)*step;
     if(nearBuilding(px,pz,1.5) || areaAt(px,pz,a=>blockedA.has(a.kind)) || nearRoad(px,pz,1.2)){ r(); r(); continue; }
     const tame=areaAt(px,pz,a=>a.kind==='residential'||a.kind==='park'||a.kind==='grass'), v=r(), y=heightAt(px,pz), s=.75+r()*.5, rot=r()*TAU, sl=slopeAt(px,pz), wd=washDist(px,pz);
@@ -177,13 +179,13 @@ function bake(D,log=()=>{}){
     if(!tame && sl>9){ if(v<.3) P(3,px,y,pz,s*(1+r()),s*(.8+r()*.7),s*(1+r()),r(),rot); else if(v<.42) P(0,px,y-.2,pz,s,s*(.8+r()*.5),s,0,rot); else if(v<.62) P(2,px,y,pz,s*.8,s*.8,s*.8,0,rot); continue; }
     if(tame){ if(v<.2) P(1,px,y,pz,s,s,s,0,rot); else if(v<.36) P(2,px,y,pz,s*.8,s*.8,s*.8,0,rot); else if(v<.4) P(3,px,y,pz,s*.6,s*.6,s*.6,0,rot); continue; }
     if(v<.06) P(0,px,y-.2,pz,s,s*(.8+r()*.5),s,0,rot); else if(v<.2) P(1,px,y,pz,s*1.1,s*1.1,s*1.1,0,rot); else if(v<.62) P(2,px,y,pz,s,s,s,0,rot); else if(v<.7) P(3,px,y,pz,s*(.6+r()),s*(.6+r()*.6),s*(.6+r()),0,rot); }
-  for(const t of D.trees){ if(Math.abs(t[0])<HALF&&Math.abs(t[1])<HALF) P(1,t[0],heightAt(t[0],t[1]),t[1],1.2,1.2,1.2,0,r()*TAU); }
+  for(const t of D.trees){ if(inB(t[0],t[1])) P(1,t[0],heightAt(t[0],t[1]),t[1],1.2,1.2,1.2,0,r()*TAU); }
   log('plants '+plants.length);
 
   // ---------- movement grid (2 m) over the block ----------
-  const NS=2, NX=Math.round(2*HALF/NS), N=NX*NX, surf=new Float32Array(N), kind=new Uint8Array(N), brush=new Float32Array(N), sp=new Float32Array(N);
-  const NK=NAVKIND, cX=i=>-HALF+(i+.5)*NS;
-  const cells=(a0,b0,c0,d0,fn)=>{ const i0=Math.max(0,Math.floor((a0+HALF)/NS)), i1=Math.min(NX-1,Math.floor((c0+HALF)/NS)), j0=Math.max(0,Math.floor((b0+HALF)/NS)), j1=Math.min(NX-1,Math.floor((d0+HALF)/NS)); for(let j=j0;j<=j1;j++) for(let i=i0;i<=i1;i++) fn(j*NX+i,cX(i),cX(j)); };
+  const NS=2, NX=Math.round((BX1-BX0)/NS), NZ=Math.round((BZ1-BZ0)/NS), N=NX*NZ, surf=new Float32Array(N), kind=new Uint8Array(N), brush=new Float32Array(N), sp=new Float32Array(N);
+  const NK=NAVKIND, cX=i=>BX0+(i+.5)*NS, cZ=j=>BZ0+(j+.5)*NS;
+  const cells=(a0,b0,c0,d0,fn)=>{ const i0=Math.max(0,Math.floor((a0-BX0)/NS)), i1=Math.min(NX-1,Math.floor((c0-BX0)/NS)), j0=Math.max(0,Math.floor((b0-BZ0)/NS)), j1=Math.min(NZ-1,Math.floor((d0-BZ0)/NS)); for(let j=j0;j<=j1;j++) for(let i=i0;i<=i1;i++) fn(j*NX+i,cX(i),cZ(j)); };
   const line=(pts,pad,fn)=>{ for(let k=0;k<pts.length-1;k++){ const a=pts[k], b=pts[k+1]; cells(Math.min(a[0],b[0])-pad,Math.min(a[1],b[1])-pad,Math.max(a[0],b[0])+pad,Math.max(a[1],b[1])+pad,(id,x,z)=>{ if(segDist(x,z,a,b)[0]<pad) fn(id,x,z); }); } };
   const set=(id,k,s)=>{ kind[id]=k; surf[id]=s; };
   for(let id=0;id<N;id++) set(id,NK.open,.72);
@@ -193,7 +195,7 @@ function bake(D,log=()=>{}){
   for(const rd of [...D.roads].sort((a,b)=>roadW(a)-roadW(b))){ if(isBridge(rd)) continue; const k=!isDrive(rd)?NK.path:isPaved(rd)?NK.asphalt:NK.dirt; line(rd.pts,roadW(rd)/2+.3,id=>set(id,k,k===NK.asphalt?1:k===NK.path?.95:.86)); }
   const PW=[.25,.1,.16,.14,.2];
   for(const p of plants){ const rr=p[0]===1?1.8:1.2; cells(p[1]-rr,p[3]-rr,p[1]+rr,p[3]+rr,id=>{ brush[id]+=PW[p[0]]; }); }
-  for(let j=0;j<NX;j++) for(let i=0;i<NX;i++){ const id=j*NX+i, x=cX(i), z=cX(j), sl=slopeAt(x,z), k=kind[id], road=k===NK.asphalt||k===NK.dirt||k===NK.path||k===NK.lot;
+  for(let j=0;j<NZ;j++) for(let i=0;i<NX;i++){ const id=j*NX+i, x=cX(i), z=cZ(j), sl=slopeAt(x,z), k=kind[id], road=k===NK.asphalt||k===NK.dirt||k===NK.path||k===NK.lot;
     const slopeF=sl<4?1:Math.max(.28,1-(sl-4)/30), brushF=road?1:Math.max(.42,1-brush[id]);
     if(!road&&brush[id]>.12&&(k===NK.open||k===NK.wash)) kind[id]=NK.brush; else if(!road&&sl>14&&k===NK.open) kind[id]=NK.hill;
     sp[id]=surf[id]*slopeF*brushF; if(sl>36&&!road){ kind[id]=NK.steep; sp[id]=0; } }
@@ -212,10 +214,10 @@ function bake(D,log=()=>{}){
   log('nav');
   // camps in the undercroft of long bridges
   const camps=F.bridges.filter(b=>b.len>90).map(b=>{ const s=b.ab+9; let k=0; while(k<b.d.length-1&&b.L[k+1]<s) k++; return {bridge:F.bridges.indexOf(b),k}; });
-  return {H,NXg,NZg,X0,Z0,st,F,walls,plants,nav:{NS,NX,sp,kind},houses:new Set(houses),camps,WASH};
+  return {H,NXg,NZg,X0,Z0,st,F,walls,plants,nav:{NS,NX,NZ,BX0,BZ0,sp,kind},houses:new Set(houses),camps,WASH};
 }
-const NAVKIND={open:0,asphalt:1,dirt:2,path:3,lot:4,yard:5,wash:6,brush:7,hill:8,water:9,building:10,wall:11,steep:12,low:13,pier:14,car:15};
-const NAVLABEL=['Open desert','Asphalt','Dirt road','Footpath','Paved lot','Yard','Sand wash','Brush','Hillside','Water','Building','Wall','Too steep','No headroom','Bridge pier','Wreck'];
+const NAVKIND={open:0,asphalt:1,dirt:2,path:3,lot:4,yard:5,wash:6,brush:7,hill:8,water:9,building:10,wall:11,steep:12,low:13,pier:14,car:15,plant:16};
+const NAVLABEL=['Open desert','Asphalt','Dirt road','Footpath','Paved lot','Yard','Sand wash','Brush','Hillside','Water','Building','Wall','Too steep','No headroom','Bridge pier','Wreck','Plant or boulder'];
 // abandoned cars: length and width in metres, shared by the road pass (movement grid) and the car models
 const CARDIM={sedan:[4.8,1.84],hatch:[4.15,1.76],suv:[4.85,1.94],pickup:[5.6,2.0],van:[5.1,2.0]};
 const SWIM=.2;
