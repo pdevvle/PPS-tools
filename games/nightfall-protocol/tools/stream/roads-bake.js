@@ -84,6 +84,15 @@ for(const w of ways){ if(matched.has(w)||w.len<4||w.rank<1&&w.drive) continue; i
 for(const s of S){ const keep=[]; for(const pl of s.plants){ let gone=false; if(pl[0]===3) for(const rd of s.roads){ if(!rd.drive) continue; const reach=rd.w/2+.6+Math.max(pl[4],pl[6])*.95; let d=1e9; for(let k=0;k<rd.pts.length-1&&d>=reach;k++) d=Math.min(d,C.segDist(pl[1],pl[3],rd.pts[k],rd.pts[k+1])[0]); if(d<reach){ gone=true; break; } }
   if(gone) s.undoPlants.push(pl); else keep.push(pl); } s.plants=keep; }
 
+// ---------- bridge ends: the bake marked 'no headroom' a deck's half-width round its centreline, past the ends too,
+// which closed the ground the deck joins. Reopen what lies beyond the ends: the approach road as asphalt, the rest as ground.
+for(const b of IDX.bridges){ const d=b.d, n=d.length, len=b.L[n-1];
+  for(const [e,sg] of [[0,-1],[n-1,1]]){ const p=d[e], q=d[e-sg], l=Math.hypot(p[0]-q[0],p[1]-q[1])||1, tx=(p[0]-q[0])/l, tz=(p[1]-q[1])/l, R=b.hw+3;
+    for(let z=p[1]-R;z<=p[1]+R;z+=NS) for(let x=p[0]-R;x<=p[0]+R;x+=NS){ const cx=Math.floor(x/NS)*NS+NS/2, cz=Math.floor(z/NS)*NS+NS/2, along=(cx-p[0])*tx+(cz-p[1])*tz; if(along<=0) continue;
+      const s=secAt(cx,cz); if(!s) continue; const ns=s.nav.n, i=Math.floor((cx-s.x0)/NS), j=Math.floor((cz-s.z0)/NS), id=j*ns+i; if(i<0||j<0||i>=ns||j>=ns||s.kindA[id]!==NK.low) continue;
+      const side=Math.abs((cx-p[0])*-tz+(cz-p[1])*tx), road=side<b.w/2+.4, e2=2, gx=(heightIn(s,cx+e2,cz)-heightIn(s,cx-e2,cz))/(2*e2), gz=(heightIn(s,cx,cz+e2)-heightIn(s,cx,cz-e2))/(2*e2), sl=Math.atan(Math.hypot(gx,gz))*180/Math.PI;
+      if(sl>36){ continue; } if(!s.undoNav.has(id)) s.undoNav.set(id,[s.kindA[id],s.spA[id]]); s.kindA[id]=road?NK.asphalt:NK.open; s.spA[id]=Math.round((road?1:.72)*(sl<4?1:Math.max(.28,1-(sl-4)/30))*250); } } }
+
 // ---------- junctions ----------
 const at=new Map(); ways.forEach(w=>{ if(w.rank<0) return; w.nodes.forEach((n,k)=>{ if(!at.has(n)) at.set(n,[]); at.get(n).push([w,k]); }); });
 const junctions=[];

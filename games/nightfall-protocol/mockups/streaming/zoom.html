@@ -1251,7 +1251,7 @@ return {figure, genFace, POSES, applyPose, mats, inkUp, STATES};
 // and falls back to plain roads for sector files without it. Coordinates: block metres, x east, z south, y up.
 (function(root){
 function RoadKit(o){
-const {THREE,C,heightAt,IDX,renderer,mat,SHAPES,sectorGeo}=o, TAU=Math.PI*2;
+const {THREE,C,heightAt,IDX,renderer,mat,SHAPES,sectorGeo}=o, kindAt=o.kindAt||(()=>255), TAU=Math.PI*2;
 const aniso=renderer.capabilities.getMaxAnisotropy(), CK=root.CarKit?root.CarKit({mat,C}):null;
 
 // ---------- textures, drawn once ----------
@@ -1315,6 +1315,30 @@ const MAT={laneDark:M(TEX.laneDark), laneLight:M(TEX.laneLight), plainDark:M(TEX
   jDark:M(TEX.plainDark,'#ffffff',{polygonOffsetFactor:-4,polygonOffsetUnits:-4}), jLight:M(TEX.plainLight,'#ffffff',{polygonOffsetFactor:-4,polygonOffsetUnits:-4}), jGravel:M(gravelTex,'#ffffff',{polygonOffsetFactor:-4,polygonOffsetUnits:-4}) };
 const PAINT=k=>{ const m=new THREE.MeshStandardMaterial({color:k,roughness:.7,metalness:0,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-6,polygonOffsetUnits:-6}); m.userData.keep=true; return m; };
 const WHITE=PAINT('#e6e3da'), YELLOW=PAINT('#dcaa35'), GROOVE=PAINT('#3b3a37');
+
+// ---------- decay decals and weeds ----------
+const alphaTex=(w,h,draw,seed)=>{ const c=document.createElement('canvas'); c.width=w; c.height=h; const g=c.getContext('2d'); draw(g,C.rng(seed),w,h); const t=new THREE.CanvasTexture(c); t.anisotropy=aniso; return t; };
+// a pothole: broken asphalt rim, a dark hollow of grit and gravel, the low side in shadow
+const potholeTex=alphaTex(128,128,(g,r,w,h)=>{ const blob=(rad,jag,col)=>{ g.beginPath(); for(let i=0;i<=24;i++){ const a=i/24*TAU, rr=rad*(1-jag*.5+r()*jag); i?g.lineTo(w/2+Math.cos(a)*rr,h/2+Math.sin(a)*rr):g.moveTo(w/2+Math.cos(a)*rr,h/2+Math.sin(a)*rr); } g.closePath(); g.fillStyle=col; g.fill(); };
+  blob(60,.35,'rgba(118,112,102,.95)'); blob(50,.3,'#3a342d'); blob(40,.35,'#2a251f'); const gr=g.createLinearGradient(0,0,w,h); gr.addColorStop(0,'rgba(0,0,0,.45)'); gr.addColorStop(.6,'rgba(0,0,0,0)'); g.globalCompositeOperation='source-atop'; g.fillStyle=gr; g.fillRect(0,0,w,h);
+  for(let i=0;i<120;i++){ g.fillStyle=['#8f8675','#6d655a','#a99f8c','#4f483f'][Math.floor(r()*4)]; const a=r()*TAU, d=r()*40; g.fillRect(w/2+Math.cos(a)*d,h/2+Math.sin(a)*d,1.5+r()*2.5,1.5+r()*2); } g.globalCompositeOperation='source-over'; },71);
+// alligator cracking: a net of dark polygons with chipped edges
+const alligTex=alphaTex(256,128,(g,r,w,h)=>{ const cx=w/2, cy=h/2; g.strokeStyle='rgba(18,16,14,.75)'; g.lineCap='round';
+  const pts=[]; for(let i=0;i<150;i++) pts.push([r()*w,r()*h]);
+  for(const [x,y] of pts){ const f=Math.max(0,1-Math.hypot((x-cx)/(w*.5),(y-cy)/(h*.5))); if(f>.15){ g.fillStyle=`rgba(${r()<.5?'20,18,15':'150,145,135'},${.12+f*.2})`; g.beginPath(); g.arc(x,y,6+r()*8,0,TAU); g.fill(); } } for(const [x,y] of pts){ const fall=Math.max(0,1-Math.hypot((x-cx)/(w*.5),(y-cy)/(h*.5))); if(fall<=0) continue; let near=pts.map(p=>[Math.hypot(p[0]-x,p[1]-y),p]).sort((a,b)=>a[0]-b[0]).slice(1,4);
+    for(const [d,p] of near){ if(d>60) continue; g.lineWidth=.8+fall*2; g.beginPath(); g.moveTo(x,y); g.lineTo((x+p[0])/2+(r()-.5)*6,(y+p[1])/2+(r()-.5)*6); g.lineTo(p[0],p[1]); g.stroke(); } }
+  for(let i=0;i<25;i++){ const x=cx+(r()-.5)*w*.6, y=cy+(r()-.5)*h*.6; g.fillStyle='rgba(25,22,18,.35)'; g.fillRect(x,y,3+r()*8,2+r()*5); } },73);
+// a sand drift: a soft lobe heaped at one edge (v=0 is the road edge it blew in from), rippled by the wind
+const driftTex=alphaTex(256,128,(g,r,w,h)=>{ const img=g.createImageData(w,h);
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){ const u=x/w, v=y/h, n=.5*Math.sin(u*13.1+Math.sin(v*7)*1.3)+.3*Math.sin(u*29+v*11)+.2*Math.sin(u*5-v*17), lobe=Math.sin(Math.PI*u)**.5*(1-v**1.3)+n*.18*Math.sin(Math.PI*u), rip=.95+.05*Math.sin((u*30+v*9)+n*2), a=Math.max(0,Math.min(1,(lobe-.18)*3.2)), o=(y*w+x)*4;
+    img.data[o]=222*rip; img.data[o+1]=196*rip; img.data[o+2]=150*rip; img.data[o+3]=a*250; } g.putImageData(img,0,0); },79);
+const DEC=(t,extra={})=>{ const m=new THREE.MeshStandardMaterial({map:t,transparent:true,depthWrite:false,roughness:1,metalness:0,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-8,polygonOffsetUnits:-8,...extra}); m.userData.keep=true; return m; };
+const POTHOLE=DEC(potholeTex), ALLIG=DEC(alligTex), DRIFT=DEC(driftTex,{polygonOffsetFactor:-10,polygonOffsetUnits:-10});
+// a tuft of dry grass: thin blades fanned out from one root
+const WEED=(()=>{ const pos=[], r=C.rng(5); for(let k=0;k<16;k++){ const a=k/16*TAU+r()*.4, lean=.2+r()*.45, h=.45+r()*.5, bx=Math.cos(a)*.04, bz=Math.sin(a)*.04, w=.06;
+  pos.push(bx-Math.sin(a)*w,0,bz+Math.cos(a)*w, bx+Math.sin(a)*w,0,bz-Math.cos(a)*w, Math.cos(a)*lean*h,h,Math.sin(a)*lean*h); }
+  const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3)); g.computeVertexNormals(); return g; })();
+const WEEDM=new THREE.MeshStandardMaterial({color:'#9c9a52',roughness:1,flatShading:true,side:THREE.DoubleSide}); WEEDM.userData.keep=true;
 
 // ---------- the sign atlas: one canvas, cells packed in shelves; street names are added as sectors need them ----------
 const AT=1024, atC=document.createElement('canvas'); atC.width=atC.height=AT; const ag=atC.getContext('2d'); const atlas=new THREE.CanvasTexture(atC); atlas.anisotropy=aniso; atlas.flipY=false;
@@ -1467,6 +1491,42 @@ function* build(s,grp){ const D=s.data, rk=D.rk||{}, J=rk.junctions||[], rnd=C.r
     const c=F(0,0,1.0-1.9); c[1]=flat(c[0],c[2]); for(let i=0;i<W3.length;i++) PB.tri(WHITE,c,W3[i],W3[(i+1)%W3.length]); }
   for(const me of PB.meshes(false)){ me.userData.noInk=true; grp.add(me); }
   yield 'paint';
+  // ---------- wear and decay: potholes, alligator cracking, sand drifts, weeds in the cracks ----------
+  { const DB=new UB(), weeds=[], NK=C.NAVKIND, exposed=k=>k===NK.open||k===NK.brush||k===NK.wash||k===NK.hill;
+    // the wind comes from the west-south-west, so sand piles in from that edge of a road
+    const WX=.94, WZ=-.34;
+    // a decal laid on the road: centre, along-road unit (tx,tz), half length and half width, split so it follows the surface
+    const decal=(m,x,z,tx,tz,hl,hw2,lift,nu=1,nv=1,flip=false)=>{ const nx=-tz, nz=tx, pt=(a,b)=>{ const px=x+tx*a+nx*b, pz=z+tz*a+nz*b; return [px,HM(px,pz)+lift,pz]; };
+      for(let i=0;i<nu;i++) for(let j=0;j<nv;j++){ const a0=-hl+2*hl*i/nu, a1=-hl+2*hl*(i+1)/nu, b0=-hw2+2*hw2*j/nv, b1=-hw2+2*hw2*(j+1)/nv, U=a=>(a+hl)/(2*hl), V=b=>flip?1-(b+hw2)/(2*hw2):(b+hw2)/(2*hw2);
+        DB.quad(m,pt(a0,b0),pt(a1,b0),pt(a1,b1),pt(a0,b1),[U(a0),V(b0)],[U(a1),V(b0)],[U(a1),V(b1)],[U(a0),V(b1)]); } };
+    D.roads.forEach((rd,ri)=>{ const surf=C.roadSurf(rd); if((surf!=='asphalt'&&surf!=='concrete')||rd.bridge>=0||!rd.drive) return;
+      const sec=C.roadSection(rd), pv=sec.pave/2, pts=C.densify(rd.pts,2), Ls=[0]; for(let i=1;i<pts.length;i++) Ls.push(Ls[i-1]+Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1])); const tot=Ls[Ls.length-1]; if(tot<3) return;
+      const r=C.rng(Math.floor(Math.abs(rd.pts[0][0]*31+rd.pts[0][1]*17))+ri*7+1);
+      const at=sv=>{ let i=0; while(i<pts.length-2&&Ls[i+1]<sv) i++; const a=pts[i], b=pts[i+1], l=(Ls[i+1]-Ls[i])||1, t=(sv-Ls[i])/l; return {x:a[0]+(b[0]-a[0])*t,z:a[1]+(b[1]-a[1])*t,tx:(b[0]-a[0])/l,tz:(b[1]-a[1])/l}; };
+      const off=(q,o)=>[q.x-q.tz*o,q.z+q.tx*o];
+      const rate=rd.cls==='motorway'?110:/_link/.test(rd.cls)?70:['secondary','tertiary','primary','trunk'].includes(rd.cls)?40:22;
+      // potholes, in the wheel paths and in little groups
+      for(let sv=r()*rate;sv<tot;sv+=rate*(.5+r())){ const q=at(sv), lanes=sec.lanes.length?sec.lanes:[{o:0}], ln=lanes[Math.floor(r()*lanes.length)], k=1+Math.floor(r()*r()*4);
+        for(let c=0;c<k;c++){ const o=Math.max(-pv+.4,Math.min(pv-.4,ln.o+(r()<.5?-.9:.9)+(r()-.5)*.6)), s2=sv+(r()-.5)*3, q2=at(Math.max(0,Math.min(tot,s2))), [x,z]=off(q2,o); if(nearJ(x,z,-2)) continue;
+          const sz=.4+r()*r()*1.3, a=r()*TAU; decal(POTHOLE,x,z,Math.sin(a),Math.cos(a),sz,sz*(.7+r()*.3),.092); if(r()<.5) weeds.push([x,z,.25+r()*.25]); } }
+      // alligator cracking: a broken patch the size of a car
+      for(let sv=r()*rate*2;sv<tot;sv+=rate*2*(.6+r())){ const q=at(sv), lanes=sec.lanes.length?sec.lanes:[{o:0}], ln=lanes[Math.floor(r()*lanes.length)], [x,z]=off(q,ln.o+(r()-.5)*.8); if(nearJ(x,z)) continue;
+        decal(ALLIG,x,z,q.tx,q.tz,1+r()*2,.9+r()*.8,.088,2,1); for(let k=0;k<3;k++){ const [wx,wz]=off(at(Math.min(tot,sv+(r()-.5)*3)),ln.o+(r()-.5)*1.6); weeds.push([wx,wz,.2+r()*.3]); } }
+      // sand drifts off the open desert on the upwind side; fans where a wash runs over the road
+      for(let sv=r()*25;sv<tot;sv+=18+r()*20){ const q=at(sv), nx=-q.tz, nz=q.tx, up=nx*-WX+nz*-WZ>0?1:-1, [ex,ez]=off(q,up*(rd.w/2+3));
+        if(!exposed(kindAt(ex,ez))||r()>(rd.cls==='motorway'?.3:.55)) continue; const reach=1.5+r()*(pv*1.1), len=4+r()*9, [x,z]=off(q,up*(pv-reach/2+.3));
+        decal(DRIFT,x,z,q.tx,q.tz,len/2,reach/2+.3,.096,3,2,up<0); if(r()<.6) for(let k=0;k<2+Math.floor(r()*4);k++){ const [wx,wz]=off(at(Math.max(0,Math.min(tot,sv+(r()-.5)*len))),up*(pv-.2-r()*reach*.4)); weeds.push([wx,wz,.25+r()*.35]); } }
+      for(const w of D.water) for(let k=1;k<w.pts.length;k++) for(let i=1;i<rd.pts.length;i++){ const X=C.segX(w.pts[k-1],w.pts[k],rd.pts[i-1],rd.pts[i]); if(!X) continue;
+        const dx=rd.pts[i][0]-rd.pts[i-1][0], dz=rd.pts[i][1]-rd.pts[i-1][1], l=Math.hypot(dx,dz)||1; decal(DRIFT,X[0],X[1],dx/l,dz/l,(w.hw||5)+2+r()*3,pv+.4,.097,4,3,r()<.5); }
+      // weeds along the pavement edge and the centre seam
+      for(let sv=r()*3;sv<tot;sv+=1.6+r()*2.4){ const q=at(sv); if(r()<(rd.cls==='motorway'?.35:.22)){ const sd=r()<.5?-1:1, [x,z]=off(q,sd*(pv-.08-r()*.25)); if(!nearJ(x,z)) weeds.push([x,z,.35+r()*.45]); }
+        if(!rd.oneway&&sec.lines.length&&r()<.05){ const [x,z]=off(q,(r()-.5)*.3); if(!nearJ(x,z)) weeds.push([x,z,.15+r()*.2]); } } });
+    for(const me of DB.meshes(false)){ me.userData.noInk=true; me.renderOrder=2; grp.add(me); }
+    if(weeds.length){ const wi=new THREE.InstancedMesh(sectorGeo(WEED,s),WEEDM,weeds.length), r=C.rng(3+s.c*11+s.r*5);
+      const clumps=[]; weeds.forEach(([x,z,sc],i)=>{ if(r()<.35) clumps.push([x,z,sc]); wi.setMatrixAt(i,new THREE.Matrix4().compose(new THREE.Vector3(x,HM(x,z)+.07,z),new THREE.Quaternion().setFromEuler(new THREE.Euler(0,r()*TAU,0)),new THREE.Vector3(sc,sc*(.7+r()*.6),sc))); });
+      if(clumps.length){ const cm=new THREE.InstancedMesh(sectorGeo(SHAPES.shrub,s),mat('#7f8a45'),clumps.length); clumps.forEach(([x,z,sc],i)=>cm.setMatrixAt(i,new THREE.Matrix4().compose(new THREE.Vector3(x+.15,HM(x,z)+.02,z),new THREE.Quaternion().setFromEuler(new THREE.Euler(0,r()*TAU,0)),new THREE.Vector3(sc*.45,sc*.4,sc*.45)))); cm.userData.noInk=true; cm.castShadow=true; s.props.add(cm); }
+      wi.userData.noInk=true; wi.castShadow=true; s.props.add(wi); } }   // in props: the plant rebuild clears s.gen
+  yield 'decay';
   // ---------- signs, signals and the rest of the roadside ----------
   const B=new UB();
   const post=(F,h,w=.04)=>box(B,POST,F,0,h/2-.3,0,w,h/2+.3,w);
@@ -2531,7 +2591,7 @@ const IDX=await (await fetch('block/index.json')).json();
 const SEC=IDX.sector, NB=IDX.n, HALF=IDX.half, NS=IDX.navStep, SN=SEC/NS, GN=NB*SN, GNN=GN*GN;
 for(const b of IDX.bridges){ const d=b.d; b.yAt=t=>C.bridgeY(b,t); b.tan=k=>{ const p=d[Math.max(0,k-1)], q=d[Math.min(d.length-1,k+1)], l=Math.hypot(q[0]-p[0],q[1]-p[1])||1; return [(q[0]-p[0])/l,(q[1]-p[1])/l]; }; b.nrm=k=>{ const [tx,tz]=b.tan(k); return [tz,-tx]; };
   b.sec=[Math.floor((b.mid[0]+HALF)/SEC),Math.floor((b.mid[1]+HALF)/SEC)]; b.bb=C.bbox(d); }
-const RK=RoadKit({THREE,C,heightAt:(x,z)=>heightAt(x,z),IDX,renderer,mat,SHAPES,sectorGeo:(g,s)=>sectorGeo(g,s)});   // road surfaces, paint, signs and signals
+const RK=RoadKit({THREE,C,heightAt:(x,z)=>heightAt(x,z),IDX,renderer,mat,SHAPES,sectorGeo:(g,s)=>sectorGeo(g,s),kindAt:(x,z)=>{ const c=cellOf(x,z); return c<0?255:kindG[c]; }});   // road surfaces, paint, signs and signals
 const sectors=new Map(), key=(c,r)=>c+','+r;
 const secAt=(x,z)=>{ const c=Math.floor((x+HALF)/SEC), r=Math.floor((z+HALF)/SEC); return c>=0&&r>=0&&c<NB&&r<NB?[c,r]:null; };
 const CX=IDX.context, ctxH=(x,z)=>{ const fx=(x+CX.half)/CX.step, fz=(z+CX.half)/CX.step, i=Math.max(0,Math.min(CX.n-2,Math.floor(fx))), j=Math.max(0,Math.min(CX.n-2,Math.floor(fz))), u=fx-i, v=fz-j, h=(a,b)=>CX.h[b*CX.n+a]; return (h(i,j)*(1-u)+h(i+1,j)*u)*(1-v)+(h(i,j+1)*(1-u)+h(i+1,j+1)*u)*v; };
@@ -2779,7 +2839,7 @@ document.getElementById('tglSwim').addEventListener('change',e=>{ ui.swim=e.targ
 document.getElementById('tglSeams').addEventListener('change',e=>{ ui.seams=e.target.checked; for(const s of sectors.values()) if(s.seam) s.seam.visible=ui.seams; });
 
 // ---------- panels ----------
-const cells=[]; for(let r=0;r<NB;r++) for(let c=0;c<NB;c++){ const i=document.createElement('i'); i.title=`Sector ${c+1},${r+1}`; miniEl.appendChild(i); cells.push(i); } const dot=document.createElement('b'); miniEl.appendChild(dot);
+const cells=[]; for(let r=0;r<NB;r++) for(let c=0;c<NB;c++){ const i=document.createElement('i'); i.title=`Sector ${c+1},${r+1}: go there`; i.addEventListener('click',()=>jumpTo(c,r)); miniEl.appendChild(i); cells.push(i); } const dot=document.createElement('b'); miniEl.appendChild(dot);
 const tot=IDX.sectors.reduce((a,s)=>a+s.bytes,0);
 blockEl.innerHTML=`<div><dt>Size</dt><dd>${NB} × ${NB} sectors, ${(NB*SEC/1000).toFixed(1)} km square</dd></div><div><dt>Sector files</dt><dd>${(tot/1e6).toFixed(1)} MB of JSON, about ${Math.round(IDX.sectors.reduce((a,s)=>a+s.gz,0)/IDX.sectors.length/1000)} KB each compressed</dd></div>
   <div><dt>Buildings</dt><dd>${IDX.sectors.reduce((a,s)=>a+s.b,0)}</dd></div><div><dt>Plants</dt><dd>${IDX.sectors.reduce((a,s)=>a+s.plants,0).toLocaleString()}</dd></div><div><dt>Bridges</dt><dd>${IDX.bridges.length}</dd></div>`;
@@ -2981,12 +3041,31 @@ const CB=(()=>{
 
 // ---------- frame loop ----------
 const PACE=2.6, GAIT=PACE/1.39;   // the squad moves faster than real walking pace (1.39 m/s); motion shows a walk played faster
+// ---------- time: exploring runs in real time; pause, 1× and 4× as on the map ----------
+const TM={speed:1, sec:0, base:7.5*60, snap:false};   // game seconds since arriving; base is the clock in game minutes
+{ const css=document.createElement('style'); css.textContent=`.tclock{position:absolute;right:10px;top:10px;display:flex;gap:4px;align-items:center;z-index:3;background:rgba(24,24,26,.82);border:1px solid #38393d;border-radius:4px;padding:4px 6px}
+  .tclock b{font:500 13px var(--mono,monospace);color:#e2e0dc;margin-right:4px;white-space:nowrap}.tclock button{background:#2d2f33;border:1px solid #38393d;color:#e2e0dc;font:600 12px var(--body,sans-serif);padding:3px 8px;cursor:pointer;border-radius:3px}
+  .tclock button[aria-pressed="true"]{border-color:#e0a526;color:#e0a526}.mini i{cursor:pointer}.mini i:hover{outline:1px solid #e0a526;outline-offset:-1px}`; document.head.appendChild(css); }
+const clockBox=document.createElement('div'); clockBox.className='tclock'; clockBox.innerHTML='<b id="tclk"></b><button type="button" data-ts="0" aria-pressed="false" title="Pause">❚❚</button><button type="button" data-ts="1" aria-pressed="true">1×</button><button type="button" data-ts="4" aria-pressed="false">4×</button>'; stage.appendChild(clockBox);
+const clkEl=clockBox.querySelector('#tclk');
+function setSpeed(k){ TM.speed=k; clockBox.querySelectorAll('[data-ts]').forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.ts===k))); }
+clockBox.addEventListener('click',e=>{ const b=e.target.closest('[data-ts]'); if(b) setSpeed(+b.dataset.ts); });
+window.addEventListener('keydown',e=>{ if((e.target.closest&&e.target.closest('input,textarea,button,select'))||NF.mode!=='tactical') return; if(e.code==='Space'){ e.preventDefault(); setSpeed(TM.speed?0:1); } });
+let clkShown='';
+function drawClock(){ const m=TM.base+TM.sec/60, d=Math.floor(m/1440)+1, h=Math.floor((m%1440)/60), mm=Math.floor(m%60), ss=Math.floor((m*60)%60), t=`Day ${d} ${String(h).padStart(2,'0')}:${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`; if(t!==clkShown){ clkShown=t; clkEl.textContent=t; } }
+// jump to a sector from the overview: the squad is set down at its middle, then on the nearest walkable cell once it has loaded
+function jumpTo(c,r){ const x=-HALF+(c+.5)*SEC, z=-HALF+(r+.5)*SEC;
+  if(figs.length){ Object.assign(squad,{x,z,l:0,path:null,trail:[{x,z,l:0}]}); figs.forEach((f,i)=>{ f.x=x; f.z=z+i*.01; f.y=undefined; }); follow=true; TM.snap=true; }
+  else { follow=false; }
+  target.set(x,heightAt(x,z),z); }
+function snapSquad(){ const s=sectors.get(key(...centre)); if(!s||s.state!=='built') return; TM.snap=false; const c=cellOf(squad.x,squad.z); if(c>=0&&nodeSpeed(c)>0) return; const n=nearestPassable(c); if(n<0) return;
+  const p=nodePos(n); Object.assign(squad,{x:p.x,z:p.z,trail:[{x:p.x,z:p.z,l:0}]}); figs.forEach((f,i)=>{ f.x=p.x; f.z=p.z+i*.01; f.y=undefined; }); }
 let last=performance.now(), boost=1, panelT=0; const tmp=new THREE.Vector3();
 const speedHere=(x,z,l)=>{ if(l) return 1; const c=cellOf(x,z); return c<0?.7:Math.max(.15,nodeSpeed(c)||.3); };
 function trailAt(back){ const T=squad.trail; let acc=Math.hypot(squad.x-T[T.length-1].x,squad.z-T[T.length-1].z); if(acc>=back) return null;
   for(let i=T.length-1;i>0;i--){ const a=T[i], b=T[i-1], l=Math.hypot(a.x-b.x,a.z-b.z); if(acc+l>=back){ const t=(back-acc)/(l||1); return {x:a.x+(b.x-a.x)*t,z:a.z+(b.z-a.z)*t,l:t<.5?a.l:b.l}; } acc+=l; } return T[0]; }
 function loop(now){
-  requestAnimationFrame(loop); const raw=now-last; last=now; stats.frame+=(raw-stats.frame)*.05; const dt=Math.min(.05,raw/1000)*boost;
+  requestAnimationFrame(loop); const raw=now-last; last=now; stats.frame+=(raw-stats.frame)*.05; const rdt=Math.min(.05,raw/1000), dt=rdt*boost*TM.speed; TM.sec+=dt; drawClock();   // the camera keeps real time so it still moves while paused
   if(NF.mode!=='tactical') return;
   pump(8);
   if(!ready){ const s=centre&&sectors.get(key(...centre)); if(s&&s.state==='built'&&[...sectors.values()].every(q=>q.state==='built'||q.state==='failed')){ ready=true; if(pending!==undefined){ placeSquad(pending); pending=undefined; } loadingEl.hidden=true; } else { renderer.render(scene,cam); return; } }
@@ -2998,6 +3077,7 @@ function loop(now){
     const T=squad.trail, lt=T[T.length-1]; if(Math.hypot(lt.x-squad.x,lt.z-squad.z)>.4){ T.push({x:squad.x,z:squad.z,l:squad.l}); if(T.length>300) T.shift(); } }
   // the window follows the squad, or the camera when no squad is here
   const q=figs.length&&follow?secAt(squad.x,squad.z):secAt(target.x,target.z); if(q&&(q[0]!==centre[0]||q[1]!==centre[1])) setCentre(...q);
+  if(TM.snap) snapSquad();
   if(!CB.active) figs.forEach((f,i)=>{
     if(i===0){ f.x=squad.x; f.z=squad.z; f.l=squad.l; if(moving){ let a=squad.heading-f.root.rotation.y; a=Math.atan2(Math.sin(a),Math.cos(a)); f.root.rotation.y+=a*Math.min(1,dt*10); } }
     else { const tp=trailAt(i*1.9); if(tp){ const ddx=tp.x-f.x, ddz=tp.z-f.z, dd=Math.hypot(ddx,ddz); if(dd>.12){ const sp=Math.min(dd,PACE*1.15*speedHere(f.x,f.z,f.l)*dt+Math.max(0,dd-1)*dt*2); f.x+=ddx/dd*sp; f.z+=ddz/dd*sp; let a=Math.atan2(ddx,ddz)-f.root.rotation.y; a=Math.atan2(Math.sin(a),Math.cos(a)); f.root.rotation.y+=a*Math.min(1,dt*8); } f.l=tp.l; } }
@@ -3008,8 +3088,8 @@ function loop(now){
   if(marker.visible){ const a=(now-markerT)/900; marker.material.opacity=Math.max(0,.8-a*.6); marker.scale.setScalar(1+a*.4); if(a>1.4) marker.visible=false; }
   // camera
   const sy=figs.length?figs[0].y||0:heightAt(target.x,target.z);
-  if(follow){ target.x+=(squad.x-target.x)*Math.min(1,dt*3); target.z+=(squad.z-target.z)*Math.min(1,dt*3); target.y+=(sy+(ui.view==='street'?1.4:0)-target.y)*Math.min(1,dt*4); }
-  const V=VIEWS[ui.view], kk=1-Math.exp(-dt*6); camS.dist+=(V.dist-camS.dist)*kk; camS.pitch+=(V.pitch-camS.pitch)*kk; const ay=camT.yaw-camS.yaw; camS.yaw+=Math.atan2(Math.sin(ay),Math.cos(ay))*kk;
+  if(follow){ target.x+=(squad.x-target.x)*Math.min(1,rdt*3); target.z+=(squad.z-target.z)*Math.min(1,rdt*3); target.y+=(sy+(ui.view==='street'?1.4:0)-target.y)*Math.min(1,rdt*4); }
+  const V=VIEWS[ui.view], kk=1-Math.exp(-rdt*6); camS.dist+=(V.dist-camS.dist)*kk; camS.pitch+=(V.pitch-camS.pitch)*kk; const ay=camT.yaw-camS.yaw; camS.yaw+=Math.atan2(Math.sin(ay),Math.cos(ay))*kk;
   cam.position.set(target.x+Math.sin(camS.yaw)*Math.cos(camS.pitch)*camS.dist, target.y+Math.sin(camS.pitch)*camS.dist, target.z+Math.cos(camS.yaw)*Math.cos(camS.pitch)*camS.dist);
   const gy=heightAt(cam.position.x,cam.position.z)+1.2; if(cam.position.y<gy) cam.position.y=gy; cam.lookAt(target);
   sun.position.set(target.x+.45*400,target.y+.8*400,target.z+.35*400); sun.target.position.copy(target); const R=ui.view==='high'?420:110;
@@ -3020,8 +3100,9 @@ function loop(now){
   whereEl.textContent=`New River · sector ${centre[0]+1},${centre[1]+1}`;
   if((panelT+=raw)>400){ panelT=0; updatePanels(); }
 }
-NF.tacEnter=(x,z,sq)=>{ target.set(x,heightAt(x,z),z); follow=!!sq; VIEWS.tactical.dist=sq?55:120; VIEWS.tactical.pitch=.85; VIEWS.high.dist=420; ui.view='tactical'; document.querySelectorAll('#segView button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.v==='tactical')));
+NF.tacEnter=(x,z,sq)=>{ TM.sec=0; TM.base=window.Campaign&&Campaign.state?Campaign.state.minutes:TM.base; setSpeed(1); target.set(x,heightAt(x,z),z); follow=!!sq; VIEWS.tactical.dist=sq?55:120; VIEWS.tactical.pitch=.85; VIEWS.high.dist=420; ui.view='tactical'; document.querySelectorAll('#segView button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.v==='tactical')));
   camS.dist=700; camS.pitch=1.1; const c=secAt(x,z)||[2,2]; ready=false; pending=sq; loadingEl.hidden=false; resize(); setCentre(...c); };
+NF.tacSeconds=()=>TM.sec;   // game seconds spent here, for the map clock to catch up
 NF.tacState=()=>({x:target.x,z:target.z,squad:squadInfo?{x:squad.x,z:squad.z,index:squadInfo.index,people:figs.length}:null}); NF.tacBusy=()=>CB.active;
 window.__stream={CB,scene,squad,sectors,stats,orderMove:(x,z,deck)=>orderMove({p:new THREE.Vector3(x,heightAt(x,z),z),deck}),boost:k=>{ boost=k; },heightAt,ui,look:(x,z,yaw,pitch,dist)=>{ follow=false; target.set(x,heightAt(x,z),z); camT.yaw=yaw; VIEWS[ui.view].pitch=pitch; VIEWS[ui.view].dist=dist; },follow:()=>{ follow=true; },renderer,teleport:(x,z)=>{ Object.assign(squad,{x,z,l:0,path:null,trail:[{x,z,l:0}]}); figs.forEach((f,i)=>{ f.x=x; f.z=z+i*.01; f.y=undefined; }); target.set(x,heightAt(x,z),z); follow=true; },lowfi:()=>{ renderer.shadowMap.enabled=false; renderer.setPixelRatio(1); resize(); }};
 requestAnimationFrame(loop);
@@ -3039,7 +3120,7 @@ NF.exitTactical=()=>{ if(NF.mode!=='tactical') return; if(NF.tacBusy&&NF.tacBusy
   swap(()=>{ NF.mode='region'; ts.hidden=true; rt.hidden=true; rs.hidden=false; rr.hidden=false; window.__region.resize();
     if(st.squad){ const [x,z]=NF.blockToRegion(st.squad.x,st.squad.z); window.__region.placeSquad(st.squad.index,x,z,st.squad.people); }
     const [rx,rz]=NF.blockToRegion(st.x,st.z); window.__region.focus(rx,rz);
-    window.__region.back((performance.now()-NF.tacT0)/1000, NF.tacResult?NF.tacResult():undefined); }); };   // the map clock catches up
+    window.__region.back(NF.tacSeconds?NF.tacSeconds():(performance.now()-NF.tacT0)/1000, NF.tacResult?NF.tacResult():undefined); }); };   // the map clock catches up
 document.getElementById('upBtn').onclick=()=>NF.exitTactical();
 })();
 

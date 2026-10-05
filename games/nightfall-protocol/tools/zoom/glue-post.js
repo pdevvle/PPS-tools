@@ -11,6 +11,6 @@ NF.exitTactical=()=>{ if(NF.mode!=='tactical') return; if(NF.tacBusy&&NF.tacBusy
   swap(()=>{ NF.mode='region'; ts.hidden=true; rt.hidden=true; rs.hidden=false; rr.hidden=false; window.__region.resize();
     if(st.squad){ const [x,z]=NF.blockToRegion(st.squad.x,st.squad.z); window.__region.placeSquad(st.squad.index,x,z,st.squad.people); }
     const [rx,rz]=NF.blockToRegion(st.x,st.z); window.__region.focus(rx,rz);
-    window.__region.back((performance.now()-NF.tacT0)/1000, NF.tacResult?NF.tacResult():undefined); }); };   // the map clock catches up
+    window.__region.back(NF.tacSeconds?NF.tacSeconds():(performance.now()-NF.tacT0)/1000, NF.tacResult?NF.tacResult():undefined); }); };   // the map clock catches up
 document.getElementById('upBtn').onclick=()=>NF.exitTactical();
 })();

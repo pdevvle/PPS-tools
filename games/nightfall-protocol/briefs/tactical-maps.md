@@ -22,6 +22,7 @@ The real ground at walking scale, everywhere in the region: baked offline from O
 - Paved roads cross washes through culverts; dirt tracks ford them. Cars are left out for now (the data put too many in).
 - Roads come from the full OSM road download for the block, matched to the baked pieces way by way. Real control first: mapped stops and give ways win. Where nothing is mapped, signals go where three or more secondary-or-bigger arms meet; otherwise the straightest pair of the biggest roads runs through and the rest stop; equal roads crossing get an all-way stop. Junction nodes within 30 m of each other are one crossing.
 - Untagged driveways are gravel (50%), dirt (30%) or asphalt (20%), chosen from the way id so it never changes; untagged residential roads are asphalt. A road whose surface turns out unpaved is repainted as dirt in the movement grid.
+- Decay is generated at run time from seeds (potholes, alligator cracking, sand drifts from the WSW and at wash crossings, weeds). Tactical time runs 1:1 with real time, with pause and 4×; the map clock catches up by the game seconds spent tactical (`NF.tacSeconds`).
 - Signals and street lights are dark: the power is out. The 69 kV lines are real; distribution lines, transformers, service drops and street lights are inferred. Cars are placed with intent: queued at dead signals, on shoulders, crashed on the freeway, parked at houses and in lots, burnt out in the desert; about 140 in the block. Road paint and sign faces are clean but grimy; wear beyond that is for the decay pass.
 
 ## Interfaces
