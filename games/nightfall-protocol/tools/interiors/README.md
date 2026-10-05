@@ -63,8 +63,11 @@ Cutaway: walls are cut in the shader (`cutMat`, `CUT`), not swapped for low copi
 - **The section look:**
   - the inside of a cut wall draws as one flat tone per build-up (`CAPCOL`: drywall light, frame brown, block and concrete near black), like the poché of a section drawing;
   - a heavy ink line runs along the cut;
-  - wall ink above the cut is dropped, and inside the cut only level lines stay (no seams or jambs).
+  - above the cut, the wall ink becomes a pale blueprint outline of the full wall: top edges strong, uprights faint. Inside the cut only level lines stay (no seams or jambs).
+- **Modes:** "Cutaway" cuts around the cursor (a tap moves it on touch screens), and "Blueprint" cuts every wall.
 - **Plan symbols** (material kind `plan`, drawn only where walls are cut right down):
   - doors as the leaf drawn open with its swing arc, and garage doors as a dashed line where they roll up, all in two-tone ribbons that read on light and dark floors;
   - windows as a raised glazing bar on the cut with a dark rim: blue when glazed, grey when broken, brown when boarded.
 - **Motion:** the focus and the lowering ease in. Picking uses the same cut (`cutTop`), so you click what you see.
+
+Moving props: "Move prop" picks up a table, desk or shelf, or any piece a blast has thrown (each thrown chair is its own piece). Click the floor to set it down: it must be clear floor in one room, within 8 m. Click the prop again to shove it to the nearest clear spot in its room that blocks no doorway, against a wall if possible. "Clear doorways" does that for every thrown prop standing in a doorway or breach, and the plan outlines such props in red. Thrown pieces that would land outside the footprint come back to the nearest floor of their room. Window colliders now cover the wall under the sill, so props no longer slide out beneath windows.

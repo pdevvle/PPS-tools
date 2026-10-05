@@ -132,7 +132,7 @@ pre{margin:0;font:12px/1.45 var(--mono);background:var(--bg);border:1px solid va
         <span class="lab">View</span>
         <div class="chips" id="modeChips">
           <button data-mode="cutaway" aria-pressed="true">Cutaway</button>
-          <button data-mode="low">Low walls</button>
+          <button data-mode="low">Blueprint</button>
           <button data-mode="shell">Shell + roof</button>
         </div>
         <div class="chips">
@@ -149,6 +149,10 @@ pre{margin:0;font:12px/1.45 var(--mono);background:var(--bg);border:1px solid va
           <button data-tool="shoot">Shoot</button>
           <button data-tool="sledge">Sledgehammer</button>
           <button data-tool="charge">Breaching charge</button>
+          <button data-tool="move">Move prop</button>
+        </div>
+        <div class="chips">
+          <button id="clearDoors">Clear doorways</button>
         </div>
       </div>
       <div class="field">
@@ -200,7 +204,7 @@ pre{margin:0;font:12px/1.45 var(--mono);background:var(--bg);border:1px solid va
       <div><span class="q">3 · Grid</span><p>A 1 m interior grid with walls on cell edges. Each outside door links its outside cell to one 2 m movement cell (the gold squares). Interior cells never touch the 2 m grid anywhere else.</p></div>
       <div><span class="q">4 · Storeys</span><p>One plan per storey from the same footprint. Stair and lift cores are chosen once (a main stair and lift near the middle, fire stairs at the far ends) and stay in the same cells on every floor. Upper floors get windows but no street doors. Floors below the one in view draw as shells, floors above are hidden, and the roof is its own level. Try the 42015 N Venture Dr offices.</p></div>
       <div><span class="q">5 · Decay</span><p>Decay is a separate seed stream layered on the plan, so a change of history never moves a wall. The strategy layer chooses the history (looted, holdout, den), and the seed picks which windows and doors were hit.</p></div>
-      <div><span class="q">Cutaway</span><p>Drawn like a building section. Walls between the camera and the cursor drop to a 0.9 m stub (under half-cover height) and slope back up around it. The cut faces are filled by build-up: light for drywall, brown for frame, near black for block and concrete. Doors show as the leaf swung open with its arc. Windows show as a glazing bar on the cut: blue when glazed, grey when broken, brown when boarded. Outside walls facing the camera are always cut.</p></div>
+      <div><span class="q">Cutaway</span><p>Drawn like a building section. Walls between the camera and the cursor drop to a 0.9 m stub (under half-cover height) and slope back up around it. The cut faces are filled by build-up: light for drywall, brown for frame, near black for block and concrete. Doors show as the leaf swung open with its arc. Windows show as a glazing bar on the cut: blue when glazed, grey when broken, brown when boarded. Outside walls facing the camera are always cut. "Blueprint" cuts every wall and shows the full walls as a pale outline. Thrown props can be moved by hand ("Move prop", "Clear doorways").</p></div>
       <div><span class="q">Walls</span><p>Each wall has a build-up, and that decides how it breaks. Drywall partitions take bullets through and open to a sledge or a nearby grenade. Stucco-over-frame house walls give way more slowly. Concrete block (shop and office exteriors, stair and lift shafts, walls between shops) stops rounds and opens only to a breaching charge; a vault takes two. Hover a wall to read it. Damage goes cracked, holed, breached, and stays in the change record.</p></div>
       <div><span class="q">6 · Lifetime</span><p>Generation takes about 5 to 20 ms for a house (the time shows in the view), so build near the squad and drop it on leaving. Only the change record persists. It is keyed by the generator version, because item ids are stable only while the rules are.</p></div>
     </div>
@@ -2160,12 +2164,14 @@ float cutH(vec3 p){
   s=mix(s,0.,uLow);
   return uFloorY+uStub+s*(uTop-uStub);
 }`;
-// kind: 'solid' (caps and cut line), 'ghost' (wall ink: nothing above the cut, and inside the cut only level
-// lines, so seams and jambs don't clutter the section), 'plain' (just cut), 'plan' (door and window symbols:
-// drawn only where the walls are cut right down)
+// kind: 'solid' (caps and cut line), 'ghost' (wall ink: above the cut it turns into the blueprint outline of the
+// full wall, pale, its top edges strong and its uprights faint; inside the cut only level lines stay, so seams and
+// jambs don't clutter the section), 'plain' (just cut), 'plan' (door and window symbols: drawn only where the walls
+// are cut right down)
 function cutMat(base,kind){
   const m=base.clone(); m.userData.uLow={value:0};
   if(kind==='solid'){ m.side=THREE.DoubleSide; m.extensions={derivatives:true}; }
+  if(kind==='ghost') m.transparent=true;
     m.onBeforeCompile=sh=>{
     Object.assign(sh.uniforms,CUT.u,{uLow:m.userData.uLow});
     const vx=kind==='solid'?'attribute vec3 capc; varying vec3 vCap;':kind==='ghost'?'attribute float hz; varying float vHz;':'';
@@ -2173,12 +2179,13 @@ function cutMat(base,kind){
       .replace('#include <project_vertex>','#include <project_vertex>\nvCutW=(modelMatrix*vec4(transformed,1.)).xyz;'+(kind==='solid'?'vCap=capc;':kind==='ghost'?'vHz=hz;':''));
     const head={solid:'\nif(vCutW.y>cH) discard;',plain:'\nif(vCutW.y>cH) discard;',plan:'\nif(cH>uFloorY+uStub+.06) discard;',
       ghost:'\nbool cut=cH<uFloorY+uTop-.05;'+
-        '\nif(vCutW.y>cH+.004) discard;'+
-        '\nelse if(cut&&vHz<.5) discard;'}[kind];
+        '\nbool over=vCutW.y>cH+.004, top=vHz>.5&&vCutW.y>uFloorY+uTop-.26;'+
+        '\nif(!over&&cut&&vHz<.5) discard;'+
+        '\nif(over&&vHz>.5&&!top) discard;'}[kind];
     sh.fragmentShader=sh.fragmentShader.replace('void main() {',CUT_GLSL+(kind==='solid'?'varying vec3 vCap;':kind==='ghost'?'varying float vHz;':'')+'\nvoid main() {\nfloat cH=cutH(vCutW);'+head)
       .replace('#include <dithering_fragment>','#include <dithering_fragment>\n'+(kind==='solid'?
         'if(!gl_FrontFacing) gl_FragColor=vec4(vCap,1.); else if(cH<uFloorY+uTop-.02&&vCutW.y>cH-2.6*fwidth(vCutW.y)) gl_FragColor.rgb=uInk;':
-        ''));
+        kind==='ghost'?'if(over) gl_FragColor=vec4(.91,.96,1.,top?.95:.4);':''));
   };
   m.customProgramCacheKey=()=>'cut-'+kind;
   return m;
@@ -2615,14 +2622,22 @@ function build(G,rec){
   applyMoves(G,rec);
   for(const it of Fn.items){
     const opened=it.searched||rec.taken.includes(G.level+':'+it.id);
-    const L0=itemL(it.i,it.j,it.f,FY), parts=it.spec.build(lookOf(G,it,opened)), mv=rec.moved&&rec.moved[G.level+':'+it.id];
+    let L0=itemL(it.i,it.j,it.f,FY); const parts=it.spec.build(lookOf(G,it,opened)), mv=rec.moved&&rec.moved[G.level+':'+it.id];
+    { // a prop backed onto a wall stands clear of that wall's thickness (walls are drawn centred on the cell edge)
+      let push=0; for(const c of it.cells0||it.cells){ const e=O.edges.get(edgeKey(c%W,(c/W)|0,(it.f+2)%4)); if(e&&e.type!=='none'&&e.type!=='open'&&e.type!=='counter') push=Math.max(push,(e.th||.06)-.025); }
+      // and a prop run into a corner stands clear of the side wall
+      const mine=new Set(it.cells0||it.cells), sidePush=d=>{ let m=0; for(const c of mine){ const i=c%W, j=(c/W)|0, n=(j+DIRS[d][1])*W+i+DIRS[d][0]; if(mine.has(n)) continue; const e=O.edges.get(edgeKey(i,j,d)); if(e&&e.type!=='none'&&e.type!=='open'&&e.type!=='counter') m=Math.max(m,(e.th||.06)-.025); } return m; };
+      const sR=sidePush((it.f+1)%4), sL=sidePush((it.f+3)%4), side=sL&&sR?0:sL-sR, F=DIRS[it.f], Tt=DIRS[(it.f+1)%4];
+      if(push>0||side) L0=new THREE.Matrix4().makeTranslation(F[0]*push+Tt[0]*side,0,F[1]*push+Tt[1]*side).multiply(L0); }
     it.L0=L0;
     if(DYN&&DYN.items.has(it.id)){ DYN.collect(it,parts,L0,mv); continue; }
     if(mv){ for(const pt of parts){ const pc=(pt[7]&&pt[7].piece)||'m'; emit([pt],mv.m&&mv.m[pc]?new THREE.Matrix4().fromArray(mv.m[pc]):L0); } }
     else emit(parts,L0);
-    if(mv&&mv.box){ // a moved prop is picked where it lies now
-      const [x0,y0,z0,x1,y1,z1]=mv.box; const pm=new THREE.Mesh(new THREE.BoxGeometry(Math.max(.3,x1-x0),Math.max(.3,y1-y0),Math.max(.3,z1-z0)),pickMat); pm.position.set((x0+x1)/2,(y0+y1)/2,(z0+z1)/2);
-      pm.userData={item:it.id}; fg.add(pm); picks.push(pm); it.top=[(x0+x1)/2,y1,(z0+z1)/2]; continue; }
+    if(mv&&mv.box){ // a moved prop is picked where it lies now, piece by piece (a thrown chair is its own pick)
+      const gp={}; for(const pt of parts){ const pc=(pt[7]&&pt[7].piece)||'m'; (gp[pc]=gp[pc]||[]).push(pt); }
+      for(const pc in gp){ const Bq=new Batch(); emitTo(Bq,gp[pc],mv.m&&mv.m[pc]?new THREE.Matrix4().fromArray(mv.m[pc]):L0); if(!Bq.p.length) continue; const [x0,y0,z0,x1,y1,z1]=boundsOf(Bq);
+        const pm=new THREE.Mesh(new THREE.BoxGeometry(Math.max(.3,x1-x0),Math.max(.3,y1-y0),Math.max(.3,z1-z0)),pickMat); pm.position.set((x0+x1)/2,(y0+y1)/2,(z0+z1)/2); pm.userData={item:it.id,pc}; fg.add(pm); picks.push(pm); }
+      const [x0,,z0,x1,y1,z1]=mv.box; it.top=[(x0+x1)/2,y1,(z0+z1)/2]; continue; }
     if(!it.spec.slot&&FLIP_PROPS.has(it.key)){
       let mi=1e9,ma=-1e9,ni=1e9,na=-1e9; for(const c of it.cells){ const i=c%W,j=(c/W)|0; mi=Math.min(mi,cx(i)); ma=Math.max(ma,cx(i+1)); ni=Math.min(ni,cz(j)); na=Math.max(na,cz(j+1)); }
       const pm=new THREE.Mesh(new THREE.BoxGeometry(ma-mi,1,na-ni),pickMat); pm.position.set((mi+ma)/2,FY+.5,(ni+na)/2); pm.userData={item:it.id}; fg.add(pm); picks.push(pm); }
@@ -2829,6 +2844,7 @@ const hudHover=document.getElementById('hudHover');
 const WALL_TOOLS={shoot:1,sledge:1,charge:1};
 function describe(u,h){
   if(TOOL==='grenade') return 'Click the floor to throw a grenade (4.5 m blast)';
+  if(TOOL==='move'){ if(MOVE) return 'Click the floor to set it down, or click it again to shove it clear'; if(!u||u.item===undefined) return 'Click a table, shelf or thrown prop to move it'; const it=G.Fn.items[u.item]; return movable(it)?'Pick up '+it.key.replace(/\d$/,'')+(u.pc&&u.pc!=='m'?' (one piece)':'')+(blocksDoor(it,doorwayCells())?' · blocks a doorway':''):'Fixed in place'; }
   if(WALL_TOOLS[TOOL]){ if(!h) return {shoot:'Click a wall, door or window to fire a round level through it',sledge:'Click a wall, door or window to swing at it',charge:'Click a wall, door or window to set a charge'}[TOOL];
     const m=WALLMAT[h.e.mat], t=wallText(h); if(h.what!=='wall') return t;
     if(TOOL==='shoot') return t+' · '+(m.pierce==null?'stops rounds':'rounds go through');
@@ -2844,8 +2860,18 @@ function describe(u,h){
 function hover(e){ if(SIM) return; if(!G.roofView){ const fp=floorPoint(e); if(fp){ CUT.goal.set(fp.x,0,fp.z); dirty=true; } } const u=WALL_TOOLS[TOOL]?null:hit(e), h=u?null:hitWall(e); hudHover.innerHTML=''; hudHover.textContent=describe(u,h); canvas.style.cursor=u||(h&&WALL_TOOLS[TOOL])?'pointer':'grab'; }
 function click(e){
   if(SIM) return;
+  if(G&&!G.roofView){ const fp=floorPoint(e); if(fp){ CUT.goal.set(fp.x,0,fp.z); dirty=true; } }
   if(TOOL==='grenade'){ const p=floorPoint(e); if(p) grenade(p); return; }
   if(TOOL==='flip'){ const u=hit(e); if(u&&u.item!==undefined) overturn(G.Fn.items[u.item]); return; }
+  if(TOOL==='move'){ if(G.roofView) return; const u=hit(e);
+    if(MOVE){ const sel=MOVE; MOVE=null; if(selBox){ curFG.remove(selBox); selBox=null; }
+      if(u&&u.item===sel.it.id&&(u.pc||null)===sel.pc){ if(!shove(sel.it,sel.pc,false)) hudHover.textContent='Nowhere clear to shove it'; return; }
+      const p=floorPoint(e); if(p) dropAt(sel.it,sel.pc,p); dirty=true; return; }
+    if(u&&u.item!==undefined){ const it=G.Fn.items[u.item]; if(!movable(it)){ hudHover.textContent='Fixed in place'; return; }
+      MOVE={it,pc:u.pc||null}; const st=pieces(it), sel=u.pc&&st[u.pc]?[u.pc]:Object.keys(st); const bx=sel.map(k=>st[k].box).reduce((a,q)=>[Math.min(a[0],q[0]),Math.min(a[1],q[1]),Math.min(a[2],q[2]),Math.max(a[3],q[3]),Math.max(a[4],q[4]),Math.max(a[5],q[5])]);
+      selBox=new THREE.Box3Helper(new THREE.Box3(new THREE.Vector3(bx[0]-.04,bx[1],bx[2]-.04),new THREE.Vector3(bx[3]+.04,bx[4]+.04,bx[5]+.04)),0xe0a526); curFG.add(selBox); dirty=true;
+      hudHover.textContent='Click the floor to set it down, or click it again to shove it clear'; }
+    return; }
   if(WALL_TOOLS[TOOL]){ if(G.roofView) return; const h=hitWall(e); if(!h) return; ({shoot,sledge,charge})[TOOL](h); return; }
   const u=hit(e); if(!u) return;
   if(u.item!==undefined&&!G.Fn.items[u.item].spec.slot) return;
@@ -2857,7 +2883,7 @@ function click(e){
 // ================================================================= physics: grenades and overturned furniture
 // The simulation only decides where things land. The outcome goes into the change record as a pose per piece,
 // plus the cells the prop now blocks and the cover it gives, so reloads and the movement grid never re-run physics.
-let TOOL='use', SIM=false, DYN=null, curFG=null;
+let TOOL='use', SIM=false, DYN=null, curFG=null, selBox=null;
 function floorPoint(e){
   const r=canvas.getBoundingClientRect(); ndc.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1); ray.setFromCamera(ndc,camera);
   const y=curFG.position.y+FY, d=ray.ray.direction, o=ray.ray.origin; if(Math.abs(d.y)<1e-4) return null; const t=(y-o.y)/d.y; if(t<0) return null;
@@ -2898,8 +2924,13 @@ function grenade(p,opt){
   const near=(x,z,m)=>Math.hypot(x-p.x,z-p.z)<R+m;
   for(const e of O.edges.values()){ if(e.type==='open'||e.type==='none') continue; { const dm=REC.walls[lv+':'+e.key]; if(dm&&dm.s>=3) continue; } const o=e.key[0], [a,b]=e.key.slice(1).split(',').map(Number);
     const mx=o==='v'?M.u0+a:M.u0+a+.5, mz=o==='v'?M.v0+b+.5:M.v0+b; if(!near(mx,mz,6)) continue;
-    const lo=e.type==='window'?e.win.sill:0, hi=e.type==='door'||e.type==='gdoor'?(REC.doors[lv+':'+e.key]==='broken'||e.door.open?0:2.1):WH; if(hi<=lo) continue;
-    const bd=new CANNON.Body({mass:0}); bd.addShape(new CANNON.Box(o==='v'?new CANNON.Vec3(.1,(hi-lo)/2,.55):new CANNON.Vec3(.55,(hi-lo)/2,.1))); bd.position.set(mx,FY+(lo+hi)/2,mz); world.addBody(bd); }
+    const dm0=REC.walls[lv+':'+e.key], spans=[];
+    if(e.type==='window'){ spans.push([0,e.win.sill],[e.win.head,WH]); if(e.win.state!=='broken'&&!REC.windows[lv+':'+e.key]) spans.push([e.win.sill,e.win.head]); }
+    else if(e.type==='door'||e.type==='gdoor'){ spans.push([e.type==='gdoor'?2.3:2.1,WH]); const ds=REC.doors[lv+':'+e.key]; if(!(ds==='broken'||ds==='open'||(!ds&&(e.door.open||e.door.state==='broken')))) spans.push([0,2.1]); }
+    else spans.push([0,WH]);
+    if(dm0&&dm0.s===2) spans.length=0, spans.push([0,.6],[1.6,WH]); // a hole leaves a gap at chest height
+    const th=Math.max(.1,(e.th||.06));
+    for(const [lo,hi] of spans){ if(hi-lo<.05) continue; const bd=new CANNON.Body({mass:0}); bd.addShape(new CANNON.Box(o==='v'?new CANNON.Vec3(th,(hi-lo)/2,.55):new CANNON.Vec3(.55,(hi-lo)/2,th))); bd.position.set(mx,FY+(lo+hi)/2,mz); world.addBody(bd); } }
   for(const it of Fn.items){ if(hits.includes(it)) continue; const [x,z]=centre(it); if(!near(x,z,6)) continue;
     let mi=1e9,ma=-1e9,ni=1e9,na=-1e9; for(const c of it.cells){ const i=c%M.W,j=(c/M.W)|0; mi=Math.min(mi,M.u0+i); ma=Math.max(ma,M.u0+i+1); ni=Math.min(ni,M.v0+j); na=Math.max(na,M.v0+j+1); }
     const h=Math.min(it.spec.h,2.2); const bd=new CANNON.Body({mass:0}); bd.addShape(new CANNON.Box(new CANNON.Vec3((ma-mi)/2-.05,h/2,(na-ni)/2-.05))); bd.position.set((mi+ma)/2,FY+h/2,(ni+na)/2); world.addBody(bd); }
@@ -2938,7 +2969,12 @@ function grenade(p,opt){
     const per={};
     for(const b of bodies){ const key=lv+':'+b.it.id, D=delta(b), Lf=D.clone().multiply(b.Lp);
       const mv=per[key]=per[key]||{m:Object.assign({},(REC.moved[key]||{}).m||{}),boxes:[]}; mv.m[b.pc]=Lf.elements.map(x=>+x.toFixed(4));
-      b.bd.computeAABB(); const ab=b.bd.aabb; if(ab.lowerBound.y<FY-.02){ const up=FY-ab.lowerBound.y; Lf.premultiply(new THREE.Matrix4().makeTranslation(0,up,0)); mv.m[b.pc]=Lf.elements.map(x=>+x.toFixed(4)); ab.lowerBound.y+=up; ab.upperBound.y+=up; } mv.boxes.push([ab.lowerBound.x,ab.lowerBound.y,ab.lowerBound.z,ab.upperBound.x,ab.upperBound.y,ab.upperBound.z]); }
+      b.bd.computeAABB(); const ab=b.bd.aabb;
+      { const M2=G.M, cxx=(ab.lowerBound.x+ab.upperBound.x)/2, czz=(ab.lowerBound.z+ab.upperBound.z)/2, i=Math.floor(cxx-M2.u0), j=Math.floor(czz-M2.v0);
+        if(i<0||j<0||i>=M2.W||j>=M2.H||!M2.mask[j*M2.W+i]){ const rid=G.P.roomOf[(b.it.cells0||b.it.cells)[0]], rm=G.P.rooms.find(r=>r.id===rid); let best=null, bd2=1e9;
+          for(const c of rm.cells){ const x=M2.u0+c%M2.W+.5, z=M2.v0+((c/M2.W)|0)+.5, d=Math.hypot(x-cxx,z-czz); if(d<bd2){ bd2=d; best=[x-cxx,z-czz]; } }
+          if(best){ Lf.premultiply(new THREE.Matrix4().makeTranslation(best[0],0,best[1])); mv.m[b.pc]=Lf.elements.map(x=>+x.toFixed(4)); for(const B of [ab.lowerBound,ab.upperBound]){ B.x+=best[0]; B.z+=best[1]; } } } }
+      if(ab.lowerBound.y<FY-.02){ const up=FY-ab.lowerBound.y; Lf.premultiply(new THREE.Matrix4().makeTranslation(0,up,0)); mv.m[b.pc]=Lf.elements.map(x=>+x.toFixed(4)); ab.lowerBound.y+=up; ab.upperBound.y+=up; } mv.boxes.push([ab.lowerBound.x,ab.lowerBound.y,ab.lowerBound.z,ab.upperBound.x,ab.upperBound.y,ab.upperBound.z]); }
     for(const key in per){ const it=G.Fn.items[+key.split(':')[1]]; REC.moved[key]=settle(it,per[key].boxes,{m:per[key].m,by:'grenade'}); }
     DYN=null; SIM=false; refresh(false); if(said) hudHover.textContent=said;
   };
@@ -3009,6 +3045,77 @@ function charge(h){
   hudHover.textContent=s>=3?m.n+' breached':m.n+' holed: it needs another charge';
 }
 
+// ---------------------------------------------------------------- moving props by hand
+// Squad members can drag a prop (or one thrown piece of it) clear. Click it, then click the floor where it goes,
+// or click it again to shove it to the nearest clear spot in the room that blocks no doorway. The result goes into
+// the change record like any other move.
+let MOVE=null;
+const movable=it=>FLIP_PROPS.has(it.key)||!!REC.moved[G.level+':'+it.id];
+function pieces(it){
+  const key=G.level+':'+it.id, mv=REC.moved[key], parts=it.spec.build(lookOf(G,it,it.searched||REC.taken.includes(key))), gp={}, out={};
+  for(const pt of parts){ const pc=(pt[7]&&pt[7].piece)||'m'; (gp[pc]=gp[pc]||[]).push(pt); }
+  for(const pc in gp){ const Mx=mv&&mv.m&&mv.m[pc]?new THREE.Matrix4().fromArray(mv.m[pc]):it.L0.clone(); const Bq=new Batch(); emitTo(Bq,gp[pc],Mx); if(!Bq.p.length) continue; out[pc]={M:Mx,box:boundsOf(Bq)}; }
+  return out;
+}
+function doorwayCells(){ // the cells either side of every doorway and breach
+  const S=new Set(), M=G.M, W=M.W;
+  for(const e of G.O.edges.values()){ const dm=REC.walls[G.level+':'+e.key]; if(!(e.type==='door'||e.type==='gdoor'||(dm&&dm.s>=3))) continue;
+    S.add(e.j*W+e.i); const n=(e.j+DIRS[e.dir][1])*W+e.i+DIRS[e.dir][0]; if(M.mask[n]) S.add(n); }
+  return S;
+}
+function underBoxes(boxes,tall){ // cells under the boxes (only the parts that stand 0.45 m or more when tall)
+  const M=G.M, S=new Set(); for(const b of boxes){ if(tall&&b[4]-FY<.45) continue;
+    for(let j=Math.floor(b[2]+.05-M.v0);j<=Math.floor(b[5]-.05-M.v0);j++) for(let i=Math.floor(b[0]+.05-M.u0);i<=Math.floor(b[3]-.05-M.u0);i++) S.add(j*M.W+i); }
+  return [...S];
+}
+const blocksDoor=(it,dw)=>{ const mv=REC.moved[G.level+':'+it.id]; return (mv?mv.cells:it.cells).some(c=>dw.has(c)); };
+function tryPlace2(it,sel,st,dx,dz,avoid){
+  const M=G.M, boxes=sel.map(pc=>{ const b=st[pc].box; return [b[0]+dx,b[1],b[2]+dz,b[3]+dx,b[4],b[5]+dz]; });
+  const all=underBoxes(boxes,false); let room=null;
+  for(const c of all){ if(c<0||c>=M.W*M.H||!M.mask[c]) return null; const r=G.P.roomOf[c]; if(room===null) room=r; else if(r!==room) return null; }
+  const rm=G.P.rooms.find(r=>r.id===room); if(!rm||/stair|elev/.test(rm.kind)) return null;
+  for(const c of underBoxes(boxes,true)){ const o=G.Fn.occ[c]; if(o>=0&&o!==it.id&&!G.Fn.items[o].spec.walk) return null; if(avoid&&avoid.has(c)) return null; }
+  return {boxes,room};
+}
+function commitMove(it,sel,st,dx,dz,instant){
+  const key=G.level+':'+it.id, prev=REC.moved[key]||{}, T=new THREE.Matrix4().makeTranslation(dx,0,dz), m={}, boxes=[];
+  for(const pc in st){ const on=sel.includes(pc), Mx=on?T.clone().multiply(st[pc].M):st[pc].M; m[pc]=Mx.elements.map(x=>+x.toFixed(4)); const b=st[pc].box; boxes.push(on?[b[0]+dx,b[1],b[2]+dz,b[3]+dx,b[4],b[5]+dz]:b); }
+  const done=()=>{ const mv=settle(it,boxes,{m,by:prev.by||'moved',facing:prev.facing}); if(prev.by==='overturn'&&mv.cover==='full') mv.cover=prev.cover||'half'; REC.moved[key]=mv; DYN=null; SIM=false; refresh(false); };
+  if(instant){ done(); return; }
+  DYN={items:new Set([it.id]),meshes:[],collect(it2,parts2,L0,mv){ const g={}; for(const pt of parts2){ const pc=(pt[7]&&pt[7].piece)||'m'; (g[pc]=g[pc]||[]).push(pt); }
+    for(const pc in g){ const B2=new Batch(); emitTo(B2,g[pc],mv&&mv.m&&mv.m[pc]?new THREE.Matrix4().fromArray(mv.m[pc]):L0); const mm=B2.mesh(solidMat,true); mm.matrixAutoUpdate=false; DYN.meshes.push({pc,m:mm}); } }};
+  refresh(false); for(const x of DYN.meshes) curFG.add(x.m);
+  SIM=true; const t0=performance.now();
+  const anim=()=>{ const a=clamp((performance.now()-t0)/350,0,1), e=a*a*(3-2*a); for(const x of DYN.meshes) if(sel.includes(x.pc)){ x.m.matrix.makeTranslation(dx*e,0,dz*e); x.m.matrixWorldNeedsUpdate=true; } dirty=true; if(a<1) requestAnimationFrame(anim); else done(); };
+  requestAnimationFrame(anim);
+}
+function shove(it,pc,instant){ // to the nearest clear spot in the room, off every doorway, against a wall if it can
+  const st=pieces(it), sel=pc&&st[pc]?[pc]:Object.keys(st), dw=doorwayCells(), M=G.M;
+  const b=sel.map(k=>st[k].box).reduce((a,q)=>[Math.min(a[0],q[0]),0,Math.min(a[2],q[2]),Math.max(a[3],q[3]),0,Math.max(a[5],q[5])],[1e9,0,1e9,-1e9,0,-1e9]);
+  const cx0=(b[0]+b[3])/2, cz0=(b[2]+b[5])/2, here=Math.floor(cz0-M.v0)*M.W+Math.floor(cx0-M.u0), room=G.P.roomOf[here]>=0?G.P.roomOf[here]:G.P.roomOf[(it.cells0||it.cells)[0]];
+  const rm=G.P.rooms.find(r=>r.id===room); if(!rm) return false;
+  let best=null;
+  for(const c of rm.cells){ const x=M.u0+c%M.W+.5, z=M.v0+((c/M.W)|0)+.5, d=Math.hypot(x-cx0,z-cz0); if(d<.6||d>8) continue; if(best&&d>best.score+1) continue;
+    const fit=tryPlace2(it,sel,st,x-cx0,z-cz0,dw); if(!fit) continue;
+    let wall=0; for(let k=0;k<4;k++){ const e=G.O.edges.get(edgeKey(c%M.W,(c/M.W)|0,k)); if(e&&e.type==='wall') wall=1; }
+    const score=d-(wall?.5:0)+(/hall|corridor/.test(rm.kind)?0:0); if(!best||score<best.score) best={score,dx:x-cx0,dz:z-cz0}; }
+  if(!best) return false;
+  commitMove(it,sel,st,best.dx,best.dz,instant); return true;
+}
+function dropAt(it,pc,p){
+  const st=pieces(it), sel=pc&&st[pc]?[pc]:Object.keys(st);
+  const b=sel.map(k=>st[k].box).reduce((a,q)=>[Math.min(a[0],q[0]),0,Math.min(a[2],q[2]),Math.max(a[3],q[3]),0,Math.max(a[5],q[5])],[1e9,0,1e9,-1e9,0,-1e9]);
+  const dx=p.x-(b[0]+b[3])/2, dz=p.z-(b[2]+b[5])/2;
+  if(Math.hypot(dx,dz)>8){ hudHover.textContent='Too far to drag in one go'; return false; }
+  if(!tryPlace2(it,sel,st,dx,dz,null)){ hudHover.textContent='No clear floor there'; return false; }
+  commitMove(it,sel,st,dx,dz,false); return true;
+}
+function clearDoorways(){
+  if(SIM) return; const dw=doorwayCells(); let n=0, stuck=0;
+  for(const it of G.Fn.items){ if(!REC.moved[G.level+':'+it.id]||!blocksDoor(it,dw)) continue; if(shove(it,null,true)) n++; else stuck++; }
+  refresh(false); hudHover.textContent=n||stuck?'Cleared '+n+' prop'+(n===1?'':'s')+' off doorways'+(stuck?', '+stuck+' with nowhere to go':''):'No thrown props block a doorway';
+}
+
 // Overturning is scripted, not simulated: the same click always gives the same result. The prop tips away
 // from the camera onto its far edge; its chairs stay where they are.
 function overturn(it){
@@ -3077,7 +3184,9 @@ function drawPlan(G){
   px.strokeStyle='rgba(29,24,20,.16)'; px.lineWidth=1;
   for(let j=0;j<H;j++) for(let i=0;i<W;i++) if(M.mask[j*W+i]) px.strokeRect(X(u0+i)+.5,Y(v0+j)+.5,k,k);
   // furniture
-  for(const it of Fn.items){ const cov=it.coverNow||it.spec.cover; px.fillStyle=cov==='full'?'#7a6a58':cov==='half'?'#b9a483':'rgba(120,110,95,.35)'; if(it.key==='debris') px.fillStyle='rgba(90,80,70,.5)'; if(it.key==='bedroll') px.fillStyle='#5d6b4e';
+  const dwc=doorwayCells();
+  for(const it of Fn.items){ const cov=it.coverNow||it.spec.cover;
+    if(REC.moved[G.level+':'+it.id]&&blocksDoor(it,dwc)){ px.strokeStyle='#c23b2e'; px.lineWidth=2; for(const c of it.cells){ const i=c%W,j=(c/W)|0; px.strokeRect(X(u0+i)+1,Y(v0+j)+1,k-2,k-2); } } px.fillStyle=cov==='full'?'#7a6a58':cov==='half'?'#b9a483':'rgba(120,110,95,.35)'; if(it.key==='debris') px.fillStyle='rgba(90,80,70,.5)'; if(it.key==='bedroll') px.fillStyle='#5d6b4e';
     for(const c of it.cells){ const i=c%W,j=(c/W)|0; px.fillRect(X(u0+i)+1,Y(v0+j)+1,k-2,k-2); }
     if(it.spec.slot){ const c=it.cells[0]; let a=0,b=0; for(const q of it.cells){ a+=q%W; b+=(q/W)|0; } a/=it.cells.length; b/=it.cells.length; const empty=it.searched||REC.taken.includes(G.level+':'+it.id)||!it.contents.length; px.fillStyle=empty?'#55534f':'#e0a526'; px.beginPath(); px.arc(X(u0+a+.5),Y(v0+b+.5),Math.max(2.5,k*.16),0,7); px.fill(); } }
   // walls, windows, doors
@@ -3191,14 +3300,15 @@ tSel.onchange=()=>{ REC=null; regen(true); };
 hSel.onchange=()=>{ regen(true); };
 document.getElementById('reroll').onclick=()=>{ reroll++; REC=null; regen(true); };
 document.getElementById('canon').onclick=()=>{ reroll=0; REC=null; regen(true); };
+document.getElementById('clearDoors').onclick=()=>clearDoorways();
 document.getElementById('resetRec').onclick=()=>{ REC=freshRecord(); refresh(false); };
-document.querySelectorAll('#toolChips button').forEach(b=>b.onclick=()=>{ TOOL=b.dataset.tool; document.querySelectorAll('#toolChips button').forEach(x=>x.setAttribute('aria-pressed',x===b?'true':'false')); hudHover.textContent=describe(null); });
+document.querySelectorAll('#toolChips button').forEach(b=>b.onclick=()=>{ TOOL=b.dataset.tool; MOVE=null; if(selBox&&curFG){ curFG.remove(selBox); selBox=null; } document.querySelectorAll('#toolChips button').forEach(x=>x.setAttribute('aria-pressed',x===b?'true':'false')); hudHover.textContent=describe(null); });
 document.querySelectorAll('#modeChips button').forEach(b=>b.onclick=()=>{ view.mode=b.dataset.mode; document.querySelectorAll('#modeChips button').forEach(x=>x.setAttribute('aria-pressed',x===b?'true':'false')); dirty=true; });
 const smoothBtn=document.getElementById('smoothBtn'); smoothBtn.onclick=()=>{ smooth.on=!smooth.on; smoothBtn.setAttribute('aria-pressed',smooth.on?'true':'false'); dirty=true; };
 const markBtn=document.getElementById('markBtn'); markBtn.onclick=()=>{ view.marks=!view.marks; markBtn.setAttribute('aria-pressed',view.marks?'true':'false'); dirty=true; };
 
 resize(); regen(false); frame();
-window.__interiors={generate,SITES,view,get G(){return G;},get REC(){return REC;},redraw(){dirty=true;},grenade:p=>grenade(p),overturn:it=>overturn(it),shoot:h=>shoot(h),sledge:h=>sledge(h),charge:h=>charge(h),WALLMAT,CUT};
+window.__interiors={generate,SITES,view,get G(){return G;},get REC(){return REC;},redraw(){dirty=true;},grenade:p=>grenade(p),overturn:it=>overturn(it),shoot:h=>shoot(h),sledge:h=>sledge(h),charge:h=>charge(h),WALLMAT,CUT,partMatrix,lookOf,shove:(it,pc,i)=>shove(it,pc,i),clearDoorways:()=>clearDoorways(),doorwayCells:()=>doorwayCells(),blocksDoor:(it,d)=>blocksDoor(it,d)};
 </script>
 
 </html>
