@@ -7,5 +7,5 @@
 cd "$(dirname "$0")"
 OUT=../../mockups/streaming
 { printf '<!doctype html>\n<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">\n'
-  cat stream-head.html sector-core.js figure-kit.js road-kit.js car-kit.js ../motion/motion.js stream-main.js; printf '\n</script>\n</html>\n'; } > $OUT/index.html
+  cat stream-head.html sector-core.js figure-kit.js road-kit.js car-kit.js flora-kit.js ../motion/motion.js stream-main.js; printf '\n</script>\n</html>\n'; } > $OUT/index.html
 echo "wrote $OUT/index.html"

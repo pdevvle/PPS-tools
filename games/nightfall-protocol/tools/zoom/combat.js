@@ -29,7 +29,7 @@ const CB=(()=>{
   // ---------- geometry of the fight ----------
   const BLOCKING=new Set([NK.building,NK.wall,NK.pier,NK.steep,NK.car]);   // wrecked cars are full cover
   const plantCover=new Map();   // cell -> 1 for saguaros, palo verdes and boulders
-  C.onBuilt=s=>{ for(const p of s.data.plants){ if(p[0]===0||p[0]===1||(p[0]===3&&p[4]>.8)){ const c=cellOf(p[1],p[3]); if(c>=0) plantCover.set(c,1); } } };
+  C.onBuilt=s=>{ for(const p of s.data.plants){ const t=SectorCore.PLANTS[p[0]]; if(t&&t.cover&&(!t.coverMin||p[4]>t.coverMin)){ const c=cellOf(p[1],p[3]); if(c>=0) plantCover.set(c,Math.max(plantCover.get(c)||0,t.cover)); } } };   // cover from the plant table
   C.onDropped=s=>{ for(const p of s.data.plants){ const c=cellOf(p[1],p[3]); plantCover.delete(c); } };
   const cx=c=>BX0+(c%GN+.5)*NS, cz=c=>BZ0+(Math.floor(c/GN)+.5)*NS;
   const coverVal=c=>c<0||kindG[c]===255?0:BLOCKING.has(kindG[c])?2:plantCover.get(c)||0;

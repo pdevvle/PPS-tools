@@ -302,9 +302,9 @@ for(const w of ways){ if(w.t.service!=='driveway'||w.len<10) continue; const deg
     if(placeCar(x,z,ang+Math.PI/2+(CR()<.5?0:Math.PI)+jit(.06),{gap:2.6})) n++; } } }
 
 // ---------- solid plants: saguaros, palo verde trunks, shrubs and boulders block the cells they stand in ----------
-// (reeds don't). The containing cell always; neighbours whose centre is within the plant's reach plus half a body.
-{ const REACH=[.35,.3,.75,.85,0]; let solid=0;
-  for(const s of S){ const ns=s.nav.n; for(const p of s.plants){ const rr=REACH[p[0]]*(p[0]===2||p[0]===3?Math.max(p[4],p[6]):1); if(!rr) continue; const reach=rr+.35;
+// (reeds don't). Each plant's reach comes from SectorCore.PLANTS. The containing cell always; neighbours whose centre is within the plant's reach plus half a body.
+{ let solid=0;
+  for(const s of S){ const ns=s.nav.n; for(const p of s.plants){ const rr=C.plantReach(p); if(!rr) continue; const reach=rr+.35;
     for(let dz=-1;dz<=1;dz++) for(let dx=-1;dx<=1;dx++){ const i=Math.floor((p[1]-s.x0)/NS)+dx, j=Math.floor((p[3]-s.z0)/NS)+dz; if(i<0||j<0||i>=ns||j>=ns) continue;
       const cx=s.x0+(i+.5)*NS, cz=s.z0+(j+.5)*NS; if((dx||dz)&&Math.hypot(cx-p[1],cz-p[3])>reach) continue; const id=j*ns+i, k=s.kindA[id];
       if(KEEP.has(k)||k===NK.car||k===NK.plant||k===NK.asphalt||k===NK.dirt||k===NK.path||k===NK.lot) continue;

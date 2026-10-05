@@ -23,6 +23,28 @@ Wear and decay are generated in the browser from fixed seeds, so they are the sa
 
 The page runs a clock (pause, 1× and 4×, or Space) like the map: exploring is real time, and on the zoom page the map catches up by the game seconds spent on the ground. Clicking a square in the sector overview sets the squad down there.
 
+## The desert: washes, rock and plants
+
+**Drainage.** The map knows only a dozen washes; the ground has hundreds. The bake routes water over the 4 m height grid (each cell drains to its steepest neighbour, flow accumulated from the top down), and wherever 2.4 ha or more drains through a cell outside the mapped washes it cuts a wash, wider and deeper as the area grows (1.2–4 m half-width, 0.3–1.2 m deep). About 140 come out of the corridor. **New River** gets a braided bed: four low-flow channels wandering across the mapped sand and scree between bars, steeper cut banks, a strand line of flood debris along the edge.
+
+**Plants and rock by habitat** (`SectorCore.PLANTS` is the table: 26 kinds with movement reach, cover, brush drag and ring visibility). Every 4.2 m the bake reads the ground and picks a habitat, then a species from that habitat's community:
+
+| Habitat | Rule | Community |
+|---|---|---|
+| River bed | inside the mapped bed | cobbles, desert broom, grass, flood wood, boulders; bare damp sand in the braids |
+| Wash channel | inside any wash | broom, cobbles, grass, the odd catclaw |
+| Wash bank | within 4 m + 1.6 × half-width | xeroriparian: blue palo verde, mesquite, ironwood, catclaw, wolfberry, jojoba, a dead tree now and then |
+| Cliff | slope over 34° | rock faces (slabs tilted into the slope), boulders, agave, ocotillo, brittlebush, barrel cactus |
+| Outcrop | ridge crests (convex), mapped bare rock, or rocky patches on slopes over 22° | granite tors in piles, ocotillo, agave, teddy bear cholla, saguaro |
+| South slope | over 9°, facing south | saguaro, foothill palo verde, ocotillo, brittlebush, teddy bear cholla |
+| North slope | over 9°, facing north | jojoba, palo verde, brittlebush, grass, fewer saguaros |
+| Bajada | gentle ground | creosote and white bursage, buckhorn cholla, prickly pear, saguaro |
+| Desert pavement | flat, sparse patches | creosote, bursage, stones |
+| Roadside | within 6 m of a road | desert broom, brittlebush, grass |
+| Yard | mapped residential | wolfberry, mesquite, palo verde, agave, prickly pear |
+
+Elevation shifts the mix (creosote and bursage thin above 760 m, grass and jojoba come in, saguaros leave cold north slopes), mapped grassland, scrub and bare rock nudge it, and slow noise gives patches. On the ground, slopes over 20° show their rock, darker on cliffs with joints and ledges across the slope, lighter on rounded ridges; washes are painted with cut-bank bands, sandy beds and gravel down the thalweg. `flora-kit.js` builds the plants (instanced, several parts each) and paints that ground.
+
 `car-kit.js` builds the cars: sedans, hatchbacks, SUVs, pickups and vans lofted along their length from side profiles, with wheel arches, glass, pillars, door seams and handles, mirrors, bumpers, grilles, lamps and plates, tyres and rims, roof rails, pickup beds with cargo; and their state from the flags: burnt out (charred, rusting, on bare rims), flat tyres, a wheel gone with the corner on a block, bonnet up over the engine bay, broken glass, the driver's door hanging open, dust and rust.
 
 `sector-core.js` has no rendering code, so the same file runs in Node for the bake and in the browser (and could run in a worker).

@@ -83,14 +83,30 @@ function bake(D,log=()=>{}){
     if(['water','reservoir','basin'].includes(a.kind)) F.lakes.push({raw:a.pts,name:a.name||''});
     if(a.kind==='swimming_pool') F.pools.push({pts:a.pts}); }
   F.beds=F.beds.filter(b=>b.pts.length>=3);
-  const WASH=w=>w.kind==='river'?(F.beds.length&&w.name==='New River'?{hw:7,depth:.9}:{hw:11,depth:2.6}):{hw:5,depth:1.6};
+  const WASH=w=>w.hw?{hw:w.hw,depth:w.depth}:w.kind==='river'?(F.beds.length&&w.name==='New River'?{hw:7,depth:.9}:{hw:11,depth:2.6}):{hw:5,depth:1.6};
+  // ---------- the washes the map leaves out, found from the ground: water runs to the lowest neighbour, and where enough
+  // ground drains through a cell (2.4 ha and up) it has cut a wash. Width and depth grow with the area drained. ----------
+  { const N=NXg*NZg, A0=1500, rcv=new Int32Array(N).fill(-1), acc=new Float32Array(N).fill(1), mask=new Uint8Array(N), D8=[[1,0,1],[-1,0,1],[0,1,1],[0,-1,1],[1,1,1.414],[1,-1,1.414],[-1,1,1.414],[-1,-1,1.414]];
+    for(let j=1;j<NZg-1;j++) for(let i=1;i<NXg-1;i++){ const id=j*NXg+i; let best=-1,bd=0; for(const [di,dj,dl] of D8){ const n=(j+dj)*NXg+i+di, d=(H[id]-H[n])/dl; if(d>bd){ bd=d; best=n; } } rcv[id]=best; }
+    const ord=new Int32Array(N); for(let i=0;i<N;i++) ord[i]=i; ord.sort((a,b)=>H[b]-H[a]); for(const id of ord){ const q=rcv[id]; if(q>=0) acc[q]+=acc[id]; }
+    for(const w of D.water){ const pad=(w.kind==='river'?30:14); for(let k=1;k<w.pts.length;k++){ const a=w.pts[k-1], b=w.pts[k]; forCells(Math.min(a[0],b[0])-pad,Math.min(a[1],b[1])-pad,Math.max(a[0],b[0])+pad,Math.max(a[1],b[1])+pad,(id,x,z)=>{ if(segDist(x,z,a,b)[0]<pad) mask[id]=1; }); } }
+    for(const bed of F.beds){ const [a,b,c,d]=bbox(bed.pts); forCells(a,b,c,d,(id,x,z)=>{ if(inPoly(x,z,bed.pts)) mask[id]=1; }); }
+    const up=new Uint8Array(N); for(let id=0;id<N;id++) if(acc[id]>=A0&&rcv[id]>=0) up[rcv[id]]=1;
+    const seen=new Uint8Array(N), cx=id=>X0+(id%NXg)*st, cz=id=>Z0+Math.floor(id/NXg)*st; let n0=0;
+    for(let id=0;id<N;id++){ if(acc[id]<A0||up[id]||mask[id]) continue; const line=[]; let c=id, end=id;
+      while(c>=0&&acc[c]>=A0){ line.push([cx(c),cz(c)]); end=c; if(seen[c]||mask[c]) break; seen[c]=1; c=rcv[c]; }
+      if(line.length<10) continue;
+      // smooth the stair-steps of the grid, keep every other point
+      const sm=line.map((p,i)=>{ if(i===0||i===line.length-1) return p; let sx=0,sz=0,k=0; for(let q=-2;q<=2;q++){ const o=line[Math.max(0,Math.min(line.length-1,i+q))]; sx+=o[0]; sz+=o[1]; k++; } return [sx/k,sz/k]; }).filter((p,i,a)=>i%2===0||i===a.length-1);
+      const g=Math.log2(acc[end]/A0+1); D.water.push({pts:sm.map(p=>[+p[0].toFixed(1),+p[1].toFixed(1)]),kind:'stream',name:'',derived:1,hw:+Math.min(4,1.2+.45*g).toFixed(2),depth:+Math.min(1.2,.3+.16*g).toFixed(2)}); n0++; }
+    log('derived washes '+n0); }
   D.roads.forEach((r,i)=>{ r.id=i; if(isBridge(r)&&isDrive(r)) F.bridges.push({road:i,pts:r.pts,w:roadW(r),name:r.name||''}); });
   for(const w of D.water) for(const r of D.roads){ if(!isDrive(r)||isBridge(r)||!isPaved(r)||r.tunnel) continue;
     for(let i=1;i<w.pts.length;i++) for(let k=1;k<r.pts.length;k++){ const p=segX(w.pts[i-1],w.pts[i],r.pts[k-1],r.pts[k]); if(!p||!inB(p[0],p[1])) continue;
       const rl=Math.hypot(r.pts[k][0]-r.pts[k-1][0],r.pts[k][1]-r.pts[k-1][1])||1;
       F.culverts.push({x:p[0],z:p[1],rx:(r.pts[k][0]-r.pts[k-1][0])/rl,rz:(r.pts[k][1]-r.pts[k-1][1])/rl,rhw:roadW(r)/2,...WASH(w)}); } }
   // 1. river beds
-  for(const bed of F.beds){ const [a,b,c,d]=bbox(bed.pts); forCells(a,b,c,d,(id,x,z)=>{ if(inPoly(x,z,bed.pts)) H[id]-=Math.min(2.2,polyDist(x,z,bed.raw)*.45); }); }
+  for(const bed of F.beds){ const [a,b,c,d]=bbox(bed.pts); forCells(a,b,c,d,(id,x,z)=>{ if(inPoly(x,z,bed.pts)) H[id]-=Math.min(2.4,polyDist(x,z,bed.raw)*.6); }); }   // cut banks about 31 degrees: steep, still climbable
   log('beds');
   // 2. paved road cores keep their crossings (culverts)
   const core=new Uint8Array(H.length), chan=new Uint8Array(H.length);
@@ -101,6 +117,15 @@ function bake(D,log=()=>{}){
     for(let i=1;i<bed.length;i++) bed[i]=Math.min(bed[i],bed[i-1]);
     cellsNear(d,hw,(id,dd,px,pz,k,t)=>{ if(core[id]) return; const tg=bed[k]+(bed[k+1]-bed[k])*t+depth*(dd/hw)**2; if(tg<H[id]){ H[id]=tg; chan[id]=1; } }); }
   log('washes');
+  // 3b. the New River's bed is braided: low-flow channels wander across the sand between bars
+  for(const w of D.water){ if(w.kind!=='river'||!F.beds.length) continue; const d=densify(w.pts,3).filter(([x,z])=>inB(x,z,D.margin)); if(d.length<4) continue;
+    const L=[0]; for(let i=1;i<d.length;i++) L.push(L[i-1]+Math.hypot(d[i][0]-d[i-1][0],d[i][1]-d[i-1][1]));
+    for(let b=0;b<4;b++){ const A=12+b*7, l1=70+b*29, l2=23+b*7, ph=b*1.9, hw=1.4+b*.35; let piece=[];
+      const flush=()=>{ if(piece.length>=8){ const br={pts:piece.map(p=>[+p[0].toFixed(1),+p[1].toFixed(1)]),kind:'braid',name:'',hw,depth:.35};
+          cellsNear(piece,hw,(id,dd)=>{ H[id]-=.35*(1-(dd/hw)**2); chan[id]=1; }); D.water.push(br); } piece=[]; };
+      for(let i=0;i<d.length;i++){ const p=d[i], q=d[Math.min(d.length-1,i+1)], o0=d[Math.max(0,i-1)], tx=q[0]-o0[0], tz=q[1]-o0[1], tl=Math.hypot(tx,tz)||1, o=(b%2?-1:1)*(A*Math.sin(L[i]/l1+ph)+.35*A*Math.sin(L[i]/l2+ph*2.3));
+        const x=p[0]-tz/tl*o, z=p[1]+tx/tl*o; if(F.beds.some(bd=>inPoly(x,z,bd.pts))) piece.push([x,z]); else flush(); }
+      flush(); } }
   // 4. lakes
   for(const L of F.lakes){ let lv=1e9; for(const [x,z] of L.raw) if(inB(x,z)) lv=Math.min(lv,heightAt(x,z)); if(lv>1e8) lv=heightAt(...centroid(L.raw)); L.level=lv-.35;
     const [a,b,c,d]=bbox(L.raw); forCells(a-6,b-6,c+6,d+6,(id,x,z)=>{ const e=polyDist(x,z,L.raw); if(inPoly(x,z,L.raw)) H[id]=Math.min(H[id],L.level-Math.min(2.6,.5+e*.35)); else if(e<6){ const want=L.level+.35; if(H[id]<want) H[id]+=(want-H[id])*(1-e/6); } }); }
@@ -142,8 +167,10 @@ function bake(D,log=()=>{}){
   const RI=new SegIndex(32); for(const r of D.roads){ const pad=roadW(r)/2+3; for(let k=1;k<r.pts.length;k++) RI.add(r.pts[k-1],r.pts[k],r,pad); }
   const nearRoad=(x,z,pad=0,drive=false)=>{ for(const [a,b,r] of RI.near(x,z)){ if(drive&&!isDrive(r)) continue; if(segDist(x,z,a,b)[0]<roadW(r)/2+pad) return true; } return false; };
   const nearestRoadPoint=(x,z)=>{ let best=[1e9,0,0]; for(const cell of [[0,0],[32,0],[-32,0],[0,32],[0,-32]]) for(const [a,b,r] of RI.near(x+cell[0],z+cell[1])){ if(!isDrive(r)) continue; const d=segDist(x,z,a,b); if(d[0]<best[0]) best=d; } return best; };
-  const WI=new SegIndex(32); for(const w of D.water){ const hw=WASH(w).hw; for(let k=1;k<w.pts.length;k++) WI.add(w.pts[k-1],w.pts[k],hw,hw+10); }
-  const washDist=(x,z)=>{ let best=1e9; for(const [a,b,hw] of WI.near(x,z)) best=Math.min(best,segDist(x,z,a,b)[0]-hw); return best; };
+  const WI=new SegIndex(32); for(const w of D.water){ const it={hw:WASH(w).hw,w}; for(let k=1;k<w.pts.length;k++) WI.add(w.pts[k-1],w.pts[k],it,it.hw+18); }
+  const washDist=(x,z)=>{ let best=1e9; for(const [a,b,it] of WI.near(x,z)) best=Math.min(best,segDist(x,z,a,b)[0]-it.hw); return best; };
+  // the nearest wash and how far its edge is (negative inside it)
+  const washNear=(x,z)=>{ let best=1e9,bw=null; for(const [a,b,it] of WI.near(x,z)){ const d=segDist(x,z,a,b)[0]-it.hw; if(d<best){ best=d; bw=it; } } return [best,bw]; };
   const BI=new BoxIndex(48); D.buildings.forEach(b=>{ if(b.pts.length>=3){ b.bb=bbox(b.pts); BI.add([b.bb[0]-2,b.bb[1]-2,b.bb[2]+2,b.bb[3]+2],b); } });
   const nearBuilding=(x,z,pad)=>BI.near(x,z).some(b=>x>b.bb[0]-pad&&x<b.bb[2]+pad&&z>b.bb[1]-pad&&z<b.bb[3]+pad&&(pad>0||inPoly(x,z,b.pts)));
   const blockedA=new Set(['retail','commercial','parking','swimming_pool','pitch','playground','water','industrial']);
@@ -165,21 +192,81 @@ function bake(D,log=()=>{}){
         if(!inB(mx,mz,-1)||nearRoad(mx,mz,.8)||inAnyBuilding(mx,mz)) continue; walls.push([...p,...q,1.8,.2,0]); } } }
   log('walls');
 
-  // ---------- plants ----------
-  const r=rng(23), plants=[], step=6.5, P=(t,x,y,z,sx,sy,sz,rx,ry)=>plants.push([t,+x.toFixed(2),+y.toFixed(2),+z.toFixed(2),+sx.toFixed(2),+sy.toFixed(2),+sz.toFixed(2),+rx.toFixed(2),+ry.toFixed(2)]);
-  for(let x=BX0+3;x<BX1-3;x+=step) for(let z=BZ0+3;z<BZ1-3;z+=step){
+  // ---------- plants and rock: Arizona Upland Sonoran Desert communities, chosen by rules from the ground itself ----------
+  // Each spot gets a habitat from the map and the terrain: the river's braided bed, a wash channel, the wash banks
+  // (xeroriparian trees), cliffs (rock faces), ridges and outcrops (granite tors), south- and north-facing slopes, the
+  // bajada flats (creosote and bursage), desert pavement, the disturbed roadside and yards. Each habitat has a community:
+  // species with weights and a density. Elevation bands, mapped land cover (grassland, scrub, bare rock) and slow noise
+  // (patches) adjust them. Everything is seeded, so the same ground grows the same plants.
+  const r=rng(23), plants=[], step=4.2, K=PT, base=D.terrain.base;
+  // positions and turns to 0.1 (5 cm and 3 degrees are invisible), sizes to 0.01
+  const P=(t,x,y,z,sx,sy,sz,rx,ry)=>plants.push([t,+x.toFixed(1),+y.toFixed(1),+z.toFixed(1),+sx.toFixed(2),+sy.toFixed(2),+sz.toFixed(2),+rx.toFixed(1),+ry.toFixed(1)]);
+  const conv=(x,z)=>heightAt(x,z)-(heightAt(x+10,z)+heightAt(x-10,z)+heightAt(x,z+10)+heightAt(x,z-10))/4;
+  const grad=(x,z)=>{ const e=3, gx=(heightAt(x+e,z)-heightAt(x-e,z))/(2*e), gz=(heightAt(x,z+e)-heightAt(x,z-e))/(2*e), g=Math.hypot(gx,gz)||1e-6; return {south:-gz/g, down:Math.atan2(-gx,-gz), deg:Math.atan(g)*180/Math.PI}; };
+  const COMM={
+    bed:     {d:.30, sp:[[K.COB,.42],[K.BRM,.18],[K.GRS,.12],[K.DRF,.1],[K.RCK,.1],[K.CAT,.03],[K.WOLF,.05]]},
+    channel: {d:.30, sp:[[K.BRM,.3],[K.COB,.3],[K.GRS,.15],[K.RCK,.1],[K.DRF,.07],[K.CAT,.05],[K.WOLF,.03]]},
+    bank:    {d:.72, sp:[[K.BPV,.2],[K.MES,.16],[K.IRW,.1],[K.CAT,.13],[K.WOLF,.12],[K.JOJ,.07],[K.BRM,.08],[K.SAG,.03],[K.GRS,.06],[K.SNAG,.02],[K.BHC,.03]]},
+    cliff:   {d:.55, sp:[[K.SLAB,.5],[K.RCK,.2],[K.AGV,.08],[K.OCO,.06],[K.BRT,.07],[K.BAR,.05],[K.TBC,.04]]},
+    outcrop: {d:.55, sp:[[K.TOR,.32],[K.RCK,.2],[K.OCO,.1],[K.AGV,.07],[K.TBC,.08],[K.BRT,.08],[K.SAG,.07],[K.BAR,.05],[K.JOJ,.03]]},
+    slopeS:  {d:.62, sp:[[K.SAG,.13],[K.PV,.14],[K.OCO,.1],[K.BRT,.19],[K.TBC,.1],[K.BAR,.05],[K.RCK,.11],[K.JOJ,.05],[K.AGV,.03],[K.GRS,.05],[K.TOR,.02]]},
+    slopeN:  {d:.70, sp:[[K.JOJ,.22],[K.PV,.14],[K.BRT,.13],[K.WOLF,.1],[K.GRS,.15],[K.SAG,.05],[K.RCK,.1],[K.CAT,.05],[K.AGV,.04],[K.OCO,.02]]},
+    slope:   {d:.62, sp:[[K.PV,.15],[K.SAG,.08],[K.BRT,.19],[K.JOJ,.11],[K.OCO,.05],[K.RCK,.12],[K.TBC,.04],[K.BAR,.04],[K.GRS,.08],[K.CRE,.08],[K.WOLF,.06]]},
+    bajada:  {d:.52, sp:[[K.CRE,.3],[K.BUR,.26],[K.SAG,.04],[K.BHC,.06],[K.PP,.04],[K.BAR,.02],[K.PV,.06],[K.GRS,.08],[K.RCK,.03],[K.WOLF,.03]]},
+    pavement:{d:.16, sp:[[K.CRE,.3],[K.BUR,.2],[K.RCK,.35],[K.BHC,.1],[K.GRS,.05]]},
+    roadside:{d:.42, sp:[[K.BRM,.25],[K.BRT,.25],[K.GRS,.25],[K.CRE,.1],[K.BUR,.1],[K.WOLF,.05]]},
+    yard:    {d:.34, sp:[[K.WOLF,.24],[K.MES,.12],[K.PV,.12],[K.AGV,.1],[K.PP,.08],[K.BRT,.08],[K.GRS,.1],[K.BAR,.05],[K.SAG,.05],[K.BPV,.06]]}};
+  // elevation bands: creosote and bursage thin out going up; grass and jojoba come in; saguaros leave the cold north slopes
+  const band=(t,elev,hab)=>{ const hi=Math.max(0,Math.min(1,(elev-760)/160)), lo=Math.max(0,Math.min(1,(700-elev)/100));
+    if(t===K.CRE||t===K.BUR) return 1+.4*lo-.75*hi; if(t===K.GRS) return 1+1.6*hi-.4*lo; if(t===K.JOJ) return 1+.7*hi; if(t===K.SAG&&hab==='slopeN') return 1-.7*hi; return 1; };
+  // mapped land cover nudges the community
+  const cover=(x,z)=>{ let f=null; for(const a of AI.near(x,z)){ if(!['grassland','meadow','scrub','heath','bare_rock','desert'].includes(a.kind)) continue; if(x>a.bb[0]&&x<a.bb[2]&&z>a.bb[1]&&z<a.bb[3]&&inPoly(x,z,a.pts)){ f=a.kind; break; } } return f; };
+  const inBedPoly=(x,z)=>F.beds.find(b=>inPoly(x,z,b.pts));
+  const counts={};
+  for(let x=BX0+2;x<BX1-2;x+=step) for(let z=BZ0+2;z<BZ1-2;z+=step){
     const px=x+(r()-.5)*step, pz=z+(r()-.5)*step;
     if(nearBuilding(px,pz,1.5) || areaAt(px,pz,a=>blockedA.has(a.kind)) || nearRoad(px,pz,1.2)){ r(); r(); continue; }
-    const tame=areaAt(px,pz,a=>a.kind==='residential'||a.kind==='park'||a.kind==='grass'), v=r(), y=heightAt(px,pz), s=.75+r()*.5, rot=r()*TAU, sl=slopeAt(px,pz), wd=washDist(px,pz);
-    if(LI.near(px,pz).some(l=>!inPoly(px,pz,l.raw)&&polyDist(px,pz,l.raw)<3.5)){ if(v<.5) P(4,px,y,pz,s,s,s,0,rot); else if(v<.7) P(3,px,y,pz,s*.7,s*.5,s*.7,0,rot); continue; }
+    const v=r(), y=heightAt(px,pz), rot=r()*TAU;
+    if(LI.near(px,pz).some(l=>!inPoly(px,pz,l.raw)&&polyDist(px,pz,l.raw)<3.5)){ const s=.75+r()*.5; if(v<.5) P(K.REED,px,y,pz,s,s,s,0,rot); else if(v<.7) P(K.RCK,px,y,pz,s*.7,s*.5,s*.7,0,rot); continue; }
     if(LI.near(px,pz).some(l=>inPoly(px,pz,l.raw))) continue;
-    if(inBed(px,pz)){ if(v<.08) P(3,px,y,pz,s*.6,s*.4,s*.6,0,rot); else if(v<.11) P(2,px,y,pz,s*.7,s*.7,s*.7,0,rot); continue; }
-    if(wd<-1){ if(v<.12) P(3,px,y,pz,s*.5,s*.4,s*.5,0,rot); continue; }
-    if(!tame && wd<7){ if(v<.45) P(1,px,y,pz,s*1.25,s*1.25,s*1.25,0,rot); else if(v<.8) P(2,px,y,pz,s*1.1,s*1.1,s*1.1,0,rot); continue; }
-    if(!tame && sl>9){ if(v<.3) P(3,px,y,pz,s*(1+r()),s*(.8+r()*.7),s*(1+r()),r(),rot); else if(v<.42) P(0,px,y-.2,pz,s,s*(.8+r()*.5),s,0,rot); else if(v<.62) P(2,px,y,pz,s*.8,s*.8,s*.8,0,rot); continue; }
-    if(tame){ if(v<.2) P(1,px,y,pz,s,s,s,0,rot); else if(v<.36) P(2,px,y,pz,s*.8,s*.8,s*.8,0,rot); else if(v<.4) P(3,px,y,pz,s*.6,s*.6,s*.6,0,rot); continue; }
-    if(v<.06) P(0,px,y-.2,pz,s,s*(.8+r()*.5),s,0,rot); else if(v<.2) P(1,px,y,pz,s*1.1,s*1.1,s*1.1,0,rot); else if(v<.62) P(2,px,y,pz,s,s,s,0,rot); else if(v<.7) P(3,px,y,pz,s*(.6+r()),s*(.6+r()*.6),s*(.6+r()),0,rot); }
-  for(const t of D.trees){ if(inB(t[0],t[1])) P(1,t[0],heightAt(t[0],t[1]),t[1],1.2,1.2,1.2,0,r()*TAU); }
+    // ---- habitat ----
+    const g=grad(px,pz), sl=g.deg, [wd,wn]=washNear(px,pz), elev=y+base, lc=cover(px,pz), bed=inBedPoly(px,pz);
+    const tame=areaAt(px,pz,a=>a.kind==='residential'||a.kind==='park'||a.kind==='grass'), cv=sl>4?conv(px,pz):0, rockN=vnoise(px,pz,70,7), patch=vnoise(px,pz,45,11);
+    let hab;
+    if(bed) hab=wn&&wn.w.kind==='braid'&&wd<0?'braid':'bed';
+    else if(wd<-.4) hab='channel';
+    else if(sl>34) hab='cliff';
+    else if(wn&&wd<4+wn.hw*1.6&&!tame) hab='bank';
+    else if(tame) hab='yard';
+    else if(nearRoad(px,pz,6,true)) hab='roadside';
+    else if(lc==='bare_rock'||(cv>.9&&sl>6)||(sl>22&&rockN>.62)) hab='outcrop';
+    else if(sl>9) hab=g.south>.25?'slopeS':g.south<-.25?'slopeN':'slope';
+    else hab=vnoise(px,pz,140,3)>.78&&sl<3?'pavement':'bajada';
+    if(hab==='braid'){ if(v<.03) P(K.COB,px,y,pz,.6,.6,.6,0,rot); continue; }   // the low-flow channels are bare damp sand
+    const C=COMM[hab]; let dens=C.d*(.55+.9*patch);
+    if(lc==='grassland'||lc==='meadow') dens*=1.2; if(lc==='scrub'||lc==='heath') dens*=1.25; if(lc==='bare_rock') dens*=.8;
+    // the strand line along the bed's edge holds flood debris
+    let sp=C.sp; if(hab==='bed'&&polyDist(px,pz,bed.raw)<6) sp=[[K.DRF,.4],[K.COB,.2],[K.BRM,.2],[K.GRS,.1],[K.CAT,.1]];
+    if(v>dens) { r(); continue; }
+    // ---- species ----
+    let tot=0; const ws=sp.map(([t,w])=>{ let k=w*band(t,elev,hab); if(lc==='grassland'&&t===K.GRS) k*=3; if(lc==='bare_rock'&&(t===K.TOR||t===K.RCK)) k*=2.5; tot+=k; return [t,k]; });
+    let pick=r()*tot, t=ws[0][0]; for(const [tt,k] of ws){ pick-=k; if(pick<=0){ t=tt; break; } }
+    const spec=PLANTS[t], sc=spec.s[0]+r()*(spec.s[1]-spec.s[0]);
+    counts[hab]=(counts[hab]||0)+1;
+    if(t===K.SLAB){ // a rock face lying in the slope: tilted to its angle, facing down it
+      P(t,px,y-.35*sc,pz,sc*(1+r()*.6),sc*(.35+r()*.25),sc*(.8+r()*.5),Math.min(1.2,sl*Math.PI/180),g.down+(r()-.5)*.5); continue; }
+    if(t===K.TOR){ // granite tors stand in piles: a big one and a few leaning on it
+      P(t,px,y-.3*sc,pz,sc,sc*(.7+r()*.4),sc*(.8+r()*.4),(r()-.5)*.5,rot); const n=1+Math.floor(r()*4);
+      for(let k=0;k<n;k++){ const a=r()*TAU, d=sc*(.7+r()*.7), qx=px+Math.cos(a)*d, qz=pz+Math.sin(a)*d, s2=sc*(.35+r()*.5); if(nearRoad(qx,qz,1.5)||nearBuilding(qx,qz,1.5)) continue; P(t,qx,heightAt(qx,qz)-.25*s2,qz,s2,s2*(.6+r()*.5),s2*(.7+r()*.5),(r()-.5)*.8,r()*TAU); }
+      continue; }
+    if(t===K.RCK){ P(t,px,y-.1,pz,sc*(1+r()*.4),sc*(.6+r()*.5),sc*(.8+r()*.4),r()*.6,rot); continue; }
+    if(t===K.COB){ for(let k=0;k<3+Math.floor(r()*5);k++){ const qx=px+(r()-.5)*3, qz=pz+(r()-.5)*3, s2=.15+r()*.35; P(t,qx,heightAt(qx,qz)-.04,qz,s2,s2*.6,s2*.8,r(),r()*TAU); } continue; }
+    if(t===K.DRF){ P(t,px,y+.05,pz,sc,sc,sc,0,rot); continue; }
+    if(t===K.BUR||t===K.GRS){ // bursage and bunch grass grow in loose drifts
+      for(let k=0;k<1+Math.floor(r()*3);k++){ const qx=k?px+(r()-.5)*2.6:px, qz=k?pz+(r()-.5)*2.6:pz, s2=sc*(.7+r()*.5); if(k&&nearRoad(qx,qz,1)) continue; P(t,qx,heightAt(qx,qz),qz,s2,s2*(.8+r()*.4),s2,0,r()*TAU); } continue; }
+    const dy=t===K.SAG?-.2:t===K.BAR?-.05:0; P(t,px,y+dy,pz,sc,sc*(.85+r()*.3),sc,0,rot); }
+  for(const t of D.trees){ if(inB(t[0],t[1])) P(K.PV,t[0],heightAt(t[0],t[1]),t[1],1.2,1.2,1.2,0,r()*TAU); }
+  log('habitats '+JSON.stringify(counts));
   log('plants '+plants.length);
 
   // ---------- movement grid (2 m) over the block ----------
@@ -193,8 +280,7 @@ function bake(D,log=()=>{}){
   for(const bed of F.beds){ const bb=bbox(bed.pts); cells(...bb,(id,x,z)=>{ if(inPoly(x,z,bed.pts)) set(id,NK.wash,.58); }); }
   for(const w of D.water) line(w.pts,WASH(w).hw*.8,id=>set(id,NK.wash,.58));
   for(const rd of [...D.roads].sort((a,b)=>roadW(a)-roadW(b))){ if(isBridge(rd)) continue; const k=!isDrive(rd)?NK.path:isPaved(rd)?NK.asphalt:NK.dirt; line(rd.pts,roadW(rd)/2+.3,id=>set(id,k,k===NK.asphalt?1:k===NK.path?.95:.86)); }
-  const PW=[.25,.1,.16,.14,.2];
-  for(const p of plants){ const rr=p[0]===1?1.8:1.2; cells(p[1]-rr,p[3]-rr,p[1]+rr,p[3]+rr,id=>{ brush[id]+=PW[p[0]]; }); }
+  for(const p of plants){ const t=PLANTS[p[0]], rr=t.fixed?1.8:1.2*Math.max(1,p[4]); cells(p[1]-rr,p[3]-rr,p[1]+rr,p[3]+rr,id=>{ brush[id]+=t.brush; }); }
   for(let j=0;j<NZ;j++) for(let i=0;i<NX;i++){ const id=j*NX+i, x=cX(i), z=cZ(j), sl=slopeAt(x,z), k=kind[id], road=k===NK.asphalt||k===NK.dirt||k===NK.path||k===NK.lot;
     const slopeF=sl<4?1:Math.max(.28,1-(sl-4)/30), brushF=road?1:Math.max(.42,1-brush[id]);
     if(!road&&brush[id]>.12&&(k===NK.open||k===NK.wash)) kind[id]=NK.brush; else if(!road&&sl>14&&k===NK.open) kind[id]=NK.hill;
@@ -216,11 +302,47 @@ function bake(D,log=()=>{}){
   const camps=F.bridges.filter(b=>b.len>90).map(b=>{ const s=b.ab+9; let k=0; while(k<b.d.length-1&&b.L[k+1]<s) k++; return {bridge:F.bridges.indexOf(b),k}; });
   return {H,NXg,NZg,X0,Z0,st,F,walls,plants,nav:{NS,NX,NZ,BX0,BZ0,sp,kind},houses:new Set(houses),camps,WASH};
 }
+// ---------- the plants and rocks of the Arizona Upland Sonoran Desert, as the bake places them ----------
+// reach: radius that blocks movement (scaled by the plant's size unless fixed: trees block at the trunk); cover: 1 half, 2 full
+// (from coverMin scale up); brush: how much it slows walking through its cell; ring: kept in the lighter ring sectors
+// (1 always, a number = from that scale up, absent = centre sector only); s: size range.
+const PLANTS=[
+  {n:'Saguaro',reach:.35,fixed:1,cover:1,brush:.25,ring:1,s:[.7,1.35]},
+  {n:'Foothill palo verde',reach:.3,fixed:1,cover:1,brush:.1,ring:1,s:[.8,1.3]},
+  {n:'Wolfberry',reach:.75,brush:.16,ring:1.05,s:[.6,1.1]},
+  {n:'Boulder',reach:.85,cover:1,coverMin:.8,brush:.14,ring:1.15,s:[.5,1.4]},
+  {n:'Reeds',reach:0,brush:.2,s:[.8,1.2]},
+  {n:'Creosote bush',reach:.55,brush:.18,ring:1.1,s:[.7,1.3]},
+  {n:'White bursage',reach:0,brush:.1,s:[.6,1.1]},
+  {n:'Brittlebush',reach:0,brush:.12,s:[.7,1.2]},
+  {n:'Ocotillo',reach:.3,fixed:1,brush:.08,ring:1,s:[.8,1.3]},
+  {n:'Teddy bear cholla',reach:.5,brush:.35,ring:1.2,s:[.7,1.3]},
+  {n:'Buckhorn cholla',reach:.5,brush:.3,ring:1.2,s:[.7,1.3]},
+  {n:'Prickly pear',reach:.55,brush:.28,s:[.6,1.2]},
+  {n:'Barrel cactus',reach:.3,brush:.1,s:[.6,1.2]},
+  {n:'Velvet mesquite',reach:.4,fixed:1,cover:1,brush:.12,ring:1,s:[.8,1.4]},
+  {n:'Blue palo verde',reach:.35,fixed:1,cover:1,brush:.1,ring:1,s:[.9,1.4]},
+  {n:'Ironwood',reach:.4,fixed:1,cover:1,brush:.12,ring:1,s:[.8,1.3]},
+  {n:'Desert broom',reach:0,brush:.18,s:[.7,1.3]},
+  {n:'Jojoba',reach:.55,brush:.18,ring:1.15,s:[.7,1.2]},
+  {n:'Agave',reach:.35,brush:.15,s:[.6,1.2]},
+  {n:'Bunch grass',reach:0,brush:.04,s:[.6,1.3]},
+  {n:'Catclaw acacia',reach:.6,brush:.3,ring:1.15,s:[.7,1.3]},
+  {n:'Granite outcrop',reach:1,cover:2,brush:.2,ring:1,s:[1.4,3.6]},
+  {n:'Rock face',reach:1,cover:2,brush:.2,ring:1,s:[1.6,3.4]},
+  {n:'Cobbles',reach:0,brush:.06,s:[.6,1.4]},
+  {n:'Flood wood',reach:0,brush:.12,s:[.7,1.4]},
+  {n:'Dead tree',reach:.3,fixed:1,cover:1,brush:.08,ring:1,s:[.8,1.3]}];
+const PT=Object.fromEntries(['SAG','PV','WOLF','RCK','REED','CRE','BUR','BRT','OCO','TBC','BHC','PP','BAR','MES','BPV','IRW','BRM','JOJ','AGV','GRS','CAT','TOR','SLAB','COB','DRF','SNAG'].map((k,i)=>[k,i]));
+const plantReach=p=>{ const t=PLANTS[p[0]]; return !t||!t.reach?0:t.fixed?t.reach:t.reach*Math.max(p[4],p[6]); };
+// smooth value noise in 0..1 over a lattice of the given spacing
+function vnoise(x,z,s,seed){ const fx=x/s, fz=z/s, i=Math.floor(fx), j=Math.floor(fz), u=fx-i, v=fz-j, h=(a,b)=>{ let n=(a*374761393+b*668265263+seed*1442695041)|0; n=Math.imul(n^(n>>>13),1274126177); return ((n^(n>>>16))>>>0)/4294967296; }, sm=t=>t*t*(3-2*t);
+  return (h(i,j)*(1-sm(u))+h(i+1,j)*sm(u))*(1-sm(v))+(h(i,j+1)*(1-sm(u))+h(i+1,j+1)*sm(u))*sm(v); }
 const NAVKIND={open:0,asphalt:1,dirt:2,path:3,lot:4,yard:5,wash:6,brush:7,hill:8,water:9,building:10,wall:11,steep:12,low:13,pier:14,car:15,plant:16};
 const NAVLABEL=['Open desert','Asphalt','Dirt road','Footpath','Paved lot','Yard','Sand wash','Brush','Hillside','Water','Building','Wall','Too steep','No headroom','Bridge pier','Wreck','Plant or boulder'];
 // abandoned cars: length and width in metres, shared by the road pass (movement grid) and the car models
 const CARDIM={sedan:[4.8,1.84],hatch:[4.15,1.76],suv:[4.85,1.94],pickup:[5.6,2.0],van:[5.1,2.0]};
 const SWIM=.2;
-const api={TAU,rng,inPoly,segDist,bbox,centroid,area,densify,polyDist,clipRect,clipLine,segX,ROADW,roadW,isDrive,isPaved,isBridge,roadSurf,roadSection,bridgeY,SegIndex,BoxIndex,bake,NAVKIND,NAVLABEL,CARDIM,SWIM};
+const api={TAU,rng,inPoly,segDist,bbox,centroid,area,densify,polyDist,clipRect,clipLine,segX,ROADW,roadW,isDrive,isPaved,isBridge,roadSurf,roadSection,bridgeY,SegIndex,BoxIndex,bake,NAVKIND,NAVLABEL,CARDIM,SWIM,PLANTS,PT,plantReach,vnoise};
 if(typeof module!=='undefined') module.exports=api; else root.SectorCore=api;
 })(typeof self!=='undefined'?self:this);

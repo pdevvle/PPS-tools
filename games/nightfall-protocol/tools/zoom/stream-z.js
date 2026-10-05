@@ -54,7 +54,8 @@ const SEC=IDX.sector, NB=IDX.n, HALF=IDX.half, NS=IDX.navStep, SN=SEC/NS;
 const NBX=IDX.nx||NB, NBZ=IDX.nz||NB, BX0=IDX.x0??-HALF, BZ0=IDX.z0??-HALF, BX1=BX0+NBX*SEC, BZ1=BZ0+NBZ*SEC, GN=NBX*SN, GZ=NBZ*SN, GNN=GN*GZ;
 for(const b of IDX.bridges){ const d=b.d; b.yAt=t=>C.bridgeY(b,t); b.tan=k=>{ const p=d[Math.max(0,k-1)], q=d[Math.min(d.length-1,k+1)], l=Math.hypot(q[0]-p[0],q[1]-p[1])||1; return [(q[0]-p[0])/l,(q[1]-p[1])/l]; }; b.nrm=k=>{ const [tx,tz]=b.tan(k); return [tz,-tx]; };
   b.sec=[Math.floor((b.mid[0]-BX0)/SEC),Math.floor((b.mid[1]-BZ0)/SEC)]; b.bb=C.bbox(d); }
-const RK=RoadKit({THREE,C,heightAt:(x,z)=>heightAt(x,z),IDX,renderer,mat,SHAPES,sectorGeo:(g,s)=>sectorGeo(g,s),kindAt:(x,z)=>{ const c=cellOf(x,z); return c<0?255:kindG[c]; }});   // road surfaces, paint, signs and signals
+const RK=RoadKit({THREE,C,heightAt:(x,z)=>heightAt(x,z),IDX,renderer,mat,SHAPES,sectorGeo:(g,s)=>sectorGeo(g,s),kindAt:(x,z)=>{ const c=cellOf(x,z); return c<0?255:kindG[c]; }});
+const FK=FloraKit({THREE,mat,C,sectorGeo:(g,s)=>sectorGeo(g,s)});   // desert plants, rock and wash beds (tools/stream/flora-kit.js)   // road surfaces, paint, signs and signals
 const sectors=new Map(), key=(c,r)=>c+','+r;
 const secAt=(x,z)=>{ const c=Math.floor((x-BX0)/SEC), r=Math.floor((z-BZ0)/SEC); return c>=0&&r>=0&&c<NBX&&r<NBZ?[c,r]:null; };
 const CX=IDX.context, CCX=CX.cx||0, CCZ=CX.cz||0, ctxH=(x,z)=>{ const fx=(x-CCX+CX.half)/CX.step, fz=(z-CCZ+CX.half)/CX.step, i=Math.max(0,Math.min(CX.n-2,Math.floor(fx))), j=Math.max(0,Math.min(CX.n-2,Math.floor(fz))), u=fx-i, v=fz-j, h=(a,b)=>CX.h[b*CX.n+a]; return (h(i,j)*(1-u)+h(i+1,j)*u)*(1-v)+(h(i,j+1)*(1-u)+h(i+1,j+1)*u)*v; };
@@ -135,9 +136,7 @@ function* buildSector(s){
   const line=(pts,w,col)=>{ g.beginPath(); pts.forEach(([x,z],i)=>i?g.lineTo(X(x),Z(z)):g.moveTo(X(x),Z(z))); g.lineWidth=Math.max(.6,w*px); g.strokeStyle=col; g.lineCap='round'; g.lineJoin='round'; g.stroke(); };
   const AREA={residential:'#d4c09c',retail:'#9a9894',commercial:'#9a9894',industrial:'#9d978d',parking:'#7d7c79',grass:'#8fa456',park:'#97ab5d',pitch:'#7f9e4a',playground:'#c9a77a',swimming_pool:'#4aa6c8',scree:'#ae9d84',sand:'#dcc7a0',water:'#4aa6c8'};
   for(const k of ['residential','scree','sand','park','grass','pitch','industrial','retail','commercial','parking','playground','swimming_pool','water']) for(const a of D.areas) if(a.kind===k) poly(a.pts,AREA[k]);
-  for(const b of D.beds){ poly(b,'#dac7a0'); }
-  for(const w of D.water){ if(w.kind==='river'&&D.beds.length){ for(let o=-34;o<=34;o+=5.5) line(w.pts.map(([x,z],i)=>[x+o+Math.sin(i*1.7+o)*3,z]),.5+Math.abs(Math.sin(o))*.6,o%11?'rgba(150,125,90,.45)':'rgba(245,232,205,.6)'); }
-    line(w.pts,w.hw*2+4,'#b9a07a'); line(w.pts,w.hw*2-1,'#dcc9a2'); line(w.pts,w.hw*.6,'#cbb48c'); }
+  FK.paintGround(g,s,X,Z,px);
   for(const l of D.lakes) for(const p of l.shore){ line(p,6,'#9c8a68'); line(p,2.5,'#7e6d52'); }
   RK.paintGround(g,s,X,Z,px);
   g.imageSmoothingEnabled=true; g.drawImage(shadeCanvas(s.Hf,n,4),X(x0-4)-2*px,Z(z0-4)-2*px,n*4*px,n*4*px);
@@ -217,16 +216,11 @@ function* buildSector(s){
 // bounds covering the whole sector, so three.js doesn't cull the lot when the shape's own origin is off screen.
 // The centre sector shows every plant; the ring keeps trees, cacti and big shrubs, with a lighter saguaro.
 function sectorGeo(shape,s){ const g=new THREE.BufferGeometry(); for(const k in shape.attributes) g.setAttribute(k,shape.attributes[k]); g.boundingSphere=new THREE.Sphere(new THREE.Vector3(s.x0+SEC/2,heightAt(s.x0+SEC/2,s.z0+SEC/2),s.z0+SEC/2),SEC*.75); g.userData.proxy=true; return g; }
-function buildPlants(s,full){
-  for(const o of [...s.gen.children]){ s.gen.remove(o); o.geometry.dispose(); }
-  const L=[[],[],[],[],[]]; for(const p of s.data.plants){ if(!full && !(p[0]===0||p[0]===1||(p[0]===2&&p[4]>1.05)||(p[0]===3&&p[4]>1.15))) continue; L[p[0]].push(mtx(p[1],p[2],p[3],p[4],p[5],p[6],p[7],p[8],0)); }
-  const inst=(shape,m,list)=>{ if(!list.length) return; const me=new THREE.InstancedMesh(sectorGeo(shape,s),m,list.length); list.forEach((mm,i)=>me.setMatrixAt(i,mm)); me.castShadow=true; me.receiveShadow=true; s.gen.add(me); };
-  inst(full?SHAPES.saguaro:SHAPES.saguaroLo,mat('#5f7d3f'),L[0]); inst(SHAPES.trunk,mat('#8a9a52'),L[1]); inst(SHAPES.canopy,mat('#a7b85a'),L[1]); inst(SHAPES.shrub,mat('#6e7f45'),L[2]); inst(SHAPES.rock,mat('#a8937a'),L[3]); inst(SHAPES.reed,mat('#7f9248'),L[4]);
-  s.full=full; }
+function buildPlants(s,full){ FK.build(s,full); }
 const LAKE=new THREE.MeshStandardMaterial({color:0x3a8fae, roughness:.22, metalness:.1, transparent:true, opacity:.86, side:THREE.DoubleSide, polygonOffset:true, polygonOffsetFactor:-1});
 const POOL=new THREE.MeshStandardMaterial({color:0x56c3dc, roughness:.18, metalness:.05, transparent:true, opacity:.9, side:THREE.DoubleSide});
 function disposeSector(s){
-  if(s.group){ inkOff(s.group); scene.remove(s.group); s.group.traverse(o=>{ if(o.geometry && !SHARED.has(o.geometry)) o.geometry.dispose(); if(o.userData.crease) o.userData.crease.dispose(); if(o.material){ if(o.material.map&&!o.material.userData.keep) o.material.map.dispose(); if(o.userData.ownMat||o.isLineSegments) o.material.dispose(); } if(o.isInstancedMesh) o.dispose&&o.dispose(); }); }
+  if(s.group){ inkOff(s.group); scene.remove(s.group); s.group.traverse(o=>{ if(o.geometry && !SHARED.has(o.geometry) && !FK.SHARED.has(o.geometry)) o.geometry.dispose(); if(o.userData.crease) o.userData.crease.dispose(); if(o.material){ if(o.material.map&&!o.material.userData.keep) o.material.map.dispose(); if(o.userData.ownMat||o.isLineSegments) o.material.dispose(); } if(o.isInstancedMesh) o.dispose&&o.dispose(); }); }
   for(const l of s.labels||[]) l.el.remove();
   if(s.data&&s.state==='built') CB.onDropped(s);
   if(s.data){ const ns=s.data.nav.n; for(let j=0;j<ns;j++) kindG.fill(255,(s.r*ns+j)*GN+s.c*ns,(s.r*ns+j)*GN+s.c*ns+ns); }
@@ -346,7 +340,7 @@ const CB=(()=>{
   // ---------- geometry of the fight ----------
   const BLOCKING=new Set([NK.building,NK.wall,NK.pier,NK.steep,NK.car]);   // wrecked cars are full cover
   const plantCover=new Map();   // cell -> 1 for saguaros, palo verdes and boulders
-  C.onBuilt=s=>{ for(const p of s.data.plants){ if(p[0]===0||p[0]===1||(p[0]===3&&p[4]>.8)){ const c=cellOf(p[1],p[3]); if(c>=0) plantCover.set(c,1); } } };
+  C.onBuilt=s=>{ for(const p of s.data.plants){ const t=SectorCore.PLANTS[p[0]]; if(t&&t.cover&&(!t.coverMin||p[4]>t.coverMin)){ const c=cellOf(p[1],p[3]); if(c>=0) plantCover.set(c,Math.max(plantCover.get(c)||0,t.cover)); } } };   // cover from the plant table
   C.onDropped=s=>{ for(const p of s.data.plants){ const c=cellOf(p[1],p[3]); plantCover.delete(c); } };
   const cx=c=>BX0+(c%GN+.5)*NS, cz=c=>BZ0+(Math.floor(c/GN)+.5)*NS;
   const coverVal=c=>c<0||kindG[c]===255?0:BLOCKING.has(kindG[c])?2:plantCover.get(c)||0;
