@@ -17,6 +17,7 @@ Nightfall Protocol is being built in parallel conversations. This folder is how 
 | `settlement.md` | Stores, barter and trade, roles, rules and civics | stores, rationing, barter and civics running |
 | `lore.md` | Setting, history, factions, item and place lore that feeds loot | backstory in, four open questions |
 | `interiors.md` | Procedural interiors for every building: plans, doors, furniture, loot | not started |
+| `strategy-tactical-integration.md` | The tactical corridor inside the strategy map: data, knowledge, sites, encounters, ground changes (strategy and tactical tasks) | open |
 
 ## Starting a topic conversation
 
