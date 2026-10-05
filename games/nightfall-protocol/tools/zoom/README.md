@@ -8,6 +8,10 @@
 
 Assemble with `./build.sh`, which `../region/build.sh` also runs. It concatenates `zoom-head.html`, `const REGION=<data/region/region_i17.json>;`, `glue-pre.js`, `../region/campaign.js`, `../region/region-main.js`, `../stream/sector-core.js`, `../stream/figure-kit.js`, `../motion/motion.js`, `stream-z.js` and `glue-post.js`, then closes the script.
 
+## The campaign on the ground
+
+On this page the campaign runs while you are on the ground (see `briefs/strategy-over-tactical.md`, State): the realm as the horizon, a map lens, one live clock, raiders and other squads as figures, heat, water and light from the campaign, long orders handed to the map, the campaign's sites with a Search button, and the camera pose handed across both ways.
+
 ## Combat demonstration
 
 `combat.js` is spliced into `stream-z.js` just before its frame loop and shares its scope (movement grid, heights, figures, camera). One encounter: three raiders round the fire in the New River bridge undercroft. Raiders see 16 m in a 130° cone (5 m all round), drawn as red fans; the squad spots them at 30 m with line of sight. Whoever sees first decides the opening: the squad gets a first strike (one free shot each, +10 aim, raiders without cover), or the raiders scramble into cover before your first turn. Then turns on the 2 m grid: two actions, 12 effective metres per action so terrain speed shapes the range (blue one action, amber two), shoot ends the turn, overwatch takes a −15 reaction shot, hunker doubles cover. Walls, buildings, piers and steep ground are full cover; saguaros, palo verdes and boulders half; no cover toward the shooter means flanked (40% crit). +15 aim from 2 m higher ground. Ink shows state: concealed blue while undetected, gold selected, blue overwatch, red wounded.

@@ -2,6 +2,22 @@
 
 From the strategy-map conversation to the tactical-maps conversation. It is the inverse of `strategy-tactical-integration.md`: that brief brings the tactical ground into the map; this one carries the map onto the ground. Read `00-foundation.md`, `strategy-map.md`, `tactical-maps.md` and `strategy-tactical-integration.md` first. Where a task is the strategy side's, it says so; the strategy-map conversation will do those.
 
+## State (built in the tactical-maps conversation)
+
+All of it runs on the zoom page only; the standalone streaming page is unchanged (task 9).
+
+- **S1–S5** are in `tools/region/region-main.js` as `__region.paintKnowledge`, `groundTexture`, `tick`, `takePose` and `pose`; `Campaign.tick(minutes,{except})` and `Campaign.searchNow(i,site)` are new in `campaign.js` (tested in `test.js`). The map's dive records its camera as `NF.mapPose`, and `NF.exitTactical` hands the ground's pose to `takePose` (S4, done with poses on both sides rather than a `NF.camHandoff` function).
+- **Tasks 1–8** are a `LIVE` section in `tools/zoom/stream-z.js`:
+  1. the horizon is the realm: a 100 m mesh 10 km round the corridor and an 800 m mesh over the whole realm, both from `Campaign.elevAt` and draped with `groundTexture`; past loaded sectors `heightAt` falls back to the same terrain;
+  2. the map lens (Layers: *Map lens*): `paintKnowledge` plus a bold sector grid with sector names, on the near horizon and every loaded sector, fading in as the camera rises past 380 m;
+  3. one clock: `__region.tick` runs every quarter second with the squad on the ground excluded; encounters open on the ground with a banner (fight it out, pull back, lie low) that pauses the clock; `NF.tacSeconds()` returns 0 once the clock has run live, so `back()` only charges fight turns;
+  4. raider bands the squad can see stand on the ground as armed figures where the campaign has them, last sightings are labelled, and the other squads inside the corridor show as figures with their names;
+  5. water is spent by `waterRate` and heat, thirst and darkness slow walking through `paceAt`, the clock shows temperature and water, and the sun, sky and fog follow `sunAt`;
+  6. zooming out hands the pose to the map, zooming in starts the ground from the map's pose;
+  7. a click past the loaded ground (on the horizon, or outside the corridor) routes with `Campaign.route`, draws the route on the ground, walks to the edge of the loaded ground and hands the rest to the map as a trip;
+  8. the campaign's sites inside the loaded ground are labelled with what is left, and **Search** (within 45 m) calls `searchNow` and lets the hours pass.
+- Not yet: a live encounter on the ground is answered by the banner, not fought in combat (combat still fights only its demonstration camp); raiders outside the loaded ground stay map markers.
+
 ## Goal
 
 Standing on the tactical ground should feel like being inside the strategy map. The world goes on past the loaded sectors, the same campaign keeps running, and pulling the camera up turns the ground back into the map without a cut. Nothing the map knows should be lost on the way down, and nothing on the ground should contradict it.

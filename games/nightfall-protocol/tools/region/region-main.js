@@ -272,7 +272,7 @@ function drawEncounter(){ const e=S().enc; encEl.hidden=!e; if(!e) return;
     <div class="acts">${canDive(e)?'<button type="button" class="pri" data-a="dive">Go tactical</button>':''}<button type="button"${canDive(e)?'':' class="pri"'} data-a="auto" title="A rough outcome from head count and who saw whom first, until the tactical ground covers the whole corridor">Fight it out (quick)</button>
     ${e.forced?'':'<button type="button" data-a="avoid">Pull back</button><button type="button" data-a="hide">Lie low</button>'}</div>`; }
 encEl.addEventListener('click',ev=>{ const b=ev.target.closest('[data-a]'); if(!b) return; const e=S().enc; if(!e) return;
-  if(b.dataset.a==='dive'){ const sq=S().squads[e.squad.index]; sq.trip=null; sq.task=null; selSquad=e.squad.index; NF.encounter=e; pendingFight=e.id; save(true);
+  if(b.dataset.a==='dive'){ const sq=S().squads[e.squad.index]; sq.trip=null; sq.task=null; selSquad=e.squad.index; NF.encounter=e; pendingFight=e.id; save(true); NF.mapPose={yaw:camS.yaw,pitch:camS.pitch,dist:camS.dist};
     NF.enterTactical(sq.x,sq.z,{x:sq.x,z:sq.z,name:sq.name,people:sq.people,index:e.squad.index,encounter:e}); return; }
   C.resolve(b.dataset.a); changed(); });
 let pendingFight=null;
@@ -307,10 +307,10 @@ let push=0;
 renderer.domElement.addEventListener('wheel',e=>{ e.preventDefault(); const want=camT.dist*Math.exp(e.deltaY*.0012);
   if(ZOOM&&want<1500 && camT.dist<=1520){ push+=-e.deltaY; if(push>240){ push=0; dive(camT.tx,camT.tz); } } else push=0;
   camT.dist=Math.max(1500,Math.min(260000,want)); },{passive:false});
-function dive(x,z){ if(!NF.inBlock(x,z)){ NF.tip('Tactical ground is baked only for the gold New River block so far'); camT.tx=(NF.rect[0][0]+NF.rect[2][0])/2; camT.tz=(NF.rect[0][1]+NF.rect[2][1])/2; camT.dist=Math.max(camT.dist,3200); return; }
+function dive(x,z){ if(!NF.inBlock(x,z)){ NF.tip('Tactical ground is baked only inside the gold outline (New River and north of it) so far'); camT.tx=(NF.rect[0][0]+NF.rect[2][0])/2; camT.tz=(NF.rect[0][1]+NF.rect[2][1])/2; camT.dist=Math.max(camT.dist,3200); return; }
   if(S().enc){ NF.tip('Answer the encounter first'); return; }
   const sqs=S().squads, sq=sqs[selSquad], free=o=>!C.busy(o)&&NF.inBlock(o.x,o.z), here=free(sq)?sq:sqs.find(free);
-  NF.encounter=null; NF.enterTactical(x,z,here?{x:here.x,z:here.z,name:here.name,people:here.people,index:sqs.indexOf(here)}:null); }
+  NF.encounter=null; NF.mapPose={yaw:camS.yaw,pitch:camS.pitch,dist:camS.dist}; NF.enterTactical(x,z,here?{x:here.x,z:here.z,name:here.name,people:here.people,index:sqs.indexOf(here)}:null); }
 if(ZOOM){ renderer.domElement.addEventListener('dblclick',e=>{ const p=pick(e); if(p) dive(p.x,p.z); });
   document.getElementById('diveBtn').onclick=()=>{ const sq=S().squads[selSquad]; dive(NF.inBlock(sq.x,sq.z)?sq.x:camT.tx, NF.inBlock(sq.x,sq.z)?sq.z:camT.tz); }; }
 document.getElementById('homeBtn').onclick=()=>{ camT.tx=hx0; camT.tz=hz0; camT.dist=6000; };
@@ -349,10 +349,52 @@ function back(realSeconds,result){ const st=S();
   advanceBy(Math.max(0,realSeconds)*TAC_RATE/60+(result&&result.turns>0?result.turns*TURN_MIN:0)); knowDirty=true; changed(); save(true); }
 // let a stretch of game time pass now, whether or not a squad is busy (other squads keep travelling)
 function advanceBy(m){ const st=S(), keep=st.waitUntil; if(!(m>0)) return null; st.waitUntil=Math.max(keep,st.minutes+m); const out=C.step(m); st.waitUntil=keep>st.minutes?keep:0; apply(out); lightFor(st.minutes); drawSky(); return out; }
+// ---------- for the tactical ground: the map's own painters, a live clock and the camera ----------
+// S2: the realm's ground (elevation tint, scrub, land use, water, roads, hillshade) over any extent in region metres
+let HMAX=0; for(const v of D.h) HMAX=Math.max(HMAX,v);
+function groundTexture(ext,size=2048){ const [x0,z0,x1,z1]=ext, W=x1-x0, Hh=z1-z0, TX=W>=Hh?size:Math.round(size*W/Hh), TZ=W>=Hh?Math.round(size*Hh/W):size;
+  const X=x=>(x-x0)/W*TX, Zc=z=>(z-z0)/Hh*TZ, px=TX/W, c=document.createElement('canvas'); c.width=TX; c.height=TZ; const g=c.getContext('2d');
+  const n=Math.min(512,Math.max(64,Math.round(Math.max(W,Hh)/60))), nx=W>=Hh?n:Math.max(8,Math.round(n*W/Hh)), nz=W>=Hh?Math.max(8,Math.round(n*Hh/W)):n, sx=W/(nx-1), sz=Hh/(nz-1);
+  const hs=new Float32Array(nx*nz); for(let j=0;j<nz;j++) for(let i=0;i<nx;i++) hs[j*nx+i]=hRaw(x0+i*sx,z0+j*sz);
+  const img=g.createImageData(nx,nz), lo=[214,190,148], mid=[196,160,112], hi=[150,112,80], L=[-.5,.75,-.45], ll=Math.hypot(...L), flat=L[1]/ll;
+  for(let j=0;j<nz;j++) for(let i=0;i<nx;i++){ const t=Math.max(0,Math.min(1,hs[j*nx+i]/HMAX)), a=t<.5?lo:mid, b=t<.5?mid:hi, k=t<.5?t*2:(t-.5)*2, o=(j*nx+i)*4;
+    const h=(p,q)=>hs[Math.min(nz-1,Math.max(0,q))*nx+Math.min(nx-1,Math.max(0,p))]*VE, dx=(h(i+1,j)-h(i-1,j))/(2*sx), dz=(h(i,j+1)-h(i,j-1))/(2*sz), nn=[-dx,1,-dz], nl=Math.hypot(...nn), v=((nn[0]*L[0]+nn[1]*L[1]+nn[2]*L[2])/(nl*ll)-flat)*2.4;
+    for(let q=0;q<3;q++){ let cch=a[q]+(b[q]-a[q])*k; cch=v<0?cch*(1-Math.min(.55,-v)*.6):cch+(255-cch)*Math.min(.35,v)*.5; img.data[o+q]=cch; } img.data[o+3]=255; }
+  const tc=document.createElement('canvas'); tc.width=nx; tc.height=nz; tc.getContext('2d').putImageData(img,0,0); g.imageSmoothingEnabled=true; g.drawImage(tc,0,0,TX,TZ);
+  const r=(q=>()=>{ q=(Math.imul(q,1664525)+1013904223)>>>0; return q/4294967296; })(Math.round(x0*7+z0*3)>>>0);
+  for(let i=0;i<TX*TZ/70;i++){ g.fillStyle=r()<.5?'rgba(110,90,60,.22)':'rgba(120,140,70,.18)'; g.fillRect(r()*TX,r()*TZ,1.4,1.4); }
+  const over=b=>b[2]>=x0&&b[0]<=x1&&b[3]>=z0&&b[1]<=z1;
+  const poly=(pts,fill)=>{ g.beginPath(); pts.forEach(([x,z],i)=>i?g.lineTo(X(x),Zc(z)):g.moveTo(X(x),Zc(z))); g.closePath(); g.fillStyle=fill; g.fill(); };
+  const line=(pts,w,col,dash)=>{ g.beginPath(); pts.forEach(([x,z],i)=>i?g.lineTo(X(x),Zc(z)):g.moveTo(X(x),Zc(z))); g.lineWidth=Math.max(.7,w*px); g.strokeStyle=col; g.lineCap='round'; g.lineJoin='round'; g.setLineDash(dash||[]); g.stroke(); g.setLineDash([]); };
+  for(const a of R.areas) if(AC[a.kind]&&over(a.bb||(a.bb=bboxOf(a.pts)))) poly(a.pts,AC[a.kind]);
+  for(const w of R.water) if(over(w.bb||(w.bb=bboxOf(w.pts)))){ const big=w.kind==='river'; line(w.pts,big?60:22,'#b39c78'); line(w.pts,big?40:12,'#e3d2ad'); }
+  for(const l of R.lakes) if(over(l.bb||(l.bb=bboxOf(l.pts)))) poly(l.pts,'#4aa6c8');
+  const edges=groundTexture.edges||(groundTexture.edges=R.graph.edges.filter(e=>RW[e[3]]&&e[3]!=='residential'&&e[3]!=='track').map(e=>({cls:e[3],dirt:!!e[5],pts:[R.graph.nodes[e[0]],...e[4],R.graph.nodes[e[1]]]})));
+  const byCls=new Map(); for(const rd of [...edges,...(DF?R.roads:[])]){ if(!over(rd.bb||(rd.bb=bboxOf(rd.pts)))) continue; if(!byCls.has(rd.cls)) byCls.set(rd.cls,[]); byCls.get(rd.cls).push(rd); }
+  for(const k of ORDER) for(const rd of byCls.get(k)||[]){ const w=RW[k]||8; if(rd.dirt) line(rd.pts,w,'#a88d68',k==='track'?[w*px*2,w*px*1.4]:null); else line(rd.pts,w,k==='motorway'?'#3b3a38':'#5e5a54'); }
+  return c; }
+// S1: the sector grid, knowledge, home, the selected sector and squad routes on any 2D canvas; toCanvas maps region metres to pixels
+function paintKnowledge(ctx,toCanvas,ext){ const st=S(), [x0,z0,x1,z1]=ext||[-HX,-HZ,HX,HZ];
+  const c0=Math.max(0,Math.floor((x0+HX)/SEC)), c1=Math.min(R.cols-1,Math.floor((x1+HX)/SEC)), r0=Math.max(0,Math.floor((z0+HZ)/SEC)), r1=Math.min(R.rows-1,Math.floor((z1+HZ)/SEC));
+  const quad=(c,r,inset=0)=>{ const a=-HX+c*SEC+inset, b=-HZ+r*SEC+inset, e=SEC-2*inset; return [[a,b],[a+e,b],[a+e,b+e],[a,b+e]].map(([x,z])=>toCanvas(x,z)); };
+  const path=q=>{ ctx.beginPath(); q.forEach(([px,py],i)=>i?ctx.lineTo(px,py):ctx.moveTo(px,py)); ctx.closePath(); };
+  for(let r=r0;r<=r1;r++) for(let c=c0;c<=c1;c++){ const kk=st.know[r][c], q=quad(c,r);
+    if(kk.k===K.UNKNOWN){ path(q); ctx.fillStyle='rgba(38,34,30,.34)'; ctx.fill(); ctx.save(); path(q); ctx.clip(); ctx.strokeStyle='rgba(30,26,22,.35)'; ctx.lineWidth=Math.max(1,Math.hypot(q[1][0]-q[0][0],q[1][1]-q[0][1])/110);
+      const n=6; for(let k=-n;k<=n;k++){ const a=[q[0][0]+(q[1][0]-q[0][0])*k/n,q[0][1]+(q[1][1]-q[0][1])*k/n]; ctx.beginPath(); ctx.moveTo(a[0]+(q[3][0]-q[0][0]),a[1]+(q[3][1]-q[0][1])); ctx.lineTo(a[0]+(q[1][0]-q[0][0]),a[1]+(q[1][1]-q[0][1])); ctx.stroke(); } ctx.restore(); }
+    else if(kk.k===K.RUMOUR){ path(q); ctx.fillStyle='rgba(60,52,44,.18)'; ctx.fill(); }
+    else if(C.stale(kk)){ path(q); ctx.fillStyle='rgba(60,52,44,.16)'; ctx.fill(); }
+    path(q); ctx.strokeStyle='rgba(40,32,24,.35)'; ctx.lineWidth=1; ctx.stroke(); }
+  const outline=(s,col,w)=>{ if(!s) return; const q=quad(s[0],s[1],8); path(q); ctx.strokeStyle=col; ctx.lineWidth=w; ctx.stroke(); };
+  outline(home,'#3fae7f',3); outline(selSec,'#e0a526',3);
+  st.squads.forEach(sq=>{ if(!sq.trip) return; ctx.beginPath(); sq.trip.pts.forEach(([x,z],i)=>{ const [px,py]=toCanvas(x,z); i?ctx.lineTo(px,py):ctx.moveTo(px,py); }); ctx.strokeStyle=sq.c; ctx.globalAlpha=.85; ctx.lineWidth=3; ctx.setLineDash([8,5]); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha=1; }); }
+// S3: the live clock while a squad is on the ground; the map redraws when it is shown again
+function liveTick(minutes,opts){ const out=C.tick(minutes,opts); dirty=true; if(out.revealed||out.found) knowDirty=true; if(out.encounter){ camT.tx=out.encounter.where.x; camT.tz=out.encounter.where.z; } lightFor(S().minutes); return out; }
+// S4: take the ground's camera where it left off, slightly higher, then ease out
+function takePose(p){ camS.tx=camT.tx=p.x; camS.tz=camT.tz=p.z; camS.yaw=camT.yaw=p.yaw; camS.pitch=camT.pitch=Math.max(.25,Math.min(1.4,p.pitch)); camS.dist=1500; camT.dist=Math.max(2400,p.dist*3); }
 window.__region={get squads(){ return S().squads; }, get know(){ return S().know; }, campaign:C, setSpeed, camT, secCentre, back,
   route:(x0,z0,x1,z1)=>C.route(x0,z0,x1,z1), send:(i,x,z)=>{ const t=C.send(i,x,z); changed(); return t; },
   focus:(x,z)=>{ camT.tx=x; camT.tz=z; camT.dist=2400; camS.tx=x; camS.tz=z; camS.dist=1600; },
   placeSquad:(i,x,z,people)=>{ const s=S().squads[i]; s.x=x; s.z=z; s.trip=null; if(people!==undefined){ s.people=people; s.water=Math.min(s.water,C.waterCap(s)); } C.reveal(x,z); C.refreshCurrent(); drawOverlay(); buildPins(); buildBuildings(); changed(); },
   advance:advanceBy,
-  save:()=>save(true), resize, select:(c,r)=>{ selSec=[c,r]; drawMarks(); drawSector(); }};
+  save:()=>save(true), resize, groundTexture, paintKnowledge, tick:liveTick, takePose, changed:()=>{ knowDirty=true; changed(); }, get pose(){ return {...camS}; }, select:(c,r)=>{ selSec=[c,r]; drawMarks(); drawSector(); }};
 })();

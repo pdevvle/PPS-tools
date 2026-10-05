@@ -248,6 +248,20 @@ function step(minutes){ const out={revealed:false,arrived:false,found:false,enco
     if(st.waitUntil&&st.minutes>=st.waitUntil) st.waitUntil=0; }
   refreshCurrent();
   return out; }
+// the live clock while a squad is on the tactical ground: time always runs, the excluded squad is driven by the ground
+// (it doesn't move or drink here, but it can still be spotted), and no new encounter opens while one is open
+function tick(minutes,opts={}){ const out={revealed:false,arrived:false,found:false,encounter:null,elapsed:0}, ex=opts.except??-1;
+  let left=minutes;
+  while(left>1e-9){ const dt=Math.min(STEP,left); left-=dt; out.elapsed+=dt; st.minutes+=dt;
+    st.squads.forEach((sq,i)=>{ if(i===ex) return; const ev=stepSquad(sq,i,dt); if(ev.revealed) out.revealed=true; if(ev.arrived) out.arrived=true; if(ev.found) out.found=true; });
+    for(const b of st.bands) stepBand(b,dt);
+    if(!st.enc){ const enc=spot(); if(enc){ st.enc=enc; out.encounter=enc;
+      note(`${enc.squad.name}: ${enc.enemy.count} raiders near ${enc.where.place} (${enc.firstSight==='squad'?'not seen us yet':enc.firstSight==='both'?'both sides saw each other':'they saw us first'}).`); } }
+    if(st.waitUntil&&st.minutes>=st.waitUntil) st.waitUntil=0; }
+  refreshCurrent(); return out; }
+// a search made on the tactical ground: done at once, the caller lets the hours pass; returns {hours, took} or null
+function searchNow(i,si){ const sq=st.squads[i], site=R.sites[si]; if(!sq||!site||st.enc) return null; const hours=scavHours(si,sq.people);
+  sq.task={kind:'scavenge',site:si,until:st.minutes}; const took=finishScavenge(sq); return {hours,took}; }
 // wait (idle squads) until the next dawn or dusk
 function waitTurn(){ const m=mod(st.minutes), marks=[SUNRISE,SUNSET,SUNRISE+1440]; const next=marks.find(t=>t>m+1); st.waitUntil=st.minutes+(next-m); return st.waitUntil; }
 const waitLabel=()=>{ const m=mod(st.minutes); return m>SUNRISE+1&&m<SUNSET-1?'Wait for dusk':'Wait for dawn'; };
@@ -262,7 +276,7 @@ function forget(store){ try{ store&&store.removeItem(SAVE_KEY); }catch(e){} }
 
 return {VERSION,SAVE_KEY,K,LOOT,UNIT,CARRY,WATER_CAP,REST_HEAT,STALE,init,newGame,get state(){ return st; },get home(){ return homeSec; },get homeXZ(){ return homeXZ; },
   sunAt,heatOf,waterRate,paceAt,tempAt,elevAt,hRaw,secAt,secCentre,route,makeTrip,tripPos,forecast,lookout,reveal,refreshCurrent,stale,fmtT,nearestPlace,
-  packKg,capKg,waterCap,atHome,busy,send,stop,stockOf,leftOf,scavHours,canScavenge,scavenge,siteName,sizeOf,resolve,step,running,waitTurn,waitLabel,
+  packKg,capKg,waterCap,atHome,busy,send,stop,stockOf,leftOf,scavHours,canScavenge,scavenge,siteName,sizeOf,resolve,step,tick,searchNow,running,waitTurn,waitLabel,
   squadSight,bandSight,serial,save,load,forget,note};
 })();
 if(typeof module!=='undefined') module.exports=Campaign;

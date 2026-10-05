@@ -10,7 +10,9 @@ NF.enterTactical=(x,z,sq)=>{ if(NF.mode!=='region') return; if(!NF.tacEnter){ NF
 NF.exitTactical=()=>{ if(NF.mode!=='tactical') return; if(NF.tacBusy&&NF.tacBusy()){ NF.tip('Finish the fight before leaving the ground'); return; } const st=NF.tacState();
   swap(()=>{ NF.mode='region'; ts.hidden=true; rt.hidden=true; rs.hidden=false; rr.hidden=false; window.__region.resize();
     if(st.squad){ const [x,z]=NF.blockToRegion(st.squad.x,st.squad.z); window.__region.placeSquad(st.squad.index,x,z,st.squad.people); }
-    const [rx,rz]=NF.blockToRegion(st.x,st.z); window.__region.focus(rx,rz);
-    window.__region.back(NF.tacSeconds?NF.tacSeconds():(performance.now()-NF.tacT0)/1000, NF.tacResult?NF.tacResult():undefined); }); };   // the map clock catches up
+    const [rx,rz]=NF.blockToRegion(st.x,st.z); if(st.pose&&window.__region.takePose) window.__region.takePose({...st.pose,x:rx,z:rz}); else window.__region.focus(rx,rz);   // the map starts where the ground's camera left off
+    // on the zoom page the campaign runs live while on the ground, so tacSeconds is 0 and only fight turns are owed
+    window.__region.back(NF.tacSeconds?NF.tacSeconds():(performance.now()-NF.tacT0)/1000, NF.tacResult?NF.tacResult():undefined);
+    if(NF.afterExit){ const f=NF.afterExit; NF.afterExit=null; f(); } }); };   // an order that reaches past the ground goes on as a map order
 document.getElementById('upBtn').onclick=()=>NF.exitTactical();
 })();
