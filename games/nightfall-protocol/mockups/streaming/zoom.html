@@ -175,7 +175,7 @@ const NF=(()=>{ const BLOCK={center:[33.918,-112.13855],half:1500,x0:-1500,z0:-4
 // ---------- campaign: the strategic layer's rules (clock, light and heat, travel, water, scavenging, raiders, saving) ----------
 // No rendering, so the same file runs in the pages and in Node (tools/region/test.js). The page draws what this holds.
 const Campaign=(()=>{
-const VERSION=1, SAVE_KEY='nightfall.campaign.v1';
+const VERSION=2, SAVE_KEY='nightfall.campaign.v2';   // v2: the 100-mile realm (a v1 save is for the corridor alone and is not loaded)
 const K={UNKNOWN:0,RUMOUR:1,SCOUT:2,CURRENT:3}, STALE=3*1440;   // scouted knowledge goes stale after 3 days
 const LOOT=['food','medicine','tools','fuel','gear','water','shelter','goods'];
 // what one unit of each loot category is and what it weighs; base.stock holds these units for the base (building.md)
@@ -202,22 +202,45 @@ const waterRate=(moving,heat)=>(moving?.5:.2)*(1+heat);
 function paceAt(min,off,heat,thirsty){ const dark=1-sunAt(min).daylight; return (off?1-.4*dark:1-.15*dark)*(1-.25*heat)*(thirsty?.6:1); }
 
 // ---------- the region: terrain, sectors, the travel graph ----------
-let R,D,G,adj,HX,HZ,SEC,homeSec,homeXZ,st=null;
-const hRaw=(x,z)=>{ const fx=(x-D.x0)/D.step, fz=(z-D.z0)/D.step, i=Math.max(0,Math.min(D.nx-2,Math.floor(fx))), j=Math.max(0,Math.min(D.nz-2,Math.floor(fz))), u=Math.min(1,Math.max(0,fx-i)), v=Math.min(1,Math.max(0,fz-j)), h=(a,b)=>D.h[b*D.nx+a];
+let R,D,DF,G,adj,HX,HZ,SEC,homeSec,homeXZ,ngrid,st=null;
+const sample=(D,x,z)=>{ const fx=(x-D.x0)/D.step, fz=(z-D.z0)/D.step, i=Math.max(0,Math.min(D.nx-2,Math.floor(fx))), j=Math.max(0,Math.min(D.nz-2,Math.floor(fz))), u=Math.min(1,Math.max(0,fx-i)), v=Math.min(1,Math.max(0,fz-j)), h=(a,b)=>D.h[b*D.nx+a];
   return (h(i,j)*(1-u)+h(i+1,j)*u)*(1-v)+(h(i,j+1)*(1-u)+h(i+1,j+1)*u)*v; };
+const inFine=(x,z)=>!!DF&&x>=DF.x0&&z>=DF.z0&&x<=DF.x0+(DF.nx-1)*DF.step&&z<=DF.z0+(DF.nz-1)*DF.step;
+const hRaw=(x,z)=>inFine(x,z)?sample(DF,x,z):sample(D,x,z);   // the corridor's 100 m terrain where it has it, the realm's 400 m elsewhere
 const elevAt=(x,z)=>hRaw(x,z)+D.base;
 const tempAt=(min,x,z)=>sunAt(min).tempC-LAPSE*(elevAt(x,z)-T_REF);   // high ground runs cooler
 const secAt=(x,z)=>{ const c=Math.floor((x+HX)/SEC), r=Math.floor((z+HZ)/SEC); return c>=0&&r>=0&&c<R.cols&&r<R.rows?[c,r]:null; };
 const secCentre=(c,r)=>[-HX+(c+.5)*SEC, -HZ+(r+.5)*SEC];
 const sameSec=(a,b)=>!!a&&!!b&&a[0]===b[0]&&a[1]===b[1];
-function init(region){ R=region; D=R.dem; G=R.graph; HX=R.half[0]; HZ=R.half[1]; SEC=R.sector;
-  adj=G.nodes.map(()=>[]);
+// the region file packs its sectors into columns (v2); give them back their per-sector shape once
+function unpack(R){ if(Array.isArray(R.sectors)) return;
+  const P=R.sectors, d=R.detail, T={t:'town',h:'homes',r:'rough',d:'desert'}; R.sectors=[]; let lo=0;
+  for(let r=0;r<R.rows;r++){ const row=[]; for(let c=0;c<R.cols;c++){ const i=r*R.cols+c; lo+=P.lo[i];   // lo is stored as steps from the sector before
+    row.push({b:P.b[i],sites:[],lo,hi:lo+P.rise[i],type:T[P.type[i]],fine:!!d&&c>=d.col&&r>=d.row&&c<d.col+d.cols&&r<d.row+d.rows}); } R.sectors.push(row); }
+  if(!Array.isArray(R.sites)){ const S=R.sites; R.sites=S.rows.map(([x,z,l,w,name])=>({name:name||'',what:S.what[w],loot:S.loot[l],p:[x,z]})); }
+  if(!R.graph.edges){ const g=R.graph, nodes=[], edges=[]; let x=0,z=0,k=0;   // the graph comes in columns; back to [x,z] junctions and [a,b,len,class,inner,dirt] edges
+    for(let i=0;i<g.nodes.length;i+=2){ x+=g.nodes[i]; z+=g.nodes[i+1]; nodes.push([x,z]); }
+    for(let e=0;e<g.a.length;e++){ let [px,pz]=nodes[g.a[e]]; const inner=[];
+      for(let q=0;q<g.ni[e];q++){ px+=g.inner[k++]; pz+=g.inner[k++]; inner.push([px,pz]); }
+      edges.push([g.a[e],g.b[e],g.len[e],g.classes[g.cls[e]],inner,+g.dirt[e]]); }
+    R.graph={nodes,edges}; }
+  R.sites.forEach((s,i)=>{ const c=Math.min(R.cols-1,Math.max(0,Math.floor((s.p[0]+R.half[0])/R.sector))), r=Math.min(R.rows-1,Math.max(0,Math.floor((s.p[1]+R.half[1])/R.sector))); s.sector=[c,r]; R.sectors[r][c].sites.push(i); }); }
+function init(region){ R=region; unpack(R); D=R.dem; DF=R.demFine||null; G=R.graph; HX=R.half[0]; HZ=R.half[1]; SEC=R.sector;
+  adj=G.nodes.map(()=>[]); ngrid=new Map();
+  G.nodes.forEach(([x,z],i)=>{ const k=Math.floor(x/NCELL)+','+Math.floor(z/NCELL); if(!ngrid.has(k)) ngrid.set(k,[]); ngrid.get(k).push(i); });
   for(const [a,b,len,cls,inner=[]] of G.edges){ const t=len/1000/(SPEED[cls]||4), ha=hRaw(...G.nodes[a]), hb=hRaw(...G.nodes[b]);   // +1 h per 300 m climbed
     adj[a].push([b,t+Math.max(0,hb-ha)/300,inner]); adj[b].push([a,t+Math.max(0,ha-hb)/300,inner.slice().reverse()]); }   // inner: the road's shape between the two junctions
   homeSec=secAt(R.home[0]+700,R.home[1]);   // just east of New River, on the ranch side
   homeXZ=secCentre(...homeSec); }
-function nearestNodes(x,z,k=6){ const best=[]; for(let i=0;i<G.nodes.length;i++){ if(!adj[i].length) continue; const d=Math.hypot(G.nodes[i][0]-x,G.nodes[i][1]-z);
-  if(best.length<k||d<best[best.length-1][1]){ best.push([i,d]); best.sort((a,b)=>a[1]-b[1]); if(best.length>k) best.pop(); } } return best; }
+// the k junctions nearest a point, searching outward ring by ring through a 1 km grid
+const NCELL=1000;
+function nearestNodes(x,z,k=6){ const best=[], cx=Math.floor(x/NCELL), cz=Math.floor(z/NCELL);
+  for(let ring=0;ring<200;ring++){
+    for(let gx=cx-ring;gx<=cx+ring;gx++) for(let gz=cz-ring;gz<=cz+ring;gz++){ if(Math.max(Math.abs(gx-cx),Math.abs(gz-cz))!==ring) continue;
+      for(const i of ngrid.get(gx+','+gz)||[]){ if(!adj[i].length) continue; const d=Math.hypot(G.nodes[i][0]-x,G.nodes[i][1]-z);
+        if(best.length<k||d<best[best.length-1][1]){ best.push([i,d]); best.sort((a,b)=>a[1]-b[1]); if(best.length>k) best.pop(); } } }
+    if(best.length>=k&&best[best.length-1][1]<=ring*NCELL) break; }
+  return best; }
 const offTime=(x0,z0,x1,z1)=>Math.hypot(x1-x0,z1-z0)/1000/OFF+Math.max(0,hRaw(x1,z1)-hRaw(x0,z0))/300;
 function heap(){ const a=[]; return {get size(){ return a.length; },
   push(t,i){ a.push([t,i]); let k=a.length-1; while(k){ const p=(k-1)>>1; if(a[p][0]<=a[k][0]) break; [a[p],a[k]]=[a[k],a[p]]; k=p; } },
@@ -241,7 +264,7 @@ function route(x0,z0,x1,z1){
   return {pts,segs,hours:best,km}; }
 // a trip: progress is measured in base hours, and spent faster or slower as light and heat change
 function makeTrip(rt){ const cum=[0]; for(const s of rt.segs) cum.push(cum[cum.length-1]+s.h); return {pts:rt.pts,segs:rt.segs,cum,total:cum[cum.length-1],done:0}; }
-function segOf(tr,done){ let k=0; while(k<tr.segs.length-1&&tr.cum[k+1]<=done) k++; return k; }
+function segOf(tr,done){ let a=0, b=tr.segs.length-1; while(a<b){ const m=(a+b+1)>>1; if(tr.cum[m]<=done) a=m; else b=m-1; } return a; }   // last leg starting at or before done
 function tripPos(tr,done=tr.done){ const k=segOf(tr,done), a=tr.pts[k], b=tr.pts[k+1], f=tr.segs[k].h>1e-9?Math.min(1,Math.max(0,(done-tr.cum[k])/tr.segs[k].h)):1;
   return {x:a[0]+(b[0]-a[0])*f, z:a[1]+(b[1]-a[1])*f, seg:k}; }
 // what a trip will cost from now: arrival time, water and hours spent lying up in the heat (a forecast; raiders aside)
@@ -271,16 +294,19 @@ const stale=kk=>kk.k===K.SCOUT&&st.minutes-kk.seen>=STALE;
 // ---------- a new campaign ----------
 function newGame(seed=20261003){
   st={v:VERSION, minutes:7*60+30, rng:seed>>>0, seq:1, know:R.sectors.map(row=>row.map(()=>({k:0,seen:0}))), squads:[], sites:{}, bands:[], base:{stock:{}}, log:[], enc:null, waitUntil:0};
-  for(const p of R.places) if(['town','village','hamlet'].includes(p.kind)){ const s=p.sector; for(let dr=-2;dr<=2;dr++) for(let dc=-2;dc<=2;dc++){ const kk=st.know[s[1]+dr]?.[s[0]+dc]; if(kk) kk.k=Math.max(kk.k,K.RUMOUR); } }
+  const HEARD={city:8,town:3,village:2,hamlet:1};   // everyone has heard of the cities; small places only nearby
+  for(const p of R.places){ const n=HEARD[p.kind]; if(!n||p.kind==='hamlet'&&Math.hypot(p.p[0]-homeXZ[0],p.p[1]-homeXZ[1])>25000) continue; const s=p.sector;
+    for(let dr=-n;dr<=n;dr++) for(let dc=-n;dc<=n;dc++){ const kk=st.know[s[1]+dr]?.[s[0]+dc]; if(kk&&Math.hypot(dr,dc)<=n+.4) kk.k=Math.max(kk.k,K.RUMOUR); } }
   { const [c,r]=homeSec; for(let dr=-7;dr<=7;dr++) for(let dc=-7;dc<=7;dc++){ const kk=st.know[r+dr]?.[c+dc], d=Math.hypot(dr,dc); if(!kk||d>7.4) continue; if(d<=3.4){ kk.k=K.SCOUT; kk.seen=st.minutes; } else kk.k=Math.max(kk.k,K.RUMOUR); } }
   const [hx,hz]=homeXZ, sq=(name,people,c,x,z)=>({name,people,c,x,z,water:people*WATER_CAP,pack:{},restHeat:false,trip:null,task:null,thirsty:false});
   st.squads.push(sq('Ranch party',4,'#e0a526',hx,hz), sq('Scouts',2,'#5b9fc4',hx+120,hz+80));
-  spawnBands(4); reveal(hx,hz); refreshCurrent();
+  spawnBands(4,6000,15000); spawnBands(10,15000,75000); reveal(hx,hz); refreshCurrent();   // a few bands close by, more out across the realm
   note('The ranch is quiet. Two squads are ready.');
   return st; }
-// raider bands: lairs well away from the ranch, near a road, spread apart
-function spawnBands(n){ const nodes=[]; for(let i=0;i<G.nodes.length;i++) if(adj[i].length){ const [x,z]=G.nodes[i]; if(Math.hypot(x-homeXZ[0],z-homeXZ[1])>6000) nodes.push(i); }
-  const lairs=[]; for(let tries=0;lairs.length<n&&tries<400;tries++){ const [x,z]=G.nodes[nodes[Math.floor(rand()*nodes.length)]]; if(lairs.every(([a,b])=>Math.hypot(a-x,b-z)>4500)) lairs.push([x,z]); }
+// raider bands: lairs between rmin and rmax from the ranch, near a road, spread apart
+function spawnBands(n,rmin,rmax){ const nodes=[]; for(let i=0;i<G.nodes.length;i++) if(adj[i].length){ const [x,z]=G.nodes[i], d=Math.hypot(x-homeXZ[0],z-homeXZ[1]); if(d>rmin&&d<rmax&&secAt(x,z)) nodes.push(i); }
+  if(!nodes.length) return;
+  const lairs=[]; for(let tries=0;lairs.length<n&&tries<400;tries++){ const [x,z]=G.nodes[nodes[Math.floor(rand()*nodes.length)]]; if(lairs.every(([a,b])=>Math.hypot(a-x,b-z)>4500)&&st.bands.every(b=>Math.hypot(b.lair[0]-x,b.lair[1]-z)>4500)) lairs.push([x,z]); }
   for(const [x,z] of lairs){ const size=3+Math.floor(rand()*4); st.bands.push({id:'b'+st.seq++, size, boss:size>=5, x, z, lair:[x,z], trip:null, campUntil:st.minutes+rand()*300, seen:null, cool:{}}); } }
 function note(msg){ st.log.unshift({t:st.minutes,msg}); if(st.log.length>40) st.log.length=40; }
 const fmtT=m=>{ const d=Math.floor(m/1440)+1, h=Math.floor(mod(m)/60), mm=Math.floor(m%60); return `Day ${d} ${String(h).padStart(2,'0')}:${String(mm).padStart(2,'0')}`; };
@@ -427,7 +453,7 @@ const store=(()=>{ try{ const s=window.localStorage, k='__nf_probe'; s.setItem(k
 const resumed=C.load(store); if(!resumed) C.newGame();
 const TAU=Math.PI*2, VE=1.6, SEC=R.sector, D=R.dem, HX=R.half[0], HZ=R.half[1], K=C.K, KN=['Unknown','Rumoured','Scouted','Current'];
 const TAC_RATE=1, TURN_MIN=5;   // tactical exploration runs in real time; each character's turn in a fight is 5 game minutes (foundation)
-const scene=new THREE.Scene(), cam=new THREE.PerspectiveCamera(36,1,10,200000);
+const scene=new THREE.Scene(), cam=new THREE.PerspectiveCamera(36,1,10,1200000);
 scene.fog=new THREE.Fog(0xd9c9a8,30000,90000); renderer.setClearColor(0xd9c9a8);
 const hemi=new THREE.HemisphereLight(0xfff3e0,0x6a5a48,.55), sun=new THREE.DirectionalLight(0xfff0d8,1); sun.castShadow=true; sun.shadow.mapSize.set(4096,4096); sun.shadow.bias=-.0006; sun.shadow.normalBias=8;
 Object.assign(sun.shadow.camera,{left:-26000,right:26000,top:26000,bottom:-26000,near:100,far:120000}); scene.add(hemi,sun,sun.target);
@@ -456,6 +482,7 @@ document.head.insertAdjacentHTML('beforeend',`<style>
 .log{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;font-size:13px;max-height:170px;overflow:auto}
 .log time{font:11px var(--mono);color:var(--muted);display:block}
 .newc{margin-top:6px}
+.lb.town.city{font-size:18px;letter-spacing:.08em}
 .lb.band{font:600 11px var(--body);color:#fff;background:rgba(110,26,16,.9);padding:1px 6px;border-radius:3px;text-shadow:none}
 .lb.band.old{background:rgba(110,26,16,.55)}
 .enc{position:absolute;left:50%;top:54px;transform:translateX(-50%);width:min(440px,calc(100% - 24px));background:rgba(24,24,26,.94);border:1px solid #c23b2e;border-radius:6px;padding:12px 14px;color:#f1eee8;z-index:4}
@@ -467,6 +494,7 @@ document.head.insertAdjacentHTML('beforeend',`<style>
 const hud=stage.querySelector('.hud'), clockEl=document.getElementById('clock');
 clockEl.insertAdjacentHTML('afterend','<span class="sky" id="sky"></span>');
 hud.insertAdjacentHTML('beforeend','<button type="button" id="waitBtn"></button>');
+document.getElementById('homeBtn').insertAdjacentHTML('afterend','<button type="button" id="realmBtn" title="See the whole realm">Realm</button>');
 const skyEl=document.getElementById('sky'), waitBtn=document.getElementById('waitBtn');
 const sqEl=document.getElementById('squads'), secEl=document.getElementById('sector'), rail=sqEl.closest('section').parentElement;
 rail.insertAdjacentHTML('beforeend',`<section style="margin-top:14px"><h2>At the ranch</h2><ul class="stock" id="stock"></ul></section>
@@ -474,66 +502,87 @@ rail.insertAdjacentHTML('beforeend',`<section style="margin-top:14px"><h2>At the
 const stockEl=document.getElementById('stock'), logEl=document.getElementById('log'), newBtn=document.getElementById('newBtn');
 const encEl=document.createElement('div'); encEl.className='enc'; encEl.hidden=true; encEl.setAttribute('role','alertdialog'); stage.appendChild(encEl);
 
-// ---------- terrain ----------
+// ---------- terrain: the realm at 400 m, and the corridor's 100 m terrain laid over it ----------
 const hRaw=C.hRaw, Y=(x,z)=>hRaw(x,z)*VE;
-const W=(D.nx-1)*D.step, Hh=(D.nz-1)*D.step;
-const geo=new THREE.PlaneGeometry(W,Hh,D.nx-1,D.nz-1); geo.rotateX(-Math.PI/2);
-{ const p=geo.attributes.position; for(let i=0;i<p.count;i++) p.setY(i,D.h[i]*VE); geo.computeVertexNormals(); }
-const TX=2048, TZ=Math.round(2048*Hh/W);
-const X=x=>(x-D.x0)/W*TX, Zc=z=>(z-D.z0)/Hh*TZ, px=TX/W;
-function groundTex(){
+const DF=R.demFine||null, MAXT=Math.min(4096,renderer.capabilities.maxTextureSize);
+const AC={residential:'#cdbb98',retail:'#a9a49a',commercial:'#a9a49a',industrial:'#a39a8c',farmland:'#9caf62',farmyard:'#b8a77a'};
+const RW={motorway:34,trunk:24,primary:20,secondary:16,tertiary:13,motorway_link:10,trunk_link:10,primary_link:10,secondary_link:9,tertiary_link:9,unclassified:10,residential:8,track:6};
+const ORDER=['track','residential','unclassified','tertiary_link','tertiary','secondary_link','secondary','primary_link','primary','trunk_link','trunk','motorway_link','motorway'];
+const bboxOf=pts=>{ let a=1e9,b=1e9,c=-1e9,d=-1e9; for(const [x,z] of pts){ if(x<a)a=x; if(z<b)b=z; if(x>c)c=x; if(z>d)d=z; } return [a,b,c,d]; };
+// one level of terrain: its mesh, its ground texture and its knowledge overlay
+function layer(Dm,size,{fine,sink}){
+  const W=(Dm.nx-1)*Dm.step, Hh=(Dm.nz-1)*Dm.step, TX=W>=Hh?size:Math.round(size*W/Hh), TZ=W>=Hh?Math.round(size*Hh/W):size;
+  const X=x=>(x-Dm.x0)/W*TX, Zc=z=>(z-Dm.z0)/Hh*TZ, px=TX/W, ext=[Dm.x0,Dm.z0,Dm.x0+W,Dm.z0+Hh];
+  const geo=new THREE.PlaneGeometry(W,Hh,Dm.nx-1,Dm.nz-1); geo.rotateX(-Math.PI/2);
+  { const p=geo.attributes.position; for(let i=0;i<p.count;i++){ const x=Dm.x0+(i%Dm.nx)*Dm.step, z=Dm.z0+Math.floor(i/Dm.nx)*Dm.step;
+      p.setY(i,Dm.h[i]*VE-(sink&&x>sink[0]&&z>sink[1]&&x<sink[2]&&z<sink[3]?60*VE:0)); }   // under the corridor, the realm sinks out of the way
+    geo.computeVertexNormals(); }
+  const over=b=>b[2]>=ext[0]&&b[0]<=ext[2]&&b[3]>=ext[1]&&b[1]<=ext[3];
   const c=document.createElement('canvas'); c.width=TX; c.height=TZ; const g=c.getContext('2d');
   // elevation tint: valley sand to ochre ridges
-  const img=g.createImageData(D.nx,D.nz); let hmax=0; for(const v of D.h) hmax=Math.max(hmax,v);
+  const img=g.createImageData(Dm.nx,Dm.nz); let hmax=0; for(const v of Dm.h) hmax=Math.max(hmax,v);
   const lo=[214,190,148], mid=[196,160,112], hi=[150,112,80];
-  for(let j=0;j<D.nz;j++) for(let i=0;i<D.nx;i++){ const t=D.h[j*D.nx+i]/hmax, a=t<.5?lo:mid, b=t<.5?mid:hi, k=t<.5?t*2:(t-.5)*2, o=(j*D.nx+i)*4;
+  for(let j=0;j<Dm.nz;j++) for(let i=0;i<Dm.nx;i++){ const t=Dm.h[j*Dm.nx+i]/hmax, a=t<.5?lo:mid, b=t<.5?mid:hi, k=t<.5?t*2:(t-.5)*2, o=(j*Dm.nx+i)*4;
     for(let q=0;q<3;q++) img.data[o+q]=a[q]+(b[q]-a[q])*k; img.data[o+3]=255; }
-  const tc=document.createElement('canvas'); tc.width=D.nx; tc.height=D.nz; tc.getContext('2d').putImageData(img,0,0); g.imageSmoothingEnabled=true; g.drawImage(tc,0,0,TX,TZ);
+  const tc=document.createElement('canvas'); tc.width=Dm.nx; tc.height=Dm.nz; tc.getContext('2d').putImageData(img,0,0); g.imageSmoothingEnabled=true; g.drawImage(tc,0,0,TX,TZ);
   const r=(s=>()=>{ s=(Math.imul(s,1664525)+1013904223)>>>0; return s/4294967296; })(7);
   for(let i=0;i<60000;i++){ g.fillStyle=r()<.5?'rgba(110,90,60,.22)':'rgba(120,140,70,.18)'; g.fillRect(r()*TX,r()*TZ,1.4,1.4); }   // desert scrub
   const poly=(pts,fill)=>{ g.beginPath(); pts.forEach(([x,z],i)=>i?g.lineTo(X(x),Zc(z)):g.moveTo(X(x),Zc(z))); g.closePath(); g.fillStyle=fill; g.fill(); };
-  const line=(pts,w,col,dash)=>{ g.beginPath(); pts.forEach(([x,z],i)=>i?g.lineTo(X(x),Zc(z)):g.moveTo(X(x),Zc(z))); g.lineWidth=Math.max(.8,w*px); g.strokeStyle=col; g.lineCap='round'; g.lineJoin='round'; g.setLineDash(dash||[]); g.stroke(); g.setLineDash([]); };
-  const AC={residential:'#cdbb98',retail:'#a9a49a',commercial:'#a9a49a',industrial:'#a39a8c',farmland:'#9caf62',farmyard:'#b8a77a'};
-  for(const a of R.areas) if(AC[a.kind]) poly(a.pts,AC[a.kind]);
-  for(const w of R.water){ const big=w.kind==='river'; line(w.pts,big?60:22,'#b39c78'); line(w.pts,big?40:12,'#e3d2ad'); }
-  for(const l of R.lakes) poly(l.pts,'#4aa6c8');
-  const RW={motorway:34,trunk:24,primary:20,secondary:16,tertiary:13,motorway_link:10,unclassified:10,residential:8,track:6};
-  const order=['track','residential','unclassified','tertiary','secondary','primary','trunk','motorway_link','motorway'];
-  for(const k of order) for(const rd of R.roads) if(rd.cls===k){ const w=RW[k]||8;
-    if(rd.dirt) line(rd.pts,w,'#a88d68',k==='track'?[w*px*2,w*px*1.4]:null); else { if(w>12) line(rd.pts,w+8,'#e8dcc4'); line(rd.pts,w,k==='motorway'?'#3b3a38':'#5e5a54'); } }
+  const line=(pts,w,col,dash)=>{ g.beginPath(); pts.forEach(([x,z],i)=>i?g.lineTo(X(x),Zc(z)):g.moveTo(X(x),Zc(z))); g.lineWidth=Math.max(fine?.8:.6,w*px); g.strokeStyle=col; g.lineCap='round'; g.lineJoin='round'; g.setLineDash(dash||[]); g.stroke(); g.setLineDash([]); };
+  for(const a of R.areas) if(AC[a.kind]&&over(a.bb||(a.bb=bboxOf(a.pts)))) poly(a.pts,AC[a.kind]);
+  for(const w of R.water) if(over(w.bb||(w.bb=bboxOf(w.pts)))){ const big=w.kind==='river'; line(w.pts,big?60:22,'#b39c78'); line(w.pts,big?40:12,'#e3d2ad'); }
+  for(const l of R.lakes) if(over(l.bb||(l.bb=bboxOf(l.pts)))) poly(l.pts,'#4aa6c8');
+  // the corridor draws its own road list; the realm draws the travel graph's edges (the same roads, major ones only)
+  const src=fine||!DF?R.roads:R.graph.edges.filter(e=>RW[e[3]]&&e[3]!=='residential'&&e[3]!=='track').map(e=>({cls:e[3],dirt:!!e[5],pts:[R.graph.nodes[e[0]],...e[4],R.graph.nodes[e[1]]]}));
+  const byCls=new Map(); for(const rd of src){ if(!over(rd.bb||(rd.bb=bboxOf(rd.pts)))) continue; if(!byCls.has(rd.cls)) byCls.set(rd.cls,[]); byCls.get(rd.cls).push(rd); }
+  for(const k of ORDER) for(const rd of byCls.get(k)||[]){ const w=RW[k]||8;
+    if(rd.dirt) line(rd.pts,w,'#a88d68',k==='track'?[w*px*2,w*px*1.4]:null); else { if(w>12&&fine) line(rd.pts,w+8,'#e8dcc4'); line(rd.pts,w,k==='motorway'?'#3b3a38':'#5e5a54'); } }
   // hillshade from the north-west
-  const sh=document.createElement('canvas'); sh.width=D.nx; sh.height=D.nz; const sg=sh.getContext('2d'), si=sg.createImageData(D.nx,D.nz), L=[-.5,.75,-.45], ll=Math.hypot(...L), flat=L[1]/ll;
-  for(let j=0;j<D.nz;j++) for(let i=0;i<D.nx;i++){ const h=(a,b)=>D.h[Math.min(D.nz-1,Math.max(0,b))*D.nx+Math.min(D.nx-1,Math.max(0,a))]*VE, dx=(h(i+1,j)-h(i-1,j))/(2*D.step), dz=(h(i,j+1)-h(i,j-1))/(2*D.step);
-    const n=[-dx,1,-dz], nl=Math.hypot(...n), v=((n[0]*L[0]+n[1]*L[1]+n[2]*L[2])/(nl*ll)-flat)*2.4, o=(j*D.nx+i)*4;
+  const sh=document.createElement('canvas'); sh.width=Dm.nx; sh.height=Dm.nz; const sg=sh.getContext('2d'), si=sg.createImageData(Dm.nx,Dm.nz), L=[-.5,.75,-.45], ll=Math.hypot(...L), flat=L[1]/ll;
+  for(let j=0;j<Dm.nz;j++) for(let i=0;i<Dm.nx;i++){ const h=(a,b)=>Dm.h[Math.min(Dm.nz-1,Math.max(0,b))*Dm.nx+Math.min(Dm.nx-1,Math.max(0,a))]*VE, dx=(h(i+1,j)-h(i-1,j))/(2*Dm.step), dz=(h(i,j+1)-h(i,j-1))/(2*Dm.step);
+    const n=[-dx,1,-dz], nl=Math.hypot(...n), v=((n[0]*L[0]+n[1]*L[1]+n[2]*L[2])/(nl*ll)-flat)*2.4, o=(j*Dm.nx+i)*4;
     if(v<0){ si.data[o]=70; si.data[o+1]=40; si.data[o+2]=20; si.data[o+3]=Math.min(.55,-v)*255; } else { si.data[o]=255; si.data[o+1]=246; si.data[o+2]=225; si.data[o+3]=Math.min(.35,v)*255; } }
   sg.putImageData(si,0,0); g.drawImage(sh,0,0,TX,TZ);
-  const t=new THREE.CanvasTexture(c); t.anisotropy=renderer.capabilities.getMaxAnisotropy(); return t; }
-const terrain=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({map:groundTex(), flatShading:true, roughness:.95, metalness:0}));
-terrain.position.set(D.x0+W/2,0,D.z0+Hh/2); terrain.receiveShadow=true; scene.add(terrain);
-const skirt=new THREE.Mesh(new THREE.PlaneGeometry(400000,400000),new THREE.MeshStandardMaterial({color:0xc4aa82, roughness:1})); skirt.rotation.x=-Math.PI/2; skirt.position.y=-20; scene.add(skirt);
+  const tex=new THREE.CanvasTexture(c); tex.anisotropy=renderer.capabilities.getMaxAnisotropy();
+  const mesh=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({map:tex, flatShading:true, roughness:.95, metalness:0}));
+  mesh.position.set(Dm.x0+W/2,0,Dm.z0+Hh/2); mesh.receiveShadow=true; scene.add(mesh);
+  const OCv=document.createElement('canvas'); OCv.width=TX; OCv.height=TZ; const og=OCv.getContext('2d'), otex=new THREE.CanvasTexture(OCv);
+  const overlay=new THREE.Mesh(geo,new THREE.MeshBasicMaterial({map:otex, transparent:true, depthWrite:false, polygonOffset:true, polygonOffsetFactor:-4, polygonOffsetUnits:-4}));
+  overlay.position.copy(mesh.position); overlay.renderOrder=2; scene.add(overlay);
+  return {mesh,X,Zc,px,TX,TZ,og,otex,fine}; }
+const sinkBox=DF?[DF.x0+DF.step,DF.z0+DF.step,DF.x0+(DF.nx-2)*DF.step,DF.z0+(DF.nz-2)*DF.step]:null;
+const layers=[layer(D,DF?MAXT:2048,{fine:!DF,sink:sinkBox})]; if(DF) layers.push(layer(DF,2048,{fine:true}));
+const terrains=layers.map(l=>l.mesh);
+const skirt=new THREE.Mesh(new THREE.PlaneGeometry(2000000,2000000),new THREE.MeshStandardMaterial({color:0xc4aa82, roughness:1})); skirt.rotation.x=-Math.PI/2; skirt.position.y=-20; scene.add(skirt);
 
 // ---------- knowledge and the sector overlay ----------
+// knowledge is painted one pixel per sector, then stretched onto each layer; outlines (home, hover, selection) are ribbons
 const secAt=C.secAt, secCentre=C.secCentre, home=C.home, [hx0,hz0]=C.homeXZ;
-const OC=document.createElement('canvas'); OC.width=TX; OC.height=TZ; const og=OC.getContext('2d'); const otex=new THREE.CanvasTexture(OC);
-const overlay=new THREE.Mesh(geo,new THREE.MeshBasicMaterial({map:otex, transparent:true, depthWrite:false, polygonOffset:true, polygonOffsetFactor:-4, polygonOffsetUnits:-4}));
-overlay.position.copy(terrain.position); overlay.renderOrder=2; scene.add(overlay);
-const hatch=(()=>{ const c=document.createElement('canvas'); c.width=c.height=16; const g=c.getContext('2d'); g.strokeStyle='rgba(30,26,22,.35)'; g.lineWidth=1.4; g.beginPath(); g.moveTo(0,16); g.lineTo(16,0); g.stroke(); return og.createPattern(c,'repeat'); })();
+const KC=document.createElement('canvas'); KC.width=R.cols; KC.height=R.rows; const kg=KC.getContext('2d');
+const UC=document.createElement('canvas'); UC.width=R.cols; UC.height=R.rows; const ug=UC.getContext('2d');
+const hatchTile=n=>{ const c=document.createElement('canvas'); c.width=c.height=n; const g=c.getContext('2d'); g.strokeStyle='rgba(30,26,22,.35)'; g.lineWidth=Math.max(1,n/11); g.beginPath(); g.moveTo(0,n); g.lineTo(n,0); g.stroke(); return c; };   // n px: one stroke every 200 m on every layer
 let hoverSec=null, selSec=null;
-function drawOverlay(){ const know=S().know;
-  og.clearRect(0,0,TX,TZ);
-  // outside the region: a soft vignette
-  og.fillStyle='rgba(40,34,28,.35)'; og.fillRect(0,0,TX,TZ); og.clearRect(X(-HX),Zc(-HZ),X(HX)-X(-HX),Zc(HZ)-Zc(-HZ));
-  for(let r=0;r<R.rows;r++) for(let c=0;c<R.cols;c++){ const kk=know[r][c], x0=X(-HX+c*SEC), z0=Zc(-HZ+r*SEC), w=SEC*px+.6;
-    if(kk.k===K.UNKNOWN){ og.fillStyle='rgba(38,34,30,.34)'; og.fillRect(x0,z0,w,w); og.fillStyle=hatch; og.fillRect(x0,z0,w,w); }
-    else if(kk.k===K.RUMOUR){ og.fillStyle='rgba(60,52,44,.18)'; og.fillRect(x0,z0,w,w); }
-    else if(C.stale(kk)){ og.fillStyle='rgba(60,52,44,.16)'; og.fillRect(x0,z0,w,w); } }
-  og.strokeStyle='rgba(40,32,24,.22)'; og.lineWidth=1; og.beginPath();
-  for(let c=0;c<=R.cols;c++){ og.moveTo(X(-HX+c*SEC),Zc(-HZ)); og.lineTo(X(-HX+c*SEC),Zc(HZ)); }
-  for(let r=0;r<=R.rows;r++){ og.moveTo(X(-HX),Zc(-HZ+r*SEC)); og.lineTo(X(HX),Zc(-HZ+r*SEC)); } og.stroke();
-  if(ZOOM){ og.setLineDash([10,6]); og.strokeStyle='#e0a526'; og.lineWidth=3; og.beginPath(); NF.rect.forEach(([x,z],i)=>i?og.lineTo(X(x),Zc(z)):og.moveTo(X(x),Zc(z))); og.closePath(); og.stroke(); og.setLineDash([]); }
-  const box=(s,col,w)=>{ if(!s) return; og.strokeStyle=col; og.lineWidth=w; og.strokeRect(X(-HX+s[0]*SEC)+w/2,Zc(-HZ+s[1]*SEC)+w/2,SEC*px-w,SEC*px-w); };
-  box(home,'#3fae7f',3); box(hoverSec,'rgba(255,250,235,.9)',2); box(selSec,'#e0a526',3.5);
-  otex.needsUpdate=true; }
+function drawOverlay(){ const know=S().know, ki=kg.createImageData(R.cols,R.rows), ui=ug.createImageData(R.cols,R.rows);
+  for(let r=0;r<R.rows;r++) for(let c=0;c<R.cols;c++){ const kk=know[r][c], o=(r*R.cols+c)*4, set=(d,rgb,a)=>{ d.data[o]=rgb[0]; d.data[o+1]=rgb[1]; d.data[o+2]=rgb[2]; d.data[o+3]=a*255; };
+    if(kk.k===K.UNKNOWN){ set(ki,[38,34,30],.34); set(ui,[0,0,0],1); } else if(kk.k===K.RUMOUR) set(ki,[60,52,44],.18); else if(C.stale(kk)) set(ki,[60,52,44],.16); }
+  kg.putImageData(ki,0,0); ug.putImageData(ui,0,0);
+  for(const L of layers){ const {og,X,Zc,TX,TZ}=L, x0=X(-HX), z0=Zc(-HZ), w=X(HX)-x0, h=Zc(HZ)-z0;
+    og.clearRect(0,0,TX,TZ); og.imageSmoothingEnabled=false;
+    og.fillStyle='rgba(40,34,28,.35)'; og.fillRect(0,0,TX,TZ); og.clearRect(x0,z0,w,h);   // outside the realm: a soft vignette
+    og.drawImage(KC,x0,z0,w,h);
+    const t=document.createElement('canvas'); t.width=TX; t.height=TZ; const tg=t.getContext('2d');   // the hatch, only over unknown sectors
+    tg.fillStyle=tg.createPattern(hatchTile(Math.max(4,Math.round(200*L.px))),'repeat'); tg.fillRect(0,0,TX,TZ); tg.globalCompositeOperation='destination-in'; tg.imageSmoothingEnabled=false; tg.drawImage(UC,x0,z0,w,h); og.drawImage(t,0,0);
+    if(L.fine){ og.strokeStyle='rgba(40,32,24,.22)'; og.lineWidth=1; og.beginPath();
+      for(let c=0;c<=R.cols;c++){ const x=X(-HX+c*SEC); if(x<0||x>TX) continue; og.moveTo(x,Math.max(0,z0)); og.lineTo(x,Math.min(TZ,z0+h)); }
+      for(let r=0;r<=R.rows;r++){ const z=Zc(-HZ+r*SEC); if(z<0||z>TZ) continue; og.moveTo(Math.max(0,x0),z); og.lineTo(Math.min(TX,x0+w),z); } og.stroke(); }
+    if(ZOOM&&L===layers[layers.length-1]){ og.setLineDash([10,6]); og.strokeStyle='#e0a526'; og.lineWidth=3; og.beginPath(); NF.rect.forEach(([x,z],i)=>i?og.lineTo(X(x),Zc(z)):og.moveTo(X(x),Zc(z))); og.closePath(); og.stroke(); og.setLineDash([]); }
+    L.otex.needsUpdate=true; }
+  drawMarks(); }
+const marks={}, markMat={home:new THREE.MeshBasicMaterial({color:0x3fae7f,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-8,polygonOffsetUnits:-8}),hover:new THREE.MeshBasicMaterial({color:0xfffaeb,transparent:true,opacity:.9,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-8,polygonOffsetUnits:-8}),sel:new THREE.MeshBasicMaterial({color:0xe0a526,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-8,polygonOffsetUnits:-8})};
+function drawMarks(){ const w=Math.max(6,(typeof camS!=='undefined'?camS.dist:16000)/1400);
+  for(const [k,s] of [['home',home],['hover',hoverSec],['sel',selSec]]){ const key=s?s+'|'+Math.round(w):'';
+    if(marks[k]&&marks[k].key===key) continue; if(marks[k]){ scene.remove(marks[k].mesh); marks[k].mesh.geometry.dispose(); marks[k]=null; } if(!s) continue;
+    const x0=-HX+s[0]*SEC+w, z0=-HZ+s[1]*SEC+w, x1=x0+SEC-2*w, z1=z0+SEC-2*w, m=ribbon([[x0,z0],[x1,z0],[x1,z1],[x0,z1],[x0,z0]],w*(k==='sel'?1.4:1),markMat[k]); m.renderOrder=4; scene.add(m); marks[k]={key,mesh:m}; } }
 
 // ---------- buildings, sites, labels ----------
 const inkMat=(color,width)=>{ const m=new THREE.MeshBasicMaterial({color, side:THREE.BackSide});
@@ -555,15 +604,21 @@ function buildBuildings(){ const know=S().know;
   bMesh.count=bInkMesh.count=list.length; bMesh.castShadow=true; scene.add(bMesh,bInkMesh); }
 const lab=(cls,html)=>{ const e=document.createElement('div'); e.className='lb '+cls; e.innerHTML=html; labelsEl.appendChild(e); return e; };
 const labels=[];
-for(const p of R.places) if(['town','village','hamlet','city'].includes(p.kind)) labels.push({el:lab('town',p.name),x:p.p[0],z:p.p[1],dy:120,kind:'town'});
+const SHOW={city:1e9,town:140000,village:60000,hamlet:24000,suburb:24000};   // the furthest camera distance a place's label shows at
+for(const p of R.places) if(SHOW[p.kind]) labels.push({el:lab('town'+(p.kind==='city'?' city':''),esc(p.name)),x:p.p[0],z:p.p[1],dy:120,kind:p.kind,far:SHOW[p.kind]});
 for(const p of R.peaks) if(p.name) labels.push({el:lab('peak',`${p.name}<small>${Math.round(p.h*3.281).toLocaleString()} ft</small>`),x:p.p[0],z:p.p[1],dy:60,kind:'peak'});
 { const mw=R.roads.filter(r=>r.cls==='motorway'); if(mw.length){ const r=mw[Math.floor(mw.length/2)], p=r.pts[Math.floor(r.pts.length/2)]; labels.push({el:lab('road','I-17'),x:p[0],z:p[1],dy:40,kind:'road'}); } }
 // site pins: grey while only rumoured, the loot colour once scouted, dimmer as a place is picked over
-const pinG=new THREE.OctahedronGeometry(1,0), pins=new THREE.Group(); scene.add(pins);
-const pinInk=inkMat(0x1d1814,.0016), pinMats=new Map(), pinMat=(c,o)=>{ const k=c+o; if(!pinMats.has(k)) pinMats.set(k,new THREE.MeshStandardMaterial({color:c, flatShading:true, transparent:o<1, opacity:o})); return pinMats.get(k); };
-function buildPins(){ const know=S().know; while(pins.children.length) pins.remove(pins.children[0]);
-  R.sites.forEach((s,i)=>{ const kk=know[s.sector[1]][s.sector[0]].k; if(kk<K.RUMOUR) return; const known=kk>=K.SCOUT, left=C.leftOf(i);
-    const m=new THREE.Mesh(pinG,pinMat(known?KIND[s.loot]:'#7d7468',left<.05?.35:1)); m.scale.set(26,40,26); m.position.set(s.p[0],Y(s.p[0],s.p[1])+70,s.p[1]); m.add(new THREE.Mesh(pinG,pinInk)); m.userData.site=s; pins.add(m); }); }
+const pinG=new THREE.OctahedronGeometry(1,0), pinMat=new THREE.MeshStandardMaterial({color:0xffffff, flatShading:true}), pinInk=inkMat(0x1d1814,.0016);
+let pinMesh=null, pinInkMesh=null;
+function buildPins(){ const know=S().know, list=[];   // one instanced mesh for every pin: there can be thousands across the realm
+  R.sites.forEach((s,i)=>{ const kk=know[s.sector[1]][s.sector[0]].k; if(kk>=K.RUMOUR) list.push([s,i,kk>=K.SCOUT]); });
+  if(pinMesh){ scene.remove(pinMesh,pinInkMesh); pinMesh.dispose(); pinInkMesh.dispose(); }
+  pinMesh=new THREE.InstancedMesh(pinG,pinMat,Math.max(1,list.length)); pinInkMesh=new THREE.InstancedMesh(pinG,pinInk,Math.max(1,list.length));
+  const m=new THREE.Matrix4(), q=new THREE.Quaternion(), sc=new THREE.Vector3(26,40,26), v=new THREE.Vector3(), col=new THREE.Color();
+  list.forEach(([s,i,known],n)=>{ m.compose(v.set(s.p[0],Y(s.p[0],s.p[1])+70,s.p[1]),q,sc); pinMesh.setMatrixAt(n,m); pinInkMesh.setMatrixAt(n,m);
+    pinMesh.setColorAt(n,col.set(!known?'#7d7468':C.leftOf(i)<.05?'#4a4640':KIND[s.loot])); });   // grey while rumoured, dark once searched out
+  pinMesh.count=pinInkMesh.count=list.length; scene.add(pinMesh,pinInkMesh); }
 
 // ---------- squads and raiders on the map ----------
 const tokG=(()=>{ const g=new THREE.CylinderGeometry(55,70,30,6); g.translate(0,15,0); const p=new THREE.ConeGeometry(45,150,6); p.translate(0,105,0); const pos=[]; for(const gg of [g,p]){ const n=gg.toNonIndexed(); pos.push(...n.attributes.position.array); } const out=new THREE.BufferGeometry(); out.setAttribute('position',new THREE.Float32BufferAttribute(pos,3)); out.computeVertexNormals(); return out; })();
@@ -592,7 +647,11 @@ function syncBands(){ const st=S(), live=new Set();
 function lightFor(m){ const s=C.sunAt(m), day=s.elev, az=s.arc*Math.PI;
   sun.intensity=.3+day*.85; hemi.intensity=.42+day*.3; sun.color.setHSL(.08,.6,.55+day*.35); hemi.color.setHSL(.08+(1-s.daylight)*.5,.35,.62+day*.25);
   const night=1-Math.min(1,s.daylight*1.5); renderer.setClearColor(new THREE.Color(0xd9c9a8).lerp(new THREE.Color(0x2a3248),night*.7)); scene.fog.color.copy(renderer.getClearColor(new THREE.Color()));
-  sun.position.set(Math.cos(az)*40000,8000+day*50000,-12000+Math.sin(az)*6000); sun.target.position.set(0,0,0); }
+  sunDir.set(Math.cos(az)*40000,8000+day*50000,-12000+Math.sin(az)*6000); }
+const sunDir=new THREE.Vector3(0,50000,0); let shadowExt=26000;
+function followView(tx,ty,tz,dist){   // the fog, the sun and its shadow box follow the view, so the whole realm can be seen
+  scene.fog.near=dist*2; scene.fog.far=dist*7; sun.target.position.set(tx,ty,tz); sun.position.copy(sun.target.position).add(sunDir);
+  const ext=Math.min(60000,Math.max(4000,dist*1.6)); if(Math.abs(ext-shadowExt)/shadowExt>.15){ shadowExt=ext; Object.assign(sun.shadow.camera,{left:-ext,right:ext,top:ext,bottom:-ext}); sun.shadow.camera.updateProjectionMatrix(); } }
 const PHASE={night:'Night',dawn:'Dawn',day:'Day',dusk:'Dusk'};
 function drawSky(){ const st=S(), sq=st.squads[selSquad]||{x:hx0,z:hz0}, s=C.sunAt(st.minutes), t=C.tempAt(st.minutes,sq.x,sq.z), heat=C.heatOf(t);
   clockEl.textContent=C.fmtT(st.minutes); skyEl.textContent=`${PHASE[s.phase]} · ${Math.round(t)} °C${heat>=C.REST_HEAT?' · heat':''}`; skyEl.classList.toggle('hot',heat>=C.REST_HEAT);
@@ -618,21 +677,22 @@ sqEl.addEventListener('change',e=>{ const r=e.target.closest('[data-rest]'); if(
 function drawStock(){ const st=S(), have=C.LOOT.filter(k=>st.base.stock[k]>0);
   stockEl.innerHTML=have.length?have.map(k=>`<li><i style="background:${KIND[k]}"></i>${st.base.stock[k]} ${C.UNIT[k].name}</li>`).join(''):'<li style="grid-column:1/-1;color:var(--muted)">Nothing brought home yet.</li>'; }
 function drawLog(){ logEl.innerHTML=S().log.slice(0,12).map(l=>`<li><time>${C.fmtT(l.t)}</time>${esc(l.msg)}</li>`).join(''); }
-let preview=null;
+let preview=null, routeMemo={};   // routes across the realm take a moment; the panel redraws often
+const colName=c=>{ let s=''; c++; while(c>0){ const m=(c-1)%26; s=String.fromCharCode(65+m)+s; c=Math.floor((c-1)/26); } return s; };   // A..Z, AA..
 function drawSector(){ const st=S();
   const [c,r]=selSec, s=R.sectors[r][c], kk=st.know[r][c], [cx,cz]=secCentre(c,r), known=kk.k>=K.SCOUT;
-  const sq=st.squads[selSquad], rt=C.route(sq.x,sq.z,cx,cz), tr=C.makeTrip(rt); preview=rt; drawPreview();
+  const sq=st.squads[selSquad], key=[sq.x,sq.z,cx,cz].map(Math.round).join(), rt=routeMemo.key===key?routeMemo.rt:(routeMemo={key,rt:C.route(sq.x,sq.z,cx,cz)}).rt, tr=C.makeTrip(rt); preview=rt; drawPreview();
   const f=C.forecast(tr,st.minutes,sq.people,sq.restHeat), TYPE={town:'Town',homes:'Scattered homes',rough:'Rough hills',desert:'Open desert'};
   const siteRows=s.sites.map(i=>{ const t=R.sites[i], left=C.leftOf(i), can=C.canScavenge(selSquad,i);
     const state=st.sites[i]?(left<.05?'searched out':`${Math.round(left*100)}% left`):'untouched';
     return `<li><i style="background:${KIND[t.loot]}"></i>${esc(C.siteName(t))}<span class="left">${KLABEL[t.loot]} · ${state}</span>${can?`<button type="button" data-scav="${i}" title="Search with ${esc(sq.name)}">Search ${fmtH(C.scavHours(i,sq.people))}</button>`:''}</li>`; });
   const seen=st.bands.filter(b=>b.seen&&st.minutes-b.seen.t<C.STALE&&String(secAt(b.seen.x,b.seen.z))===String(selSec));
   const short=f.water>sq.water+.05, inSec=String(secAt(sq.x,sq.z))===String(selSec);
-  secEl.innerHTML=`<h2>Sector ${String.fromCharCode(65+c%26)}${c>=26?String.fromCharCode(65+Math.floor(c/26)-1):''}-${r+1}</h2><h3>${esc((t=>t[0].toUpperCase()+t.slice(1))(C.nearestPlace(cx,cz)))}</h3>
+  secEl.innerHTML=`<h2>Sector ${colName(c)}-${r+1}</h2><h3>${esc((t=>t[0].toUpperCase()+t.slice(1))(C.nearestPlace(cx,cz)))}</h3>
    <dl><div><dt>Knowledge</dt><dd>${KN[kk.k]}${C.stale(kk)?' (stale)':''}</dd></div>
    <div><dt>Ground</dt><dd>${kk.k>=K.RUMOUR?TYPE[s.type]:'?'}</dd></div>
    <div><dt>Elevation</dt><dd>${Math.round(s.lo*3.281).toLocaleString()}–${Math.round(s.hi*3.281).toLocaleString()} ft</dd></div>
-   <div><dt>Buildings</dt><dd>${kk.k>=K.RUMOUR?s.b:'?'}</dd></div>
+   <div><dt>Buildings</dt><dd>${kk.k<K.RUMOUR?'?':s.fine===false?'about '+s.b:s.b}</dd></div>
    <div><dt>Sites</dt><dd>${known?s.sites.length:kk.k===K.RUMOUR&&s.sites.length?'some':'?'}</dd></div></dl>
    ${seen.length?`<p class="danger">Raiders seen here ${C.fmtT(Math.max(...seen.map(b=>b.seen.t)))}</p>`:''}
    ${known&&s.sites.length?`<ul class="sites">${siteRows.slice(0,40).join('')}</ul>`:''}
@@ -677,18 +737,18 @@ addEventListener('pagehide',()=>save(true)); document.addEventListener('visibili
 const camS={yaw:-.35,pitch:.62,dist:16000,tx:hx0*.4,tz:hz0*.4}, camT=Object.assign({},camS);
 let Wd=1,Ht=1; function resize(){ Wd=stage.clientWidth; Ht=stage.clientHeight; renderer.setSize(Wd,Ht,false); cam.aspect=Wd/Math.max(1,Ht); cam.updateProjectionMatrix(); } new ResizeObserver(resize).observe(stage); resize();
 const ray=new THREE.Raycaster(), ndc=new THREE.Vector2(); let drag=null;
-const pick=e=>{ const r=renderer.domElement.getBoundingClientRect(); ndc.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1); ray.setFromCamera(ndc,cam); const h=ray.intersectObject(terrain)[0]; return h?h.point:null; };
+const pick=e=>{ const r=renderer.domElement.getBoundingClientRect(); ndc.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1); ray.setFromCamera(ndc,cam); const h=ray.intersectObjects(terrains)[0]; return h?h.point:null; };
 renderer.domElement.addEventListener('contextmenu',e=>e.preventDefault());
 renderer.domElement.addEventListener('pointerdown',e=>{ drag={x:e.clientX,y:e.clientY,b:e.button,moved:false,yaw:camT.yaw,pitch:camT.pitch,tx:camT.tx,tz:camT.tz}; renderer.domElement.setPointerCapture(e.pointerId); });
-renderer.domElement.addEventListener('pointermove',e=>{ if(!drag){ const p=pick(e); const s=p&&secAt(p.x,p.z); if(String(s)!==String(hoverSec)){ hoverSec=s; drawOverlay(); } return; }
+renderer.domElement.addEventListener('pointermove',e=>{ if(!drag){ const p=pick(e); const s=p&&secAt(p.x,p.z); if(String(s)!==String(hoverSec)){ hoverSec=s; drawMarks(); } return; }
   const dx=e.clientX-drag.x, dy=e.clientY-drag.y; if(Math.hypot(dx,dy)>4) drag.moved=true; if(!drag.moved) return;
   if(drag.b===2||e.shiftKey){ const k=camT.dist/900, c=Math.cos(camT.yaw), s=Math.sin(camT.yaw); camT.tx=drag.tx-(dx*c+dy*s)*k; camT.tz=drag.tz-(-dx*s+dy*c)*k; }
   else { camT.yaw=drag.yaw-dx*.005; camT.pitch=Math.max(.25,Math.min(1.4,drag.pitch+dy*.004)); } });
-renderer.domElement.addEventListener('pointerup',e=>{ const d=drag; drag=null; if(!d||d.moved||d.b!==0) return; const p=pick(e); const s=p&&secAt(p.x,p.z); if(!s) return; selSec=s; drawOverlay(); drawSector(); });
+renderer.domElement.addEventListener('pointerup',e=>{ const d=drag; drag=null; if(!d||d.moved||d.b!==0) return; const p=pick(e); const s=p&&secAt(p.x,p.z); if(!s) return; selSec=s; drawMarks(); drawSector(); });
 let push=0;
 renderer.domElement.addEventListener('wheel',e=>{ e.preventDefault(); const want=camT.dist*Math.exp(e.deltaY*.0012);
   if(ZOOM&&want<1500 && camT.dist<=1520){ push+=-e.deltaY; if(push>240){ push=0; dive(camT.tx,camT.tz); } } else push=0;
-  camT.dist=Math.max(1500,Math.min(60000,want)); },{passive:false});
+  camT.dist=Math.max(1500,Math.min(260000,want)); },{passive:false});
 function dive(x,z){ if(!NF.inBlock(x,z)){ NF.tip('Tactical ground is baked only for the gold New River block so far'); camT.tx=(NF.rect[0][0]+NF.rect[2][0])/2; camT.tz=(NF.rect[0][1]+NF.rect[2][1])/2; camT.dist=Math.max(camT.dist,3200); return; }
   if(S().enc){ NF.tip('Answer the encounter first'); return; }
   const sqs=S().squads, sq=sqs[selSquad], free=o=>!C.busy(o)&&NF.inBlock(o.x,o.z), here=free(sq)?sq:sqs.find(free);
@@ -696,6 +756,7 @@ function dive(x,z){ if(!NF.inBlock(x,z)){ NF.tip('Tactical ground is baked only 
 if(ZOOM){ renderer.domElement.addEventListener('dblclick',e=>{ const p=pick(e); if(p) dive(p.x,p.z); });
   document.getElementById('diveBtn').onclick=()=>{ const sq=S().squads[selSquad]; dive(NF.inBlock(sq.x,sq.z)?sq.x:camT.tx, NF.inBlock(sq.x,sq.z)?sq.z:camT.tz); }; }
 document.getElementById('homeBtn').onclick=()=>{ camT.tx=hx0; camT.tz=hz0; camT.dist=6000; };
+document.getElementById('realmBtn').onclick=()=>{ camT.tx=0; camT.tz=0; camT.dist=Math.max(HX,HZ)*2.6; camT.pitch=Math.max(camT.pitch,.75); };
 let speed=1;   // 1× = 10 game minutes per real second
 function setSpeed(v){ speed=v; document.querySelectorAll('.hud button[data-s]').forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.s===v))); }
 document.querySelectorAll('.hud button[data-s]').forEach(b=>b.onclick=()=>setSpeed(+b.dataset.s));
@@ -704,7 +765,7 @@ if(resumed) setSpeed(0);   // a resumed campaign waits for the player
 // ---------- frame loop ----------
 syncViews(); syncBands(); buildBuildings(); buildPins(); drawOverlay(); drawSquads(); drawStock(); drawLog(); drawSky(); drawEncounter(); lightFor(S().minutes);
 if(resumed){ C.note('Campaign resumed.'); drawLog(); }
-const tmp=new THREE.Vector3(); let last=performance.now(), uiAcc=0;
+const tmp=new THREE.Vector3(); let last=performance.now(), uiAcc=0, marksAt=16000;
 function loop(now){
   requestAnimationFrame(loop); const dt=Math.min(.1,(now-last)/1000); last=now; if(ZOOM&&NF.mode!=='region') return;
   const st=S(), run=C.running()&&speed>0;
@@ -715,10 +776,11 @@ function loop(now){
   uiAcc+=dt; if(uiAcc>.5){ uiAcc=0; drawSky(); if(run){ drawSquads(); syncBands(); } }
   saveT+=dt; if(saveT>2) save();
   const k=1-Math.exp(-dt*5); for(const key in camS){ if(key==='yaw'){ const d=Math.atan2(Math.sin(camT.yaw-camS.yaw),Math.cos(camT.yaw-camS.yaw)); camS.yaw+=d*k; } else camS[key]+=(camT[key]-camS[key])*k; }
-  const ty=Y(camS.tx,camS.tz); cam.position.set(camS.tx+Math.sin(camS.yaw)*Math.cos(camS.pitch)*camS.dist, ty+Math.sin(camS.pitch)*camS.dist, camS.tz+Math.cos(camS.yaw)*Math.cos(camS.pitch)*camS.dist); cam.lookAt(camS.tx,ty,camS.tz);
+  const ty=Y(camS.tx,camS.tz); cam.position.set(camS.tx+Math.sin(camS.yaw)*Math.cos(camS.pitch)*camS.dist, ty+Math.sin(camS.pitch)*camS.dist, camS.tz+Math.cos(camS.yaw)*Math.cos(camS.pitch)*camS.dist); cam.lookAt(camS.tx,ty,camS.tz); followView(camS.tx,ty,camS.tz,camS.dist);
+  if(Math.abs(camS.dist-marksAt)/marksAt>.25){ marksAt=camS.dist; drawMarks(); }
   renderer.render(scene,cam);
   const place=(el,x,z,dy)=>{ tmp.set(x,Y(x,z)+dy,z).project(cam); const on=tmp.z<1&&Math.abs(tmp.x)<1.05&&Math.abs(tmp.y)<1.05; el.style.display=on?'':'none'; if(on) el.style.transform=`translate(${(tmp.x+1)/2*Wd}px,${(1-tmp.y)/2*Ht}px) translate(-50%,-100%)`; };
-  for(const l of labels){ const show=l.kind!=='peak'||camS.dist<40000; if(!show){ l.el.style.display='none'; continue; } place(l.el,l.x,l.z,l.dy); }
+  for(const l of labels){ const show=l.kind==='peak'?camS.dist<40000&&Math.hypot(l.x-camS.tx,l.z-camS.tz)<camS.dist*2.5:l.far?camS.dist<l.far:true; if(!show){ l.el.style.display='none'; continue; } place(l.el,l.x,l.z,l.dy); }
   st.squads.forEach((s,i)=>{ const v=views[i]; place(v.el,s.x,s.z,260); const near=st.squads.slice(0,i).filter(o=>Math.hypot(o.x-s.x,o.z-s.z)<camS.dist*.04).length; if(near) v.el.style.transform+=` translateY(${near*-26}px)`; });
   for(const v of bandViews.values()) if(v.show) place(v.el,v.x,v.z,150);
 }
@@ -734,7 +796,7 @@ window.__region={get squads(){ return S().squads; }, get know(){ return S().know
   focus:(x,z)=>{ camT.tx=x; camT.tz=z; camT.dist=2400; camS.tx=x; camS.tz=z; camS.dist=1600; },
   placeSquad:(i,x,z,people)=>{ const s=S().squads[i]; s.x=x; s.z=z; s.trip=null; if(people!==undefined){ s.people=people; s.water=Math.min(s.water,C.waterCap(s)); } C.reveal(x,z); C.refreshCurrent(); drawOverlay(); buildPins(); buildBuildings(); changed(); },
   advance:advanceBy,
-  save:()=>save(true), resize, select:(c,r)=>{ selSec=[c,r]; drawOverlay(); drawSector(); }};
+  save:()=>save(true), resize, select:(c,r)=>{ selSec=[c,r]; drawMarks(); drawSector(); }};
 })();
 // Nightfall sector core: everything about a block of real terrain that doesn't need a renderer.
 // The offline bake (Node) runs it over a whole block so sector edges match; the browser reads its output.
