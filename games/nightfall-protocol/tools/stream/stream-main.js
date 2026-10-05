@@ -44,8 +44,8 @@ const CREASE=new THREE.LineBasicMaterial({color:0x2d241d, transparent:true, opac
 function inkOn(group){ const list=[]; group.traverse(o=>{ if(o.isMesh && !o.userData.ink && !o.userData.noInk) list.push(o); });
   for(const o of list){ const sh=o.isInstancedMesh?new THREE.InstancedMesh(o.geometry,INK,o.count):new THREE.Mesh(o.geometry,INK); if(o.isInstancedMesh) sh.instanceMatrix=o.instanceMatrix;
     sh.userData.ink=true; sh.matrixAutoUpdate=false; o.add(sh);
-    if(!o.isInstancedMesh){ let eg=creaseOf.get(o.geometry); if(!eg){ eg=new THREE.EdgesGeometry(o.geometry,28); creaseOf.set(o.geometry,eg); } const ln=new THREE.LineSegments(eg,CREASE); ln.userData.ink=true; ln.matrixAutoUpdate=false; o.add(ln); } } }
-function inkOff(group){ const kill=[]; group.traverse(o=>{ if(o.userData.ink) kill.push(o); }); for(const o of kill){ o.parent.remove(o); if(o.isLineSegments){ o.geometry.dispose(); for(const [k,v] of creaseOf) if(v===o.geometry) creaseOf.delete(k); } } }
+    if(!o.isInstancedMesh){ const own=o.userData.crease; let eg=own||creaseOf.get(o.geometry); if(!eg){ eg=new THREE.EdgesGeometry(o.geometry,28); creaseOf.set(o.geometry,eg); } const ln=new THREE.LineSegments(eg,CREASE); if(own) ln.userData.keepGeo=true; ln.userData.ink=true; ln.matrixAutoUpdate=false; o.add(ln); } } }
+function inkOff(group){ const kill=[]; group.traverse(o=>{ if(o.userData.ink) kill.push(o); }); for(const o of kill){ o.parent.remove(o); if(o.isLineSegments&&!o.userData.keepGeo){ o.geometry.dispose(); for(const [k,v] of creaseOf) if(v===o.geometry) creaseOf.delete(k); } } }
 
 // ---------- the block ----------
 const IDX=await (await fetch('block/index.json')).json();
@@ -201,6 +201,8 @@ function* buildSector(s){
       for(let i=0;i<pts.length;i++){ const j=(i+1)%pts.length, a=pts[i], b=pts[j], A=outer[i], Bo=outer[j]; B.quad(coping,[a[0],P.level+.1,a[1]],[b[0],P.level+.1,b[1]],[Bo[0],P.level+.1,Bo[1]],[A[0],P.level+.1,A[1]]); B.quad(coping,[A[0],P.low-.3,A[1]],[Bo[0],P.low-.3,Bo[1]],[Bo[0],P.level+.1,Bo[1]],[A[0],P.level+.1,A[1]]); B.quad(tile,[a[0],P.level-.6,a[1]],[b[0],P.level-.6,b[1]],[b[0],P.level+.1,b[1]],[a[0],P.level+.1,a[1]]); } }
     B.meshes().forEach(me=>s.props.add(me)); if(rocks.length){ const rk=new THREE.InstancedMesh(sectorGeo(SHAPES.rock,s),mat('#9c968c'),rocks.length); rocks.forEach((m,i)=>rk.setMatrixAt(i,m)); rk.castShadow=true; s.props.add(rk); } }
   yield 'structures';
+  // crease lines for the ink worked out now, one mesh a step, so taking the centre doesn't stall on them
+  for(const o of [...s.props.children]) if(o.isMesh&&!o.isInstancedMesh&&!o.userData.noInk&&!o.userData.crease){ o.userData.crease=new THREE.EdgesGeometry(o.geometry,28); yield 'creases'; }
   buildPlants(s,!!centre&&s.c===centre[0]&&s.r===centre[1]);
   yield 'plants';
   // loot pins and labels
@@ -222,7 +224,7 @@ function buildPlants(s,full){
 const LAKE=new THREE.MeshStandardMaterial({color:0x3a8fae, roughness:.22, metalness:.1, transparent:true, opacity:.86, side:THREE.DoubleSide, polygonOffset:true, polygonOffsetFactor:-1});
 const POOL=new THREE.MeshStandardMaterial({color:0x56c3dc, roughness:.18, metalness:.05, transparent:true, opacity:.9, side:THREE.DoubleSide});
 function disposeSector(s){
-  if(s.group){ inkOff(s.group); scene.remove(s.group); s.group.traverse(o=>{ if(o.geometry && !SHARED.has(o.geometry)) o.geometry.dispose(); if(o.material){ if(o.material.map&&!o.material.userData.keep) o.material.map.dispose(); if(o.userData.ownMat||o.isLineSegments) o.material.dispose(); } if(o.isInstancedMesh) o.dispose&&o.dispose(); }); }
+  if(s.group){ inkOff(s.group); scene.remove(s.group); s.group.traverse(o=>{ if(o.geometry && !SHARED.has(o.geometry)) o.geometry.dispose(); if(o.userData.crease) o.userData.crease.dispose(); if(o.material){ if(o.material.map&&!o.material.userData.keep) o.material.map.dispose(); if(o.userData.ownMat||o.isLineSegments) o.material.dispose(); } if(o.isInstancedMesh) o.dispose&&o.dispose(); }); }
   for(const l of s.labels||[]) l.el.remove();
   if(s.data){ const ns=s.data.nav.n; for(let j=0;j<ns;j++) kindG.fill(255,(s.r*ns+j)*GN+s.c*ns,(s.r*ns+j)*GN+s.c*ns+ns); }
   s.Hf=null; s.data=null; s.state='gone'; }
@@ -288,6 +290,9 @@ renderer.domElement.addEventListener('wheel',e=>{ e.preventDefault(); const v=VI
 const marker=new THREE.Mesh(new THREE.RingGeometry(.9,1.2,24),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.8,depthWrite:false})); marker.rotation.x=-Math.PI/2; marker.visible=false; scene.add(marker); let markerT=0;
 document.getElementById('segView').addEventListener('click',e=>{ const b=e.target.closest('button[data-v]'); if(!b) return; document.querySelectorAll('#segView button').forEach(x=>x.setAttribute('aria-pressed',String(x===b))); ui.view=b.dataset.v; follow=true; });
 document.getElementById('tglSwim').addEventListener('change',e=>{ ui.swim=e.target.checked; });
+// places worth a look: the squad is set down there and the camera framed on it
+document.getElementById('places')?.addEventListener('click',e=>{ const b=e.target.closest('button[data-p]'); if(!b||!figs.length) return; const [x,z,yaw,pitch,dist]=b.dataset.p.split(',').map(Number);
+  window.__stream.teleport(x,z); ui.view='tactical'; document.querySelectorAll('#segView button').forEach(q=>q.setAttribute('aria-pressed',String(q.dataset.v==='tactical'))); camT.yaw=yaw; VIEWS.tactical.pitch=pitch; VIEWS.tactical.dist=dist; say(b.textContent); });
 document.getElementById('tglSeams').addEventListener('change',e=>{ ui.seams=e.target.checked; for(const s of sectors.values()) if(s.seam) s.seam.visible=ui.seams; });
 
 // ---------- panels ----------

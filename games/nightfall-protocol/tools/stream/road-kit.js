@@ -5,7 +5,7 @@
 (function(root){
 function RoadKit(o){
 const {THREE,C,heightAt,IDX,renderer,mat,SHAPES,sectorGeo}=o, TAU=Math.PI*2;
-const aniso=renderer.capabilities.getMaxAnisotropy();
+const aniso=renderer.capabilities.getMaxAnisotropy(), CK=root.CarKit?root.CarKit({mat,C}):null;
 
 // ---------- textures, drawn once ----------
 function canvasTex(w,h,draw,seed){ const c=document.createElement('canvas'); c.width=w; c.height=h; const g=c.getContext('2d'), r=C.rng(seed);
@@ -124,6 +124,8 @@ function plate(B,F,pts,c,dz=.03,back=true){ const xs=pts.map(p=>p[0]), ys=pts.ma
 const rect=(w,h,y0)=>[[-w/2,y0],[w/2,y0],[w/2,y0+h],[-w/2,y0+h]];
 const octo=(r,y)=>Array.from({length:8},(_,i)=>{ const a=(i+.5)/8*TAU; return [Math.cos(a)*r,y-Math.sin(a)*r]; }).reverse();
 const METAL=mat('#8e9396'), POST=mat('#7f8589'), GALV=mat('#a9aeb0'), HEAD=mat('#242424'), RED=mat('#4a1612'), AMBER=mat('#4d3a10'), GREEN=mat('#123d2a'), WOOD=mat('#6b5a45'), PIPE=mat('#8b8f8c'), DARK=mat('#2b2724'), BERM=mat('#b99d74'), CONC=mat('#c4bdb0'), REFL=mat('#e8e4d8'), REFLA=mat('#d9a12a');
+const WOODP=mat('#6a5844'), POLE69=mat('#7a7166'), INSUL=mat('#c9c2b2'), CAN=mat('#8d9193'), LAMP=mat('#8f9496'), LENS=mat('#d9d4bf'), BRONZE=mat('#3b3530'), TRANS=mat('#7f8a80');
+const MESH=(()=>{ const m=new THREE.MeshStandardMaterial({color:0x6d6f6c,transparent:true,opacity:.35,side:THREE.DoubleSide,depthWrite:false}); m.userData.keep=true; return m; })();
 const lens=(B,F,lx,ly,lz,r,m)=>{ for(let i=0;i<8;i++){ const a=i/8*TAU, b=(i+1)/8*TAU; B.tri(m,F(lx,ly,lz),F(lx+Math.cos(a)*r,ly+Math.sin(a)*r,lz),F(lx+Math.cos(b)*r,ly+Math.sin(b)*r,lz)); } };
 
 // ---------- ground paint under the roads: dusty margins, and rock exposed where the road was cut into a hill ----------
@@ -239,7 +241,39 @@ function* build(s,grp){ const D=s.data, rk=D.rk||{}, J=rk.junctions||[], rnd=C.r
     for(const h of sg.h){ const hx=-h; box(B,HEAD,F,hx,5.25,.05,.17,.5,.13); plate(B,F,[[hx-.31,4.65],[hx+.31,4.65],[hx+.31,5.85],[hx-.31,5.85]],backCell(),-.1);
       lens(B,F,hx,5.6,.19,.12,RED); lens(B,F,hx,5.25,.19,.12,AMBER); lens(B,F,hx,4.9,.19,.12,GREEN); box(B,GALV,F,hx,5.85,0,.03,.12,.03); }
     if(sg.n&&L>3.4) plate(B,F,rect(1.6,.3,6.15).map(([a,b])=>[a-Math.min(L*.5,2.2),b]),bladeCell(sg.n),.12);
-    box(B,METAL,F,.1,1.1,.2,.06,.09,.04); }
+    box(B,METAL,F,.1,1.1,.2,.06,.09,.04);
+    tube(B,GALV,F(0,7.2,0),F(0,9.4,0),.09,6); tube(B,GALV,F(0,9.3,0),F(-2.6,9.7,0),.05,5); box(B,LAMP,F,-2.75,9.62,0,.36,.07,.17); }
+  // ---------- power: poles, crossarms and insulators; wires sag between them; service drops to the houses ----------
+  const W=[], wire=(a,b,sag)=>{ const n=8; let p=a; for(let q=1;q<=n;q++){ const t=q/n, c=[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t-4*sag*t*(1-t),a[2]+(b[2]-a[2])*t]; W.push(...p,...c); p=c; } };
+  // where the conductors hang on each kind of pole: [across the line, height]
+  const ATT=[[[-1.6,17.2],[1.6,17.2],[-1.6,15.2],[1.6,15.2],[-1.6,13.2],[1.6,13.2],[0,20.1]],[[1.5,17.2],[-1.5,15.6],[1.5,14],[0,19.1]],[[-1,10.42],[1,10.42],[0,11.2],[.22,8.6]]];
+  const att=(x,z,yaw,t,k,flip)=>{ const [o,h]=ATT[t][k], F=frame(x,heightAt(x,z),z,yaw); return F(o*flip,h,0); };
+  for(const p of rk.poles||[]){ const F=frame(p.x,heightAt(p.x,p.z),p.z,p.y);
+    if(p.t===2){ tube(B,WOODP,F(0,-.5,0),F(0,11.05,0),.14,7); box(B,WOODP,F,0,10.25,0,1.25,.05,.06);
+      for(const [o,h] of ATT[2]) box(B,INSUL,F,o,h-.16,0,.05,.12,.05);
+      if(p.tf){ tube(B,CAN,F(0,7.1,.4),F(0,8.05,.4),.28,8); box(B,CAN,F,0,7.6,.2,.06,.2,.15); }
+      if(p.l!==undefined){ const L2=frame(p.x,heightAt(p.x,p.z),p.z,p.l); tube(B,GALV,L2(0,8.8,0),L2(0,9.3,2.2),.045,5); box(B,LAMP,L2,0,9.26,2.45,.17,.07,.36); } }
+    else { const H=p.t===0?20.2:19.2; tube(B,POLE69,F(0,-.6,0),F(0,H,0),.32,8); tube(B,POLE69,F(0,H-.2,0),F(0,H+.3,0),.05,4);
+      for(const [o,h] of ATT[p.t].slice(0,-1)) tube(B,INSUL,F(0,h,0),F(o,h,0),.07,6); }
+    if(p.g!==undefined){ const top=p.t===2?F(0,9.6,0):F(0,16,0), gx=p.x+Math.sin(p.g)*6, gz=p.z+Math.cos(p.g)*6; W.push(...top,gx,heightAt(gx,gz),gz); } }
+  for(const [x1,z1,y1,x2,z2,y2,t] of rk.spans||[]){ const flip=Math.cos(y1)*Math.cos(y2)+Math.sin(y1)*Math.sin(y2)<0?-1:1, span=Math.hypot(x2-x1,z2-z1);
+    for(let k=0;k<ATT[t].length;k++) wire(att(x1,z1,y1,t,k,1),att(x2,z2,y2,t,k,flip),span*(t===2?.022:.03)); }
+  for(const [px,pz,py,hx,hz] of rk.drops||[]){ const a=frame(px,heightAt(px,pz),pz,py)(.2,8.6,0); wire(a,[hx,heightAt(hx,hz)+3.1,hz],.35); }
+  if(W.length){ const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(W,3)); const ln=new THREE.LineSegments(g,new THREE.LineBasicMaterial({color:0x26221e})); s.props.add(ln); }
+  // ---------- street lights (dark) and the substation ----------
+  for(const l of rk.lights||[]){ if(l.k==='sub'){ const ring=l.pts, [cx,cz]=C.centroid(ring);
+      for(let k=0;k<ring.length;k++){ const a=ring[k], b=ring[(k+1)%ring.length], n=Math.max(1,Math.round(Math.hypot(b[0]-a[0],b[1]-a[1])/3)); let prev=null;
+        for(let q=0;q<=n;q++){ const x=a[0]+(b[0]-a[0])*q/n, z=a[1]+(b[1]-a[1])*q/n, y=heightAt(x,z); tube(B,GALV,[x,y-.2,z],[x,y+2.4,z],.035,4); if(prev){ B.quad(MESH,[prev[0],prev[1],prev[2]],[x,y,z],[x,y+2.3,z],[prev[0],prev[1]+2.3,prev[2]]); tube(B,GALV,[prev[0],prev[1]+2.35,prev[2]],[x,y+2.35,z],.02,4); } prev=[x,y,z]; } }
+      const ang=Math.atan2(ring[1][0]-ring[0][0],ring[1][1]-ring[0][1]);
+      for(const [du,dv] of [[-3.5,0],[3.5,0]]){ const F=frame(cx,heightAt(cx,cz),cz,ang); box(B,TRANS,F,du,1.1,dv,1.3,1.1,1.0); for(let q=-2;q<=2;q++) box(B,TRANS,F,du+q*.5,1.0,dv+1.15,.06,.8,.15);
+        for(const o of [-.6,0,.6]) tube(B,INSUL,F(du+o,2.2,dv),F(du+o,3.1,dv),.1,6); }
+      const F=frame(cx,heightAt(cx,cz),cz,ang); for(const du of [-6,6]) for(const dv of [-2.5,2.5]) tube(B,GALV,F(du,-.2,dv),F(du,7,dv),.12,6); for(const du of [-6,6]) tube(B,GALV,F(du,7,-2.5),F(du,7,2.5),.1,6); tube(B,GALV,F(-6,6.5,0),F(6,6.5,0),.08,6);
+      continue; }
+    const y0=heightAt(l.x,l.z), F=frame(l.x,y0,l.z,l.y);
+    if(l.k==='davit'){ tube(B,GALV,F(0,-.4,0),F(0,12,0),.13,8); tube(B,GALV,F(0,11.8,0),F(0,12.5,1.2),.07,6); tube(B,GALV,F(0,12.5,1.2),F(0,12.6,3),.06,6); box(B,LAMP,F,0,12.55,3.25,.2,.08,.42); box(B,CONC,F,0,.15,0,.35,.35,.35); }
+    else { box(B,BRONZE,F,0,3.8,0,.08,4.3,.08); box(B,BRONZE,F,0,8.1,.35,.3,.07,.25); box(B,LENS,F,0,8.02,.35,.26,.02,.21); box(B,CONC,F,0,.25,0,.3,.45,.3); } }
+  // ---------- abandoned cars ----------
+  if(CK) for(const c of rk.cars||[]) CK.add(B,c,(x,z)=>HM(x,z)+.03);
   // cable median barrier: posts every 3 m, three cables
   const CB=new UB();
   for(const md of rk.medians||[]){ const pts=C.densify(md.pts,3); let prev=null; for(const [x,z] of pts){ const y=heightAt(x,z); box(CB,GALV,(a,b,c)=>[x+a,y+b,z+c],0,.35,0,.035,.45,.035);

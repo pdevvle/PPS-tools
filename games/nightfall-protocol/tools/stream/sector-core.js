@@ -214,9 +214,11 @@ function bake(D,log=()=>{}){
   const camps=F.bridges.filter(b=>b.len>90).map(b=>{ const s=b.ab+9; let k=0; while(k<b.d.length-1&&b.L[k+1]<s) k++; return {bridge:F.bridges.indexOf(b),k}; });
   return {H,NXg,NZg,X0,Z0,st,F,walls,plants,nav:{NS,NX,sp,kind},houses:new Set(houses),camps,WASH};
 }
-const NAVKIND={open:0,asphalt:1,dirt:2,path:3,lot:4,yard:5,wash:6,brush:7,hill:8,water:9,building:10,wall:11,steep:12,low:13,pier:14};
-const NAVLABEL=['Open desert','Asphalt','Dirt road','Footpath','Paved lot','Yard','Sand wash','Brush','Hillside','Water','Building','Wall','Too steep','No headroom','Bridge pier'];
+const NAVKIND={open:0,asphalt:1,dirt:2,path:3,lot:4,yard:5,wash:6,brush:7,hill:8,water:9,building:10,wall:11,steep:12,low:13,pier:14,car:15};
+const NAVLABEL=['Open desert','Asphalt','Dirt road','Footpath','Paved lot','Yard','Sand wash','Brush','Hillside','Water','Building','Wall','Too steep','No headroom','Bridge pier','Wreck'];
+// abandoned cars: length and width in metres, shared by the road pass (movement grid) and the car models
+const CARDIM={sedan:[4.8,1.84],hatch:[4.15,1.76],suv:[4.85,1.94],pickup:[5.6,2.0],van:[5.1,2.0]};
 const SWIM=.2;
-const api={TAU,rng,inPoly,segDist,bbox,centroid,area,densify,polyDist,clipRect,clipLine,segX,ROADW,roadW,isDrive,isPaved,isBridge,roadSurf,roadSection,bridgeY,SegIndex,BoxIndex,bake,NAVKIND,NAVLABEL,SWIM};
+const api={TAU,rng,inPoly,segDist,bbox,centroid,area,densify,polyDist,clipRect,clipLine,segX,ROADW,roadW,isDrive,isPaved,isBridge,roadSurf,roadSection,bridgeY,SegIndex,BoxIndex,bake,NAVKIND,NAVLABEL,CARDIM,SWIM};
 if(typeof module!=='undefined') module.exports=api; else root.SectorCore=api;
 })(typeof self!=='undefined'?self:this);

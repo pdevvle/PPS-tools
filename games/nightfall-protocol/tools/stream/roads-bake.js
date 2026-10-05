@@ -7,7 +7,7 @@
 // It records what it changed (rk.undo) so it can be rerun over its own output.
 // Map data (c) OpenStreetMap contributors, ODbL.
 const fs=require('fs'), zlib=require('zlib'), C=require('./sector-core.js');
-const [dir,osmFile]=process.argv.slice(2);
+const [dir,osmFile,powerArg]=process.argv.slice(2), powerFile=powerArg||osmFile.replace(/osm_([^/]*)$/,'osm_power_$1');
 const IDX=JSON.parse(fs.readFileSync(`${dir}/index.json`,'utf8')), SEC=IDX.sector, NB=IDX.n, HALF=IDX.half, NS=IDX.navStep, NK=C.NAVKIND;
 const [LAT0,LON0]=IDX.center, kx=111320*Math.cos(LAT0*Math.PI/180), ky=110574, r1=v=>Math.round(v*10)/10, r2=v=>Math.round(v*100)/100;
 const P=(la,lo)=>[r1((lo-LON0)*kx),r1(-(la-LAT0)*ky)];
@@ -20,7 +20,7 @@ const hash=n=>{ let x=(n*2654435761)>>>0; x^=x>>>15; x=Math.imul(x,2246822519)>>
 // ---------- undo an earlier pass ----------
 for(const s of S){ s.kindA=unb64(s.nav.kind,Uint8Array).slice(); s.spA=unb64(s.nav.sp,Uint8Array).slice();
   if(s.rk){ const u=s.rk.undo; for(let i=0;i<u.nav.length;i+=3){ s.kindA[u.nav[i]]=u.nav[i+1]; s.spA[u.nav[i]]=u.nav[i+2]; } s.plants.push(...u.plants); s.roads=s.roads.filter(r=>!r.added); for(const r of s.roads){ if('pv0' in r) r.paved=r.pv0; for(const k of ['id','lanes','lf','lb','ms','turn','surf','ref','pv0']) delete r[k]; } delete s.rk; }
-  s.undoNav=new Map(); s.undoPlants=[]; s.rk={junctions:[],signs:[],signals:[],bars:[],walks:[],arrows:[],medians:[],gates:[],grids:[]}; }
+  s.undoNav=new Map(); s.undoPlants=[]; s.rk={junctions:[],signs:[],signals:[],bars:[],walks:[],arrows:[],medians:[],gates:[],grids:[],poles:[],spans:[],drops:[],lights:[],cars:[]}; }
 
 // ---------- the OSM roads ----------
 const els=JSON.parse(fs.readFileSync(osmFile,'utf8')).elements, nodes=new Map();
@@ -122,7 +122,7 @@ const nudge=(x,z,nx,nz,pad=.25)=>{ for(let k=0;k<=14;k++){ const px=x+nx*k*.5, p
 const hull=P=>{ P=P.slice().sort((a,b)=>a[0]-b[0]||a[1]-b[1]); const cr=(o,a,b)=>(a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]), lo=[], up=[];
   for(const p of P){ while(lo.length>=2&&cr(lo[lo.length-2],lo[lo.length-1],p)<=0) lo.pop(); lo.push(p); } for(const p of P.reverse()){ while(up.length>=2&&cr(up[up.length-2],up[up.length-1],p)<=0) up.pop(); up.push(p); }
   return lo.slice(0,-1).concat(up.slice(0,-1)); };
-const junctionOut=[];
+const junctionOut=[], approaches=[];
 for(const j of junctions){ const hasMoto=j.arms.some(a=>a.w.cls==='motorway'); if(hasMoto) continue;
   const major=j.arms.filter(a=>a.w.rank>=4), R0=a=>Math.max(...j.arms.filter(b=>b!==a&&Math.abs(b.ax*a.ax+b.az*a.az)<.9).map(b=>b.hw),2.5)+1;
   let mode=j.mapped==='signals'?'signals':j.mapped?'mapped':major.length>=3&&new Set(major.map(a=>a.w.name||a.w.cls)).size>=2&&!major.every(a=>/_link/.test(a.w.cls))?'signals':'infer';
@@ -146,6 +146,7 @@ for(const j of junctions){ const hasMoto=j.arms.some(a=>a.w.cls==='motorway'); i
   for(const a of j.arms){ const R=R0(a), rx=a.az, rz=-a.ax, w=a.w, hwA=a.hw, cross=j.arms.filter(b=>b.w.name&&b.w.name!==w.name).map(b=>b.w.name)[0], inner=false, jx=a.jx, jz=a.jz;
     // half of the road the incoming traffic uses
     const inHalf=w.oneway?[-hwA,hwA]:[0,hwA];
+    if(a.incoming&&a.paved&&!inner&&(mode==='signals'||a.ctl)) approaches.push({j,a,x:jx,z:jz,R,sig:mode==='signals'});
     if(mode==='signals'&&!inner){
       if(a.incoming){ const ext=Math.max(0,...j.members.map(m=>-(m.x-jx)*a.ax-(m.z-jz)*a.az)), far=ext+Math.max(...j.arms.filter(b=>Math.abs(b.ax*a.ax+b.az*a.az)<.9).map(b=>b.hw),3)+1.5, q=nudge(jx-a.ax*far+rx*(hwA+.9),jz-a.az*far+rz*(hwA+.9),rx,rz,.45);
         if(q){ const [px,pz]=q, base=(px-jx)*rx+(pz-jz)*rz;
@@ -201,12 +202,100 @@ for(const l of ways){ if(l.cls!=='motorway_link') continue; const st=motoAt.get(
 for(const n of nodes.values()){ const b=n.tags&&n.tags.barrier; if(b!=='gate'&&b!=='cattle_grid') continue; const l=at.get(n.id); if(!l) continue; const [w,k]=l[0], q=along(w,w.L[k]);
   add(n.p[0],n.p[1],b==='gate'?'gates':'grids',[r2(n.p[0]),r2(n.p[1]),r2(Math.atan2(q.tx,q.tz)),r2(w.w),hash(n.id)<.7?1:0]); }
 
+const R0Of=(j,a)=>Math.max(...j.arms.filter(b=>b!==a&&Math.abs(b.ax*a.ax+b.az*a.az)<.9).map(b=>b.hw),2.5)+1;   // how far back from a crossing its arms clear the other roads
+// ---------- power: the real 69 kV lines, distribution along the roads, service drops to the houses ----------
+const BLD=[]; for(const s of S) for(const b of s.buildings){ if(b.pts.length>=3) BLD.push({...b,bb:C.bbox(b.pts)}); }
+const BI2=new C.BoxIndex(48); for(const b of BLD) BI2.add([b.bb[0]-2,b.bb[1]-2,b.bb[2]+2,b.bb[3]+2],b);
+const inBuilding=(x,z,pad=0)=>BI2.near(x,z).some(b=>x>b.bb[0]-pad&&x<b.bb[2]+pad&&z>b.bb[1]-pad&&z<b.bb[3]+pad&&(pad>0||C.inPoly(x,z,b.pts)));
+const BRB=IDX.bridges.map(b=>C.bbox(b.d)), nearBridge=(x,z,pad)=>BRB.some(bb=>x>bb[0]-pad&&x<bb[2]+pad&&z>bb[1]-pad&&z<bb[3]+pad);
+const kindAt=(x,z)=>{ const s=secAt(x,z); if(!s) return 255; const ns=s.nav.n, i=Math.floor((x-s.x0)/NS), j=Math.floor((z-s.z0)/NS); return i<0||j<0||i>=ns||j>=ns?255:s.kindA[j*ns+i]; };
+const yawAcross=(tx,tz)=>Math.atan2(-tx,-tz);   // a frame whose local x runs across a line heading (tx,tz)
+const poleAt=[], farFromPoles=(x,z,d)=>!poleAt.some(p=>Math.hypot(p[0]-x,p[1]-z)<d);
+// one line of poles: crossarms square to the line (bisecting at angles), guy wires at the ends and the corners
+function addLine(pts,t){ const P=pts.map((p,i)=>{ const a=pts[Math.max(0,i-1)], b=pts[Math.min(pts.length-1,i+1)], dx=b[0]-a[0], dz=b[1]-a[1], l=Math.hypot(dx,dz)||1; return {x:p[0],z:p[1],y:yawAcross(dx/l,dz/l)}; });
+  P.forEach((p,i)=>{ let guy; if(i===0||i===P.length-1){ const q=P[i===0?1:i-1]; if(q) guy=Math.atan2(p.x-q.x,p.z-q.z); }
+    else { const a=P[i-1], b=P[i+1], ux=a.x-p.x, uz=a.z-p.z, vx=b.x-p.x, vz=b.z-p.z, la=Math.hypot(ux,uz)||1, lb=Math.hypot(vx,vz)||1; if((ux*vx+uz*vz)/(la*lb)>-.9) guy=Math.atan2(-(ux/la+vx/lb),-(uz/la+vz/lb)); }
+    if(!farFromPoles(p.x,p.z,1)) return; poleAt.push([p.x,p.z]); p.o={t,x:r2(p.x),z:r2(p.z),y:r2(p.y)}; if(guy!==undefined) p.o.g=r2(guy); add(p.x,p.z,'poles',p.o); });
+  for(let i=0;i<P.length-1;i++){ const a=P[i], b=P[i+1]; add(a.x,a.z,'spans',[r2(a.x),r2(a.z),r2(a.y),r2(b.x),r2(b.z),r2(b.y),t]); }
+  return P; }
+const POW=fs.existsSync(powerFile)?JSON.parse(fs.readFileSync(powerFile,'utf8')).elements:[];
+for(const e of POW){ if(e.type!=='way'||!e.geometry) continue; const pts=e.geometry.map(g=>P(g.lat,g.lon)); if(!pts.some(([x,z])=>Math.abs(x)<HALF+60&&Math.abs(z)<HALF+60)) continue;
+  if(e.tags.power==='line') addLine(pts,e.tags.circuits==='2'?0:1);
+  if(e.tags.power==='substation'&&pts.length>=4){ const ring=pts.slice(0,-1); add(...C.centroid(ring),'lights',{k:'sub',pts:ring.map(p=>[r1(p[0]),r1(p[1])])});
+    // the fence closes the yard to the squad
+    for(let k=0;k<ring.length;k++){ const a=ring[k], b=ring[(k+1)%ring.length], n=Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])/1); for(let q=0;q<=n;q++){ const x=a[0]+(b[0]-a[0])*q/n, z=a[1]+(b[1]-a[1])*q/n, s=secAt(x,z); if(!s) continue;
+      const ns=s.nav.n, i=Math.floor((x-s.x0)/NS), j=Math.floor((z-s.z0)/NS), id=j*ns+i; if(i<0||j<0||i>=ns||j>=ns) continue; if(!s.undoNav.has(id)) s.undoNav.set(id,[s.kindA[id],s.spA[id]]); s.kindA[id]=NK.wall; s.spA[id]=0; } } } }
+// distribution: 12 kV on wooden poles about 50 m apart along the bigger roads, one side, kept off the pavement and out of buildings
+const distLines=[];
+for(const w of ways){ if(w.rank<3||w.cls==='motorway'||/_link/.test(w.cls)||w.len<80) continue; const side=hash(w.id*7)<.5?-1:1, off=edgeOf(w)+1.7; let line=[];
+  const flush=()=>{ if(line.length>=2) distLines.push(addLine(line,2)); line=[]; };
+  for(let s0=10+hash(w.id)*25;s0<w.len-6;s0+=46+hash(w.id+Math.floor(s0))*12){ const q=along(w,s0), x=q.x-q.tz*side*off, z=q.z+q.tx*side*off;
+    if(Math.abs(x)>HALF+30||Math.abs(z)>HALF+30||nearBridge(x,z,25)){ flush(); continue; }
+    if(!clearAt(x,z,.4)||inBuilding(x,z,1)||!farFromPoles(x,z,9)||[NK.water,NK.wall,NK.steep].includes(kindAt(x,z))) continue;
+    if(line.length&&Math.hypot(x-line[line.length-1][0],z-line[line.length-1][1])>95) flush(); line.push([x,z]); }
+  flush(); }
+const distPoles=distLines.flat().filter(p=>p.o);
+// each house within 45 m of a pole gets a drop from its nearest one; that pole carries a transformer can
+for(const b of BLD){ if(!b.house) continue; const [cx,cz]=C.centroid(b.pts); let best=null,bd=45; for(const p of distPoles){ const d=Math.hypot(p.x-cx,p.z-cz); if(d<bd){ bd=d; best=p; } } if(!best) continue;
+  let hp=null,hd=1e9; for(let k=0;k<b.pts.length;k++){ const sd=C.segDist(best.x,best.z,b.pts[k],b.pts[(k+1)%b.pts.length]); if(sd[0]<hd){ hd=sd[0]; hp=[sd[1],sd[2]]; } }
+  best.o.tf=1; add(best.x,best.z,'drops',[r2(best.x),r2(best.z),best.o.y,r2(hp[0]),r2(hp[1])]); }
+
+// ---------- street lights (all dark) ----------
+for(const j of junctionOut){ if(j.mode==='signals') continue; const big=j.arms.some(a=>a.w.rank>=4)&&j.arms.filter(a=>a.w.rank>=3).length>=3;
+  // a cobra head on the utility pole nearest a bigger crossing
+  if(big){ let best=null,bd=32; for(const p of distPoles){ const d=Math.hypot(p.x-j.x,p.z-j.z); if(d<bd){ bd=d; best=p; } } if(best) best.o.l=r2(Math.atan2(j.x-best.x,j.z-best.z)); }
+  // freeway ramp ends get the state's tall davit poles
+  for(const a of j.arms){ if(!/_link/.test(a.w.cls)) continue; const rx=a.az, rz=-a.ax, q=nudge(a.jx+a.ax*(R0Of(j,a)+5)+rx*(a.hw+1.6),a.jz+a.az*(R0Of(j,a)+5)+rz*(a.hw+1.6),rx,rz,.5); if(q) add(q[0],q[1],'lights',{k:'davit',x:r2(q[0]),z:r2(q[1]),y:r2(Math.atan2(-rx,-rz))}); } }
+// parking lots: shoebox lights round the edge
+{ const done=new Set(); for(const s of S) for(const ar of s.areas){ if(ar.kind!=='parking'||ar.pts.length<3) continue; const key=ar.pts.map(p=>p.join(',')).join(';'); if(done.has(key)) continue; done.add(key);
+  const [cx,cz]=C.centroid(ar.pts); let n=0; for(let k=0;k<ar.pts.length&&n<6;k++){ const a=ar.pts[k], b=ar.pts[(k+1)%ar.pts.length], L=Math.hypot(b[0]-a[0],b[1]-a[1]); for(let t=10;t<L-6&&n<6;t+=30){ let x=a[0]+(b[0]-a[0])*t/L, z=a[1]+(b[1]-a[1])*t/L; const dx=cx-x, dz=cz-z, dl=Math.hypot(dx,dz)||1; x+=dx/dl*1.5; z+=dz/dl*1.5;
+    if(x<s.x0||x>=s.x0+SEC||z<s.z0||z>=s.z0+SEC||!clearAt(x,z,.3)||inBuilding(x,z,.8)) continue; add(x,z,'lights',{k:'lot',x:r2(x),z:r2(z),y:r2(Math.atan2(dx,dz))}); n++; } } } }
+
+// ---------- abandoned cars, placed with intent ----------
+const CR=C.rng(4242), placedCars=[], TYPES=['sedan','sedan','sedan','suv','suv','pickup','pickup','hatch','van'];
+function markCar(x,z,yaw,type){ const [L,W]=C.CARDIM[type], fx=Math.sin(yaw), fz=Math.cos(yaw);
+  for(let dz=-4;dz<=4;dz+=NS) for(let dx=-4;dx<=4;dx+=NS){ const px=Math.floor((x+dx)/NS)*NS+NS/2, pz=Math.floor((z+dz)/NS)*NS+NS/2, u=(px-x)*fx+(pz-z)*fz, v=(px-x)*fz-(pz-z)*fx;
+    if(Math.abs(u)>L/2+.2||Math.abs(v)>W/2+.2) continue; const s=secAt(px,pz); if(!s) continue; const ns=s.nav.n, i=Math.floor((px-s.x0)/NS), j=Math.floor((pz-s.z0)/NS), id=j*ns+i; if(i<0||j<0||i>=ns||j>=ns||KEEP.has(s.kindA[id])) continue;
+    if(!s.undoNav.has(id)) s.undoNav.set(id,[s.kindA[id],s.spA[id]]); s.kindA[id]=NK.car; s.spA[id]=0; }
+  const s=secAt(x,z); if(s){ const keep=[]; for(const pl of s.plants){ const u=(pl[1]-x)*fx+(pl[3]-z)*fz, v=(pl[1]-x)*fz-(pl[3]-z)*fx; if(Math.abs(u)<L/2+.8&&Math.abs(v)<W/2+.8) s.undoPlants.push(pl); else keep.push(pl); } s.plants=keep; } }
+// flags: 1 burnt out, 2 flat tyres, 4 a wheel gone (on a block), 8 bonnet up, 16 glass broken, 32 driver's door open, 64 dusty, 128 rusty
+function placeCar(x,z,yaw,o={}){ if(Math.abs(x)>HALF-3||Math.abs(z)>HALF-3||nearBridge(x,z,6)||inBuilding(x,z,1.2)) return false;
+  if(placedCars.some(c=>Math.hypot(c[0]-x,c[1]-z)<(o.gap||5.2))) return false; const k=kindAt(x,z); if([NK.water,NK.building,NK.wall,NK.steep,NK.pier,NK.low,NK.car,255].includes(k)) return false;
+  const type=o.type||TYPES[Math.floor(CR()*TYPES.length)], col=Math.floor(CR()*12); let f=0;
+  if(o.burnt||CR()<.07) f|=1; if(CR()<.35) f|=2; if(CR()<.07) f|=4; if(CR()<.13) f|=8; if(CR()<.3) f|=16; if(CR()<.16) f|=32; if(CR()<.65) f|=64; if(CR()<.35) f|=128;
+  placedCars.push([x,z]); add(x,z,'cars',[r2(x),r2(z),r2(yaw),type,col,f,Math.floor(CR()*1e6)]); markCar(x,z,yaw,type); return true; }
+const jit=a=>(CR()-.5)*a;
+// where the power died: cars still queued at the dark signals, one waiting at the odd stop sign
+for(const ap of approaches){ const a=ap.a, w=a.w, rx=a.az, rz=-a.ax, ls=w.sec.lanes.filter(l=>w.oneway||l.dir===(a.sg<0?1:-1)); if(!ls.length) continue;
+  const n=ap.sig?1+Math.floor(CR()*3):CR()<.3?1:0; for(let k=0;k<n;k++){ const ln=ls[Math.floor(CR()*ls.length)], ro=a.sg<0?ln.o:-ln.o, d=ap.R+(ap.sig?4:1.2)+3+k*7.4+jit(.8);
+    placeCar(ap.x+a.ax*d+rx*ro,ap.z+a.az*d+rz*ro,Math.atan2(-a.ax,-a.az)+jit(.06),{gap:4.5}); } }
+// the freeway: on the shoulders mostly, some stopped in the lanes, the odd crash
+for(const w of ways){ if(w.cls!=='motorway') continue; const S0=w.sec;
+  for(let s0=60+CR()*120;s0<w.len-20;s0+=130+CR()*170){ if(CR()>.6) continue; const q=along(w,s0), r=CR();
+    const o=r<.55?S0.x1+S0.rs*.5:r<.85?S0.lanes[Math.floor(CR()*S0.lanes.length)].o:S0.x0-S0.ls*.4, crash=CR()<.12, yaw=Math.atan2(q.tx,q.tz)+(crash?jit(1.8):jit(.1));
+    const x=q.x-q.tz*o, z=q.z+q.tx*o; if(placeCar(x,z,yaw)&&crash){ const q2=along(w,s0-5.5); placeCar(q2.x-q2.tz*(o+jit(1.5)),q2.z+q2.tx*(o+jit(1.5)),Math.atan2(q2.tx,q2.tz)+jit(1.2),{gap:3.2}); } } }
+// other roads: pulled over or left in the lane; dirt roads now and then; burnt wrecks off the tracks
+for(const w of ways){ if(w.rank<3&&w.cls!=='track'||w.cls==='motorway'||/_link/.test(w.cls)) continue; const paved=w.paved, step=paved?230:420, p=paved?.45:w.cls==='track'?.08:.16;
+  for(let s0=30+CR()*step;s0<w.len-15;s0+=step*(.7+CR()*.6)){ if(CR()>p) continue; const q=along(w,s0), dir=w.oneway||CR()<.5?1:-1, ls=w.sec.lanes.filter(l=>w.oneway||l.dir===dir);
+    let o; if(!paved) o=w.cls==='track'?dir*(w.w/2+4+CR()*6):jit(1.2); else o=CR()<.6?dir*(w.sec.pave/2-.9):(ls.length?ls[Math.floor(CR()*ls.length)].o:0);
+    placeCar(q.x-q.tz*o,q.z+q.tx*o,Math.atan2(q.tx*dir,q.tz*dir)+jit(w.cls==='track'?2:.12),{burnt:w.cls==='track'}); } }
+// driveways: parked at the house end, nose in more often than not
+for(const w of ways){ if(w.t.service!=='driveway'||w.len<10) continue; const deg=n=>(at.get(n)||[]).length; let end=-1;
+  if(deg(w.nodes[w.nodes.length-1])===1) end=1; else if(deg(w.nodes[0])===1) end=0; if(end<0||CR()>.55) continue;
+  const s0=end?w.len-4:4, q=along(w,s0), nose=CR()<.7?1:-1; placeCar(q.x,q.z,Math.atan2(q.tx,q.tz)+(end?0:Math.PI)+(nose<0?Math.PI:0)+jit(.15)); }
+// parking lots: a few left in the bays
+{ const done=new Set(); for(const s of S) for(const ar of s.areas){ if(ar.kind!=='parking'||ar.pts.length<3) continue; const key=ar.pts.map(p=>p.join(',')).join(';'); if(done.has(key)) continue; done.add(key);
+  let best=0,ang=0; for(let k=0;k<ar.pts.length;k++){ const a=ar.pts[k], b=ar.pts[(k+1)%ar.pts.length], L=Math.hypot(b[0]-a[0],b[1]-a[1]); if(L>best){ best=L; ang=Math.atan2(b[0]-a[0],b[1]-a[1]); } }
+  const [cx,cz]=C.centroid(ar.pts), ca=Math.sin(ang), sa=Math.cos(ang); let n=0;
+  for(let u=-60;u<60&&n<6;u+=2.8) for(let v=-60;v<60&&n<6;v+=6.5){ const x=cx+u*ca+v*sa, z=cz+u*sa-v*ca; if(x<s.x0||x>=s.x0+SEC||z<s.z0||z>=s.z0+SEC||!C.inPoly(x,z,ar.pts)||CR()>.12) continue;
+    if(placeCar(x,z,ang+Math.PI/2+(CR()<.5?0:Math.PI)+jit(.06),{gap:2.6})) n++; } } }
+
 // ---------- write ----------
 let sum={added,signs:0,signals:0,junctions:junctionOut.length,medians:0,changed:0};
 for(const s of S){ s.rk.undo={nav:[...s.undoNav].flatMap(([i,[k,v]])=>[i,k,v]),plants:s.undoPlants}; sum.changed+=s.undoNav.size;
   s.nav.kind=b64(s.kindA); s.nav.sp=b64(s.spA); delete s.kindA; delete s.spA; delete s.undoNav; delete s.undoPlants; delete s.Hn;
-  sum.signs+=s.rk.signs.length; sum.signals+=s.rk.signals.length; sum.medians+=s.rk.medians.length;
+  sum.signs+=s.rk.signs.length; sum.cars=(sum.cars||0)+s.rk.cars.length; sum.poles=(sum.poles||0)+s.rk.poles.length; sum.lights=(sum.lights||0)+s.rk.lights.length; sum.signals+=s.rk.signals.length; sum.medians+=s.rk.medians.length;
   const js=JSON.stringify(s); fs.writeFileSync(`${dir}/s_${s.c}_${s.r}.json`,js); const e=IDX.sectors.find(q=>q.c===s.c&&q.r===s.r); e.bytes=js.length; e.gz=zlib.gzipSync(js,{level:9}).length; e.plants=s.plants.length; }
-IDX.roadKit={osm:osmFile.split('/').pop(),matched:matched.size,ways:ways.length};
+IDX.roadKit={osm:osmFile.split('/').pop(),power:fs.existsSync(powerFile)?powerFile.split('/').pop():'',matched:matched.size,ways:ways.length}; IDX.navLabels=C.NAVLABEL;
 fs.writeFileSync(`${dir}/index.json`,JSON.stringify(IDX));
 console.log('ways',ways.length,'matched',matched.size,sum);

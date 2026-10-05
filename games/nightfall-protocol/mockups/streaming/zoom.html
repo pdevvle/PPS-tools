@@ -949,10 +949,12 @@ function bake(D,log=()=>{}){
   const camps=F.bridges.filter(b=>b.len>90).map(b=>{ const s=b.ab+9; let k=0; while(k<b.d.length-1&&b.L[k+1]<s) k++; return {bridge:F.bridges.indexOf(b),k}; });
   return {H,NXg,NZg,X0,Z0,st,F,walls,plants,nav:{NS,NX,sp,kind},houses:new Set(houses),camps,WASH};
 }
-const NAVKIND={open:0,asphalt:1,dirt:2,path:3,lot:4,yard:5,wash:6,brush:7,hill:8,water:9,building:10,wall:11,steep:12,low:13,pier:14};
-const NAVLABEL=['Open desert','Asphalt','Dirt road','Footpath','Paved lot','Yard','Sand wash','Brush','Hillside','Water','Building','Wall','Too steep','No headroom','Bridge pier'];
+const NAVKIND={open:0,asphalt:1,dirt:2,path:3,lot:4,yard:5,wash:6,brush:7,hill:8,water:9,building:10,wall:11,steep:12,low:13,pier:14,car:15};
+const NAVLABEL=['Open desert','Asphalt','Dirt road','Footpath','Paved lot','Yard','Sand wash','Brush','Hillside','Water','Building','Wall','Too steep','No headroom','Bridge pier','Wreck'];
+// abandoned cars: length and width in metres, shared by the road pass (movement grid) and the car models
+const CARDIM={sedan:[4.8,1.84],hatch:[4.15,1.76],suv:[4.85,1.94],pickup:[5.6,2.0],van:[5.1,2.0]};
 const SWIM=.2;
-const api={TAU,rng,inPoly,segDist,bbox,centroid,area,densify,polyDist,clipRect,clipLine,segX,ROADW,roadW,isDrive,isPaved,isBridge,roadSurf,roadSection,bridgeY,SegIndex,BoxIndex,bake,NAVKIND,NAVLABEL,SWIM};
+const api={TAU,rng,inPoly,segDist,bbox,centroid,area,densify,polyDist,clipRect,clipLine,segX,ROADW,roadW,isDrive,isPaved,isBridge,roadSurf,roadSection,bridgeY,SegIndex,BoxIndex,bake,NAVKIND,NAVLABEL,CARDIM,SWIM};
 if(typeof module!=='undefined') module.exports=api; else root.SectorCore=api;
 })(typeof self!=='undefined'?self:this);
 const FigureKit=(()=>{
@@ -1250,7 +1252,7 @@ return {figure, genFace, POSES, applyPose, mats, inkUp, STATES};
 (function(root){
 function RoadKit(o){
 const {THREE,C,heightAt,IDX,renderer,mat,SHAPES,sectorGeo}=o, TAU=Math.PI*2;
-const aniso=renderer.capabilities.getMaxAnisotropy();
+const aniso=renderer.capabilities.getMaxAnisotropy(), CK=root.CarKit?root.CarKit({mat,C}):null;
 
 // ---------- textures, drawn once ----------
 function canvasTex(w,h,draw,seed){ const c=document.createElement('canvas'); c.width=w; c.height=h; const g=c.getContext('2d'), r=C.rng(seed);
@@ -1369,6 +1371,8 @@ function plate(B,F,pts,c,dz=.03,back=true){ const xs=pts.map(p=>p[0]), ys=pts.ma
 const rect=(w,h,y0)=>[[-w/2,y0],[w/2,y0],[w/2,y0+h],[-w/2,y0+h]];
 const octo=(r,y)=>Array.from({length:8},(_,i)=>{ const a=(i+.5)/8*TAU; return [Math.cos(a)*r,y-Math.sin(a)*r]; }).reverse();
 const METAL=mat('#8e9396'), POST=mat('#7f8589'), GALV=mat('#a9aeb0'), HEAD=mat('#242424'), RED=mat('#4a1612'), AMBER=mat('#4d3a10'), GREEN=mat('#123d2a'), WOOD=mat('#6b5a45'), PIPE=mat('#8b8f8c'), DARK=mat('#2b2724'), BERM=mat('#b99d74'), CONC=mat('#c4bdb0'), REFL=mat('#e8e4d8'), REFLA=mat('#d9a12a');
+const WOODP=mat('#6a5844'), POLE69=mat('#7a7166'), INSUL=mat('#c9c2b2'), CAN=mat('#8d9193'), LAMP=mat('#8f9496'), LENS=mat('#d9d4bf'), BRONZE=mat('#3b3530'), TRANS=mat('#7f8a80');
+const MESH=(()=>{ const m=new THREE.MeshStandardMaterial({color:0x6d6f6c,transparent:true,opacity:.35,side:THREE.DoubleSide,depthWrite:false}); m.userData.keep=true; return m; })();
 const lens=(B,F,lx,ly,lz,r,m)=>{ for(let i=0;i<8;i++){ const a=i/8*TAU, b=(i+1)/8*TAU; B.tri(m,F(lx,ly,lz),F(lx+Math.cos(a)*r,ly+Math.sin(a)*r,lz),F(lx+Math.cos(b)*r,ly+Math.sin(b)*r,lz)); } };
 
 // ---------- ground paint under the roads: dusty margins, and rock exposed where the road was cut into a hill ----------
@@ -1484,7 +1488,39 @@ function* build(s,grp){ const D=s.data, rk=D.rk||{}, J=rk.junctions||[], rnd=C.r
     for(const h of sg.h){ const hx=-h; box(B,HEAD,F,hx,5.25,.05,.17,.5,.13); plate(B,F,[[hx-.31,4.65],[hx+.31,4.65],[hx+.31,5.85],[hx-.31,5.85]],backCell(),-.1);
       lens(B,F,hx,5.6,.19,.12,RED); lens(B,F,hx,5.25,.19,.12,AMBER); lens(B,F,hx,4.9,.19,.12,GREEN); box(B,GALV,F,hx,5.85,0,.03,.12,.03); }
     if(sg.n&&L>3.4) plate(B,F,rect(1.6,.3,6.15).map(([a,b])=>[a-Math.min(L*.5,2.2),b]),bladeCell(sg.n),.12);
-    box(B,METAL,F,.1,1.1,.2,.06,.09,.04); }
+    box(B,METAL,F,.1,1.1,.2,.06,.09,.04);
+    tube(B,GALV,F(0,7.2,0),F(0,9.4,0),.09,6); tube(B,GALV,F(0,9.3,0),F(-2.6,9.7,0),.05,5); box(B,LAMP,F,-2.75,9.62,0,.36,.07,.17); }
+  // ---------- power: poles, crossarms and insulators; wires sag between them; service drops to the houses ----------
+  const W=[], wire=(a,b,sag)=>{ const n=8; let p=a; for(let q=1;q<=n;q++){ const t=q/n, c=[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t-4*sag*t*(1-t),a[2]+(b[2]-a[2])*t]; W.push(...p,...c); p=c; } };
+  // where the conductors hang on each kind of pole: [across the line, height]
+  const ATT=[[[-1.6,17.2],[1.6,17.2],[-1.6,15.2],[1.6,15.2],[-1.6,13.2],[1.6,13.2],[0,20.1]],[[1.5,17.2],[-1.5,15.6],[1.5,14],[0,19.1]],[[-1,10.42],[1,10.42],[0,11.2],[.22,8.6]]];
+  const att=(x,z,yaw,t,k,flip)=>{ const [o,h]=ATT[t][k], F=frame(x,heightAt(x,z),z,yaw); return F(o*flip,h,0); };
+  for(const p of rk.poles||[]){ const F=frame(p.x,heightAt(p.x,p.z),p.z,p.y);
+    if(p.t===2){ tube(B,WOODP,F(0,-.5,0),F(0,11.05,0),.14,7); box(B,WOODP,F,0,10.25,0,1.25,.05,.06);
+      for(const [o,h] of ATT[2]) box(B,INSUL,F,o,h-.16,0,.05,.12,.05);
+      if(p.tf){ tube(B,CAN,F(0,7.1,.4),F(0,8.05,.4),.28,8); box(B,CAN,F,0,7.6,.2,.06,.2,.15); }
+      if(p.l!==undefined){ const L2=frame(p.x,heightAt(p.x,p.z),p.z,p.l); tube(B,GALV,L2(0,8.8,0),L2(0,9.3,2.2),.045,5); box(B,LAMP,L2,0,9.26,2.45,.17,.07,.36); } }
+    else { const H=p.t===0?20.2:19.2; tube(B,POLE69,F(0,-.6,0),F(0,H,0),.32,8); tube(B,POLE69,F(0,H-.2,0),F(0,H+.3,0),.05,4);
+      for(const [o,h] of ATT[p.t].slice(0,-1)) tube(B,INSUL,F(0,h,0),F(o,h,0),.07,6); }
+    if(p.g!==undefined){ const top=p.t===2?F(0,9.6,0):F(0,16,0), gx=p.x+Math.sin(p.g)*6, gz=p.z+Math.cos(p.g)*6; W.push(...top,gx,heightAt(gx,gz),gz); } }
+  for(const [x1,z1,y1,x2,z2,y2,t] of rk.spans||[]){ const flip=Math.cos(y1)*Math.cos(y2)+Math.sin(y1)*Math.sin(y2)<0?-1:1, span=Math.hypot(x2-x1,z2-z1);
+    for(let k=0;k<ATT[t].length;k++) wire(att(x1,z1,y1,t,k,1),att(x2,z2,y2,t,k,flip),span*(t===2?.022:.03)); }
+  for(const [px,pz,py,hx,hz] of rk.drops||[]){ const a=frame(px,heightAt(px,pz),pz,py)(.2,8.6,0); wire(a,[hx,heightAt(hx,hz)+3.1,hz],.35); }
+  if(W.length){ const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(W,3)); const ln=new THREE.LineSegments(g,new THREE.LineBasicMaterial({color:0x26221e})); s.props.add(ln); }
+  // ---------- street lights (dark) and the substation ----------
+  for(const l of rk.lights||[]){ if(l.k==='sub'){ const ring=l.pts, [cx,cz]=C.centroid(ring);
+      for(let k=0;k<ring.length;k++){ const a=ring[k], b=ring[(k+1)%ring.length], n=Math.max(1,Math.round(Math.hypot(b[0]-a[0],b[1]-a[1])/3)); let prev=null;
+        for(let q=0;q<=n;q++){ const x=a[0]+(b[0]-a[0])*q/n, z=a[1]+(b[1]-a[1])*q/n, y=heightAt(x,z); tube(B,GALV,[x,y-.2,z],[x,y+2.4,z],.035,4); if(prev){ B.quad(MESH,[prev[0],prev[1],prev[2]],[x,y,z],[x,y+2.3,z],[prev[0],prev[1]+2.3,prev[2]]); tube(B,GALV,[prev[0],prev[1]+2.35,prev[2]],[x,y+2.35,z],.02,4); } prev=[x,y,z]; } }
+      const ang=Math.atan2(ring[1][0]-ring[0][0],ring[1][1]-ring[0][1]);
+      for(const [du,dv] of [[-3.5,0],[3.5,0]]){ const F=frame(cx,heightAt(cx,cz),cz,ang); box(B,TRANS,F,du,1.1,dv,1.3,1.1,1.0); for(let q=-2;q<=2;q++) box(B,TRANS,F,du+q*.5,1.0,dv+1.15,.06,.8,.15);
+        for(const o of [-.6,0,.6]) tube(B,INSUL,F(du+o,2.2,dv),F(du+o,3.1,dv),.1,6); }
+      const F=frame(cx,heightAt(cx,cz),cz,ang); for(const du of [-6,6]) for(const dv of [-2.5,2.5]) tube(B,GALV,F(du,-.2,dv),F(du,7,dv),.12,6); for(const du of [-6,6]) tube(B,GALV,F(du,7,-2.5),F(du,7,2.5),.1,6); tube(B,GALV,F(-6,6.5,0),F(6,6.5,0),.08,6);
+      continue; }
+    const y0=heightAt(l.x,l.z), F=frame(l.x,y0,l.z,l.y);
+    if(l.k==='davit'){ tube(B,GALV,F(0,-.4,0),F(0,12,0),.13,8); tube(B,GALV,F(0,11.8,0),F(0,12.5,1.2),.07,6); tube(B,GALV,F(0,12.5,1.2),F(0,12.6,3),.06,6); box(B,LAMP,F,0,12.55,3.25,.2,.08,.42); box(B,CONC,F,0,.15,0,.35,.35,.35); }
+    else { box(B,BRONZE,F,0,3.8,0,.08,4.3,.08); box(B,BRONZE,F,0,8.1,.35,.3,.07,.25); box(B,LENS,F,0,8.02,.35,.26,.02,.21); box(B,CONC,F,0,.25,0,.3,.45,.3); } }
+  // ---------- abandoned cars ----------
+  if(CK) for(const c of rk.cars||[]) CK.add(B,c,(x,z)=>HM(x,z)+.03);
   // cable median barrier: posts every 3 m, three cables
   const CB=new UB();
   for(const md of rk.medians||[]){ const pts=C.densify(md.pts,3); let prev=null; for(const [x,z] of pts){ const y=heightAt(x,z); box(CB,GALV,(a,b,c)=>[x+a,y+b,z+c],0,.35,0,.035,.45,.035);
@@ -1511,6 +1547,105 @@ function* build(s,grp){ const D=s.data, rk=D.rk||{}, J=rk.junctions||[], rnd=C.r
 return {paintGround,build,atlas};
 }
 root.RoadKit=RoadKit;
+})(typeof self!=='undefined'?self:this);
+// ---------- Nightfall car kit: abandoned cars built from code, ink-faceted ----------
+// CarKit({mat,C}).add(B,rec,ground) adds one car to a batch B (B.tri / B.quad with a material first).
+// rec = [x,z,yaw,type,colour,flags,seed] as written by tools/stream/roads-bake.js; ground(x,z) gives the height.
+// Flags: 1 burnt out, 2 flat tyres, 4 a wheel gone (corner on a block), 8 bonnet up, 16 glass broken,
+// 32 driver's door open, 64 dusty, 128 rusty. Bodies are lofted along their length from side-profile stations.
+(function(root){
+function CarKit(o){
+const {mat,C}=o, TAU=Math.PI*2;
+// desert-faded paint: white, silver, champagne, black, oxblood, navy, olive, tan, cream, gunmetal, bronze, rust red
+const PAINT=['#d9d6cf','#b3b6b8','#cbbd9f','#2c2d2f','#6f2a26','#2f4766','#4c5a3e','#b0976f','#e2dbc6','#5a5f66','#8a6a3a','#94402c'];
+const hex=c=>[1,3,5].map(i=>parseInt(c.slice(i,i+2),16)), toHex=a=>'#'+a.map(v=>Math.round(Math.max(0,Math.min(255,v))).toString(16).padStart(2,'0')).join('');
+const mix=(a,b,k)=>{ const A=hex(a), Bc=hex(b); return toHex(A.map((v,i)=>v+(Bc[i]-v)*k)); };
+// side profiles: stations [u from the front bumper, top height]; axles, wheel radius, ride height, belt line, where the cabin is
+const T={
+  sedan:{L:4.8,W:1.84,R:.33,yb:.3,belt:.98,ax:[1.02,3.78],prof:[[0,.7],[.14,.82],[1.22,.95],[1.98,1.43],[3.08,1.43],[3.86,1.01],[4.66,.99],[4.8,.86]],hood:1.22,roof:[1.98,3.08],deck:3.86,bp:2.55,doors:[1.3,2.5,3.6],paintBumper:true},
+  hatch:{L:4.15,W:1.76,R:.31,yb:.28,belt:.96,ax:[.86,3.38],prof:[[0,.68],[.13,.8],[.98,.92],[1.72,1.45],[3.3,1.42],[4.02,1.08],[4.15,.92]],hood:.98,roof:[1.72,3.3],deck:4.02,bp:2.35,doors:[1.05,2.3,3.25],paintBumper:true,hatch:true},
+  suv:{L:4.85,W:1.94,R:.37,yb:.38,belt:1.12,ax:[1.12,3.92],prof:[[0,.86],[.15,.97],[1.08,1.1],[1.82,1.78],[4.52,1.76],[4.76,1.68],[4.85,1.05]],hood:1.08,roof:[1.82,4.52],deck:4.76,bp:2.75,doors:[1.15,2.7,3.85],paintBumper:true,rearFace:true,rails:true},
+  pickup:{L:5.6,W:2.0,R:.38,yb:.42,belt:1.12,ax:[1.15,4.55],prof:[[0,.98],[.15,1.06],[1.3,1.14],[2.02,1.86],[2.92,1.86],[2.98,1.86],[3.02,1.12],[5.5,1.12],[5.6,1.08]],hood:1.3,roof:[2.02,2.92],deck:2.98,bed:[3.02,5.6],bp:2.95,doors:[1.38,2.9],chrome:true},
+  van:{L:5.1,W:2.0,R:.36,yb:.38,belt:1.16,ax:[.98,4.2],prof:[[0,.98],[.14,1.06],[.72,1.18],[1.38,2.05],[4.95,2.05],[5.1,1.96]],hood:.72,roof:[1.38,4.95],deck:4.98,bp:2.1,doors:[.8,2.0,3.05,4.0],sideGlass:[1.38,2.05],rearFace:true,chrome:true}};
+
+function add(B,rec,ground){
+  const [x,z,yaw,type,ci,fl,seed]=rec, S=T[type]||T.sedan, r=C.rng(seed||1), L=S.L, W=S.W, hw0=W/2;
+  const burnt=fl&1, flat=fl&2, missing=fl&4, bonnet=fl&8, broken=fl&16, door=fl&32, dusty=fl&64, rusty=fl&128;
+  let paint=PAINT[ci%PAINT.length]; if(rusty) paint=mix(paint,'#7a4a2c',.25); if(dusty) paint=mix(paint,'#cdb48c',.3); if(burnt) paint='#3a3330';
+  const BODY=mat(paint), LOWER=mat(burnt?'#2a2421':rusty?'#6e4127':mix(paint,'#1d1b19',.35)), TRIM=mat('#232220'), GLASS=mat(burnt?'#151311':dusty?'#4f5654':'#2b343a'), HOLE=mat('#141312'),
+    CHROME=mat(burnt?'#4a3a30':'#b5b7b3'), RUST=mat('#6e4127'), LIGHT=mat('#d8dcd8'), TAIL=mat('#8a1c18'), TYRE=mat('#232120'), RIM=mat(burnt?'#5a3a28':r()<.5?'#a6a9aa':'#3a3b3c'), INSIDE=mat('#2c2723'), LINER=mat('#2e2d2b');
+  // pose: the four corners sit on the ground; flats and a missing wheel drop their corner
+  const fx=Math.sin(yaw), fz=Math.cos(yaw), rx=-Math.cos(yaw), rz=Math.sin(yaw);
+  const XZ=(u,v)=>[x+fx*(L/2-u)+rx*v,z+fz*(L/2-u)+rz*v];
+  const drop=[0,0,0,0], lost=missing?Math.floor(r()*4):-1; if(burnt) for(let i=0;i<4;i++) drop[i]=S.R*.38; if(flat) for(let i=0;i<4;i++) if(r()<.6) drop[i]=Math.max(drop[i],.09); if(lost>=0) drop[lost]=Math.max(.05,S.R-.2);
+  const cor=[[S.ax[0],-hw0],[S.ax[0],hw0],[S.ax[1],-hw0],[S.ax[1],hw0]].map(([u,v],i)=>ground(...XZ(u,v))-drop[i]);
+  const P=(u,v,y)=>{ const [px,pz]=XZ(u,v), a=Math.max(0,Math.min(1,(u-S.ax[0])/(S.ax[1]-S.ax[0]))), b=(v+hw0)/W, g=(cor[0]*(1-b)+cor[1]*b)*(1-a)+(cor[2]*(1-b)+cor[3]*b)*a; return [px,g+y,pz]; };
+  const box=(m,u0,u1,v0,v1,y0,y1)=>{ const c=[[u0,v0],[u1,v0],[u1,v1],[u0,v1]]; for(let i=0;i<4;i++){ const [a,b]=c[i], [a2,b2]=c[(i+1)%4]; B.quad(m,P(a,b,y0),P(a2,b2,y0),P(a2,b2,y1),P(a,b,y1)); } B.quad(m,P(u0,v0,y1),P(u1,v0,y1),P(u1,v1,y1),P(u0,v1,y1)); };
+  // stations: the profile plus wheel arches and the B pillar
+  const topAt=u=>{ const p=S.prof; for(let i=0;i<p.length-1;i++) if(u<=p[i+1][0]) return p[i][1]+(p[i+1][1]-p[i][1])*(u-p[i][0])/((p[i+1][0]-p[i][0])||1); return p[p.length-1][1]; };
+  const arch=S.R*2+.05, us=new Set(S.prof.map(p=>p[0])); for(const a of S.ax) for(const d of [-.56,-.44,-.3,.3,.44,.56]) us.add(+(a+d).toFixed(3)); us.add(S.bp-.08); us.add(S.bp+.08); for(const d of S.doors) us.add(d);
+  const U=[...us].filter(u=>u>=0&&u<=L).sort((a,b)=>a-b);
+  const ybAt=u=>{ for(const a of S.ax){ const d=Math.abs(u-a); if(d<.44) return arch; if(d<.56) return S.yb+(arch-S.yb)*(.56-d)/.12; } return S.yb; };
+  const inBed=u=>S.bed&&u>=S.bed[0]-1e-3, cabin=u=>u>=S.roof[0]-1e-3&&u<=S.roof[1]+1e-3;
+  const sec=u=>{ const top=topAt(u), belt=Math.min(S.belt,top-.02), taper=u<.5?.9+u*.2:u>L-.4?.9+(L-u)*.25:1, hw=hw0*taper, yb=ybAt(u), cab=top>belt+.2;
+    if(inBed(u)){ const fl2=S.yb+.5; return [[hw*.96,yb],[hw,yb+.2],[hw,belt],[hw-.06,belt],[hw-.07,fl2],[0,fl2]]; }
+    const rw=cab?hw*.8:hw*.92, crown=cab?.05:.035; return [[hw*.96,yb],[hw,yb+.2],[hw,belt],[rw,top],[rw*.5,top+crown*.8],[0,top+crown]]; };
+  const SEC=U.map(sec);
+  const windshield=(a,b)=>a>=S.hood-1e-3&&b<=S.roof[0]+1e-3, rearWin=(a,b)=>a>=S.roof[1]-1e-3&&b<=S.deck+1e-3&&!S.bed;
+  const sideGlass=(a,b)=>{ if(S.sideGlass&&(a<S.sideGlass[0]-1e-3||b>S.sideGlass[1]+1e-3)) return false; return cabin(a)&&cabin(b)&&!(a>=S.bp-.081&&b<=S.bp+.081); };
+  const brokenAt=k=>broken&&C.rng(seed+k*13)()<.45;
+  const doorGap=(side,a,b)=>door&&side<0&&a>=S.doors[0]-1e-3&&b<=S.bp-.079;
+  for(let i=0;i<U.length-1;i++){ const a=U[i], b=U[i+1], A=SEC[i], Bs=SEC[i+1], bedSeg=inBed(a)&&inBed(b);
+    for(const side of [-1,1]){ const p=(s,k,u)=>P(u,s[k][0]*side,s[k][1]);
+      for(let k=0;k<5;k++){ let m=k===0?LOWER:BODY;
+        if(k===2){ if(sideGlass(a,b)) m=burnt?HOLE:brokenAt(i*2+(side>0)) ?HOLE:GLASS; if(doorGap(side,a,b)) continue; }
+        if(k===1&&doorGap(side,a,b)) continue;
+        if(k>=3){ if(bedSeg) m=LINER; else if(windshield(a,b)) m=burnt?HOLE:broken&&r()<.3?mat('#5d6569'):GLASS; else if(rearWin(a,b)) m=burnt||brokenAt(99)?HOLE:GLASS; if(bonnet&&b<=S.hood+1e-3) continue; }
+        if(burnt&&k>=3&&m===BODY&&r()<.4) m=RUST;
+        B.quad(m,p(A,k,a),p(Bs,k,b),p(Bs,k+1,b),p(A,k+1,a)); } }
+    B.quad(TRIM,P(a,-A[0][0],A[0][1]),P(b,-Bs[0][0],Bs[0][1]),P(b,Bs[0][0],Bs[0][1]),P(a,A[0][0],A[0][1])); }
+  // end caps: front and rear faces, fanned from the middle
+  for(const [i,u] of [[0,0],[U.length-1,L]]){ const s=SEC[i], ring=[...s.map(([v,y])=>[v,y]),...s.slice().reverse().map(([v,y])=>[-v,y])], c=P(u,0,(s[0][1]+s[5][1])/2);
+    for(let k=0;k<ring.length-1;k++) B.tri(BODY,c,P(u,...ring[k]),P(u,...ring[k+1])); }
+  const front=-.012, rear=L+.012, bh=S.belt;
+  // bumpers, grille, lamps, plates
+  const bumpM=burnt?RUST:S.chrome?CHROME:S.paintBumper?BODY:TRIM;
+  box(bumpM,-.06,.12,-hw0*.94,hw0*.94,S.yb+.02,S.yb+.3); box(TRIM,-.07,.1,-hw0*.9,hw0*.9,S.yb-.04,S.yb+.04);
+  if(S.bed) box(BODY,L-.07,L,-hw0+.07,hw0-.07,S.yb+.48,S.belt);   // tailgate
+  box(bumpM,L-.12,L+.06,-hw0*.94,hw0*.94,S.yb+.02,S.yb+.3);
+  box(burnt?HOLE:TRIM,front-.01,.05,-W*.22,W*.22,S.yb+.34,Math.min(bh-.06,S.yb+.62));
+  for(const sd of [-1,1]){ box(burnt?HOLE:LIGHT,front-.01,.06,sd*W*.3-.17*sd,sd*W*.3+.17*sd,bh-.3,bh-.14);
+    box(burnt?HOLE:TAIL,L-.05,rear+.005,sd*hw0*.86-.16*sd,sd*hw0*.86+.04*sd,bh-.34,bh-.06); }
+  box(mat('#d9d6c8'),rear-.02,rear+.02,-.16,.16,S.yb+.34,S.yb+.5);
+  // mirrors, door seams and handles
+  for(const sd of [-1,1]){ const mu=S.hood+.18, mv=sd*(hw0+.1); box(BODY,mu,mu+.12,mv-.06*sd,mv+.07*sd,bh+.06,bh+.22); box(TRIM,mu-.005,mu+.004,mv-.05*sd,mv+.06*sd,bh+.08,bh+.2);
+    for(const d of S.doors){ if(door&&sd<0&&d===S.doors[0]) continue; const s=sec(d); B.quad(TRIM,P(d-.012,sd*(s[1][0]+.006),S.yb+.24),P(d+.012,sd*(s[1][0]+.006),S.yb+.24),P(d+.012,sd*(s[2][0]+.006),bh-.02),P(d-.012,sd*(s[2][0]+.006),bh-.02)); }
+    for(let k=0;k<S.doors.length-1;k++){ const hu=S.doors[k+1]-.28; if(door&&sd<0&&k===0) continue; box(TRIM,hu,hu+.16,sd*(hw0+.005),sd*(hw0+.03),bh-.16,bh-.11); } }
+  // wheels: tyre, sidewall and rim; burnt ones are bare rims, a missing one leaves the corner on a cinder block
+  [[S.ax[0],-1],[S.ax[0],1],[S.ax[1],-1],[S.ax[1],1]].forEach(([u,sd],i)=>{ if(i===lost){ box(mat('#9a968e'),u-.2,u+.2,sd*(hw0-.45),sd*(hw0-.1),-.02,S.yb+.02); return; }
+    const R=burnt?S.R*.62:S.R, cy=R-(flat&&drop[i]>0&&!burnt?.06:0), v0=sd*(hw0-.25), v1=sd*(hw0-.02), k=12, ring=(rad,v,t)=>P(u+Math.cos(t)*rad,v,cy+Math.sin(t)*rad);   // a flat sits on its rim
+    for(let q=0;q<k;q++){ const t0=q/k*TAU, t1=(q+1)/k*TAU; if(!burnt) B.quad(TYRE,ring(S.R,v0,t0),ring(S.R,v0,t1),ring(S.R,v1,t1),ring(S.R,v1,t0));
+      if(!burnt) B.quad(TYRE,ring(S.R,v1,t0),ring(S.R,v1,t1),ring(S.R*.64,v1+sd*.012,t1),ring(S.R*.64,v1+sd*.012,t0));
+      B.tri(RIM,P(u,v1+sd*.03,cy),ring(S.R*.62,v1+sd*.015,t0),ring(S.R*.62,v1+sd*.015,t1));
+      if(burnt) B.quad(RIM,ring(S.R*.62,v0,t0),ring(S.R*.62,v0,t1),ring(S.R*.62,v1+sd*.015,t1),ring(S.R*.62,v1+sd*.015,t0)); }   // bare rim barrels
+    for(let q=0;q<5;q++){ const t=q/5*TAU; box(TRIM,u+Math.cos(t)*S.R*.3-.02,u+Math.cos(t)*S.R*.3+.02,v1+sd*.02,v1+sd*.035,cy+Math.sin(t)*S.R*.3-.02,cy+Math.sin(t)*S.R*.3+.02); } });
+  // what the type carries
+  if(S.rails) for(const sd of [-1,1]) box(burnt?RUST:TRIM,S.roof[0]+.25,S.roof[1]-.15,sd*hw0*.68,sd*hw0*.74,topAt(2.5)+.05,topAt(2.5)+.1);
+  if(S.rearFace){ const top=topAt(L-.01); B.quad(burnt||brokenAt(7)?HOLE:GLASS,P(rear+.002,-hw0*.7,bh+.06),P(rear+.002,hw0*.7,bh+.06),P(rear+.002,hw0*.62,top-.12),P(rear+.002,-hw0*.62,top-.12)); }
+  if(S.bed){ B.quad(burnt?HOLE:GLASS,P(S.bed[0]-.075,-hw0*.62,S.belt+.12),P(S.bed[0]-.075,hw0*.62,S.belt+.12),P(S.bed[0]-.075,hw0*.56,1.72),P(S.bed[0]-.075,-hw0*.56,1.72));
+    B.quad(TRIM,P(L-.005,-hw0*.95,S.belt-.04),P(L-.005,hw0*.95,S.belt-.04),P(L-.005,hw0*.95,S.belt-.02),P(L-.005,-hw0*.95,S.belt-.02));
+    if(r()<.6) for(let q=0;q<1+Math.floor(r()*3);q++){ const u=S.bed[0]+.4+r()*1.6, v=(r()-.5)*1.1, c=[mat('#8a6a48'),mat('#4f5a3a'),mat('#a33a2a')][Math.floor(r()*3)]; box(c,u,u+.4+r()*.3,v,v+.35+r()*.2,S.yb+.5,S.yb+.75+r()*.35); } }
+  // bonnet up: the panel propped on its hinge over a dark engine bay
+  if(bonnet){ const s0=sec(S.hood), h=topAt(S.hood); box(INSIDE,.3,S.hood-.05,-hw0*.8,hw0*.8,S.yb+.3,topAt(.7)-.1); const ang=1.05, L0=S.hood-.1;
+    const hp=(du,v)=>{ const u=S.hood-Math.cos(ang)*du, y=h+Math.sin(ang)*du; return P(u,v,y); }; B.quad(BODY,hp(0,-s0[3][0]),hp(0,s0[3][0]),hp(L0,s0[3][0]*.95),hp(L0,-s0[3][0]*.95)); }
+  // driver's door hanging open about its front hinge, the seats behind it
+  if(door){ const d0=S.doors[0], d1=S.bp-.08, s=sec(d0), ang=.95, len=d1-d0, hv=-(s[1][0]);
+    const dp=(du,y)=>P(d0+Math.cos(ang)*du,hv-Math.sin(ang)*du,y); B.quad(BODY,dp(0,S.yb+.2),dp(len,S.yb+.2),dp(len,S.belt),dp(0,S.belt)); B.quad(burnt?HOLE:GLASS,dp(.08,S.belt),dp(len,S.belt),dp(len*.9,S.belt+.38),dp(.25,S.belt+.38)); }
+  if(door||broken||burnt){ box(INSIDE,S.hood+.45,S.roof[1]-.25,-hw0*.78,hw0*.78,S.yb+.25,S.belt+.18); }
+}
+return {add,TYPES:T};
+}
+root.CarKit=CarKit;
 })(typeof self!=='undefined'?self:this);
 // ---------- Motion: procedural movement for FigureKit figures ----------
 // One call per figure per frame: Motion.update(fig, state, dt), after the runtime has placed fig.root (position on the
@@ -2388,8 +2523,8 @@ const CREASE=new THREE.LineBasicMaterial({color:0x2d241d, transparent:true, opac
 function inkOn(group){ const list=[]; group.traverse(o=>{ if(o.isMesh && !o.userData.ink && !o.userData.noInk) list.push(o); });
   for(const o of list){ const sh=o.isInstancedMesh?new THREE.InstancedMesh(o.geometry,INK,o.count):new THREE.Mesh(o.geometry,INK); if(o.isInstancedMesh) sh.instanceMatrix=o.instanceMatrix;
     sh.userData.ink=true; sh.matrixAutoUpdate=false; o.add(sh);
-    if(!o.isInstancedMesh){ let eg=creaseOf.get(o.geometry); if(!eg){ eg=new THREE.EdgesGeometry(o.geometry,28); creaseOf.set(o.geometry,eg); } const ln=new THREE.LineSegments(eg,CREASE); ln.userData.ink=true; ln.matrixAutoUpdate=false; o.add(ln); } } }
-function inkOff(group){ const kill=[]; group.traverse(o=>{ if(o.userData.ink) kill.push(o); }); for(const o of kill){ o.parent.remove(o); if(o.isLineSegments){ o.geometry.dispose(); for(const [k,v] of creaseOf) if(v===o.geometry) creaseOf.delete(k); } } }
+    if(!o.isInstancedMesh){ const own=o.userData.crease; let eg=own||creaseOf.get(o.geometry); if(!eg){ eg=new THREE.EdgesGeometry(o.geometry,28); creaseOf.set(o.geometry,eg); } const ln=new THREE.LineSegments(eg,CREASE); if(own) ln.userData.keepGeo=true; ln.userData.ink=true; ln.matrixAutoUpdate=false; o.add(ln); } } }
+function inkOff(group){ const kill=[]; group.traverse(o=>{ if(o.userData.ink) kill.push(o); }); for(const o of kill){ o.parent.remove(o); if(o.isLineSegments&&!o.userData.keepGeo){ o.geometry.dispose(); for(const [k,v] of creaseOf) if(v===o.geometry) creaseOf.delete(k); } } }
 
 // ---------- the block ----------
 const IDX=await (await fetch('block/index.json')).json();
@@ -2545,6 +2680,8 @@ function* buildSector(s){
       for(let i=0;i<pts.length;i++){ const j=(i+1)%pts.length, a=pts[i], b=pts[j], A=outer[i], Bo=outer[j]; B.quad(coping,[a[0],P.level+.1,a[1]],[b[0],P.level+.1,b[1]],[Bo[0],P.level+.1,Bo[1]],[A[0],P.level+.1,A[1]]); B.quad(coping,[A[0],P.low-.3,A[1]],[Bo[0],P.low-.3,Bo[1]],[Bo[0],P.level+.1,Bo[1]],[A[0],P.level+.1,A[1]]); B.quad(tile,[a[0],P.level-.6,a[1]],[b[0],P.level-.6,b[1]],[b[0],P.level+.1,b[1]],[a[0],P.level+.1,a[1]]); } }
     B.meshes().forEach(me=>s.props.add(me)); if(rocks.length){ const rk=new THREE.InstancedMesh(sectorGeo(SHAPES.rock,s),mat('#9c968c'),rocks.length); rocks.forEach((m,i)=>rk.setMatrixAt(i,m)); rk.castShadow=true; s.props.add(rk); } }
   yield 'structures';
+  // crease lines for the ink worked out now, one mesh a step, so taking the centre doesn't stall on them
+  for(const o of [...s.props.children]) if(o.isMesh&&!o.isInstancedMesh&&!o.userData.noInk&&!o.userData.crease){ o.userData.crease=new THREE.EdgesGeometry(o.geometry,28); yield 'creases'; }
   buildPlants(s,!!centre&&s.c===centre[0]&&s.r===centre[1]);
   yield 'plants';
   // loot pins and labels
@@ -2566,7 +2703,7 @@ function buildPlants(s,full){
 const LAKE=new THREE.MeshStandardMaterial({color:0x3a8fae, roughness:.22, metalness:.1, transparent:true, opacity:.86, side:THREE.DoubleSide, polygonOffset:true, polygonOffsetFactor:-1});
 const POOL=new THREE.MeshStandardMaterial({color:0x56c3dc, roughness:.18, metalness:.05, transparent:true, opacity:.9, side:THREE.DoubleSide});
 function disposeSector(s){
-  if(s.group){ inkOff(s.group); scene.remove(s.group); s.group.traverse(o=>{ if(o.geometry && !SHARED.has(o.geometry)) o.geometry.dispose(); if(o.material){ if(o.material.map&&!o.material.userData.keep) o.material.map.dispose(); if(o.userData.ownMat||o.isLineSegments) o.material.dispose(); } if(o.isInstancedMesh) o.dispose&&o.dispose(); }); }
+  if(s.group){ inkOff(s.group); scene.remove(s.group); s.group.traverse(o=>{ if(o.geometry && !SHARED.has(o.geometry)) o.geometry.dispose(); if(o.userData.crease) o.userData.crease.dispose(); if(o.material){ if(o.material.map&&!o.material.userData.keep) o.material.map.dispose(); if(o.userData.ownMat||o.isLineSegments) o.material.dispose(); } if(o.isInstancedMesh) o.dispose&&o.dispose(); }); }
   for(const l of s.labels||[]) l.el.remove();
   if(s.data&&s.state==='built') CB.onDropped(s);
   if(s.data){ const ns=s.data.nav.n; for(let j=0;j<ns;j++) kindG.fill(255,(s.r*ns+j)*GN+s.c*ns,(s.r*ns+j)*GN+s.c*ns+ns); }
@@ -2683,7 +2820,7 @@ const CB=(()=>{
   const INKS={selected:0xe0a526,calm:0x1d1814,overwatch:0x2f9fc4,concealed:0x5b6fa8,wounded:0xc23b2e,raider:0x6e1a10,dead:0x77726a};
   let pod=null;   // the camp: built once its sector is loaded
   // ---------- geometry of the fight ----------
-  const BLOCKING=new Set([NK.building,NK.wall,NK.pier,NK.steep]);
+  const BLOCKING=new Set([NK.building,NK.wall,NK.pier,NK.steep,NK.car]);   // wrecked cars are full cover
   const plantCover=new Map();   // cell -> 1 for saguaros, palo verdes and boulders
   C.onBuilt=s=>{ for(const p of s.data.plants){ if(p[0]===0||p[0]===1||(p[0]===3&&p[4]>.8)){ const c=cellOf(p[1],p[3]); if(c>=0) plantCover.set(c,1); } } };
   C.onDropped=s=>{ for(const p of s.data.plants){ const c=cellOf(p[1],p[3]); plantCover.delete(c); } };
