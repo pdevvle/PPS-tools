@@ -27,7 +27,7 @@ const CB=(()=>{
   const INKS={selected:0xe0a526,calm:0x1d1814,overwatch:0x2f9fc4,concealed:0x5b6fa8,wounded:0xc23b2e,raider:0x6e1a10,dead:0x77726a};
   let pod=null;   // the camp: built once its sector is loaded
   // ---------- geometry of the fight ----------
-  const BLOCKING=new Set([NK.building,NK.wall,NK.pier,NK.steep]);
+  const BLOCKING=new Set([NK.building,NK.wall,NK.pier,NK.steep,NK.car]);   // wrecked cars are full cover
   const plantCover=new Map();   // cell -> 1 for saguaros, palo verdes and boulders
   C.onBuilt=s=>{ for(const p of s.data.plants){ if(p[0]===0||p[0]===1||(p[0]===3&&p[4]>.8)){ const c=cellOf(p[1],p[3]); if(c>=0) plantCover.set(c,1); } } };
   C.onDropped=s=>{ for(const p of s.data.plants){ const c=cellOf(p[1],p[3]); plantCover.delete(c); } };
