@@ -28,6 +28,33 @@ const roadW=r=>ROADW[r.cls]||4;
 const isDrive=r=>!['footway','path','cycleway','steps','pedestrian','bridleway'].includes(r.cls);
 const isPaved=r=>!(/unpaved|dirt|gravel|ground|compacted|sand/.test(r.surface||'') || r.cls==='track');
 const isBridge=r=>!!r.bridge && r.bridge!=='no';
+// what a road is made of: asphalt, concrete, gravel, dirt or sand (rd.surf from the road pass wins over the OSM tag)
+function roadSurf(r){ if(r.surf) return r.surf; const s=r.surface||'';
+  if(/concrete|paving/.test(s)) return 'concrete'; if(/sand/.test(s)) return 'sand'; if(/gravel|compacted|pebble/.test(s)) return 'gravel'; if(/unpaved|dirt|ground|earth|mud/.test(s)||r.cls==='track') return 'dirt'; return 'asphalt'; }
+// a paved road's cross-section, offsets in metres from the centreline, + to the right of the way's direction
+// pave: paved width; lines: {o,c:'w'|'y',w,dash:[on,off]|null}; lanes: centres of travel lanes {o,dir:+1 with the way, -1 against}
+function roadSection(r){
+  const W=r.w||roadW(r), cls=r.cls, surf=roadSurf(r), one=r.oneway==='yes'||r.oneway==='1'||r.oneway==='true', lf=r.lf||0, lb=r.lb||0;
+  if(surf!=='asphalt'&&surf!=='concrete') return {pave:W,lines:[],lanes:[],unpaved:true};
+  const link=/_link$/.test(cls), L=[], lanes=[];
+  if(cls==='motorway'||(one&&(link||['trunk','primary','secondary','tertiary'].includes(cls)))){
+    const n=Math.max(1,lf||(cls==='motorway'?2:1)), lw=3.7, ls=cls==='motorway'?1.5:1.2, rs=cls==='motorway'?3:2.4, pave=Math.min(W,n*lw+ls+rs), x0=-pave/2+ls;
+    L.push({o:x0,c:'y',w:.15,dash:null},{o:x0+n*lw,c:'w',w:.15,dash:null}); for(let i=1;i<n;i++) L.push({o:x0+i*lw,c:'w',w:.12,dash:[3,9]});
+    for(let i=0;i<n;i++) lanes.push({o:x0+(i+.5)*lw,dir:1});
+    return {pave,lines:L,lanes,ls,rs,x0,x1:x0+n*lw,rumble:cls==='motorway'}; }
+  if(['trunk','primary','secondary','tertiary'].includes(cls)){
+    const nf=Math.max(1,lf||1), nb=Math.max(1,lb||1), twl=r.lanes>=3&&nf+nb===2?1:(r.lanes>nf+nb?1:0), lw=3.6, sh=cls==='tertiary'?1.2:1.8, mid=twl?3.6:0;
+    const pave=Math.min(W,(nf+nb)*lw+mid+2*sh), half=pave/2, m=mid/2;
+    if(twl) for(const sg of [-1,1]) L.push({o:sg*(m-.1),c:'y',w:.12,dash:[3,9]},{o:sg*(m+.05),c:'y',w:.12,dash:null});
+    else if(cls==='tertiary') L.push({o:0,c:'y',w:.12,dash:[3,9]},{o:.22,c:'y',w:.12,dash:null,near:1},{o:-.22,c:'y',w:.12,dash:null,near:1});
+    else L.push({o:-.13,c:'y',w:.12,dash:null},{o:.13,c:'y',w:.12,dash:null});
+    for(let i=1;i<nf;i++) L.push({o:m+i*lw,c:'w',w:.12,dash:[3,9]}); for(let i=1;i<nb;i++) L.push({o:-(m+i*lw),c:'w',w:.12,dash:[3,9]});
+    L.push({o:half-sh,c:'w',w:.12,dash:null},{o:-(half-sh),c:'w',w:.12,dash:null});
+    for(let i=0;i<nf;i++) lanes.push({o:m+(i+.5)*lw,dir:1}); for(let i=0;i<nb;i++) lanes.push({o:-(m+(i+.5)*lw),dir:-1});
+    return {pave,lines:L,lanes,sh,mid}; }
+  // residential, unclassified, service and the rest: no paint, pavement nearly edge to edge
+  const pave=cls==='residential'||cls==='unclassified'?Math.min(W,7.4):W;
+  return {pave,lines:[],lanes:one?[{o:0,dir:1}]:[{o:pave/4,dir:1},{o:-pave/4,dir:-1}]}; }
 const bridgeY=(b,t)=>b.e0+(b.e1-b.e0)*t+b.raise+(b.long?.3*Math.sin(Math.PI*t):0);
 // a bucket grid of line segments, so "what's near here" doesn't scan every road in the block
 class SegIndex{ constructor(cell=32){ this.c=cell; this.m=new Map(); }
@@ -190,6 +217,6 @@ function bake(D,log=()=>{}){
 const NAVKIND={open:0,asphalt:1,dirt:2,path:3,lot:4,yard:5,wash:6,brush:7,hill:8,water:9,building:10,wall:11,steep:12,low:13,pier:14};
 const NAVLABEL=['Open desert','Asphalt','Dirt road','Footpath','Paved lot','Yard','Sand wash','Brush','Hillside','Water','Building','Wall','Too steep','No headroom','Bridge pier'];
 const SWIM=.2;
-const api={TAU,rng,inPoly,segDist,bbox,centroid,area,densify,polyDist,clipRect,clipLine,segX,ROADW,roadW,isDrive,isPaved,isBridge,bridgeY,SegIndex,BoxIndex,bake,NAVKIND,NAVLABEL,SWIM};
+const api={TAU,rng,inPoly,segDist,bbox,centroid,area,densify,polyDist,clipRect,clipLine,segX,ROADW,roadW,isDrive,isPaved,isBridge,roadSurf,roadSection,bridgeY,SegIndex,BoxIndex,bake,NAVKIND,NAVLABEL,SWIM};
 if(typeof module!=='undefined') module.exports=api; else root.SectorCore=api;
 })(typeof self!=='undefined'?self:this);

@@ -52,6 +52,7 @@ const IDX=await (await fetch('block/index.json')).json();
 const SEC=IDX.sector, NB=IDX.n, HALF=IDX.half, NS=IDX.navStep, SN=SEC/NS, GN=NB*SN, GNN=GN*GN;
 for(const b of IDX.bridges){ const d=b.d; b.yAt=t=>C.bridgeY(b,t); b.tan=k=>{ const p=d[Math.max(0,k-1)], q=d[Math.min(d.length-1,k+1)], l=Math.hypot(q[0]-p[0],q[1]-p[1])||1; return [(q[0]-p[0])/l,(q[1]-p[1])/l]; }; b.nrm=k=>{ const [tx,tz]=b.tan(k); return [tz,-tx]; };
   b.sec=[Math.floor((b.mid[0]+HALF)/SEC),Math.floor((b.mid[1]+HALF)/SEC)]; b.bb=C.bbox(d); }
+const RK=RoadKit({THREE,C,heightAt:(x,z)=>heightAt(x,z),IDX,renderer,mat,SHAPES,sectorGeo:(g,s)=>sectorGeo(g,s)});   // road surfaces, paint, signs and signals
 const sectors=new Map(), key=(c,r)=>c+','+r;
 const secAt=(x,z)=>{ const c=Math.floor((x+HALF)/SEC), r=Math.floor((z+HALF)/SEC); return c>=0&&r>=0&&c<NB&&r<NB?[c,r]:null; };
 const CX=IDX.context, ctxH=(x,z)=>{ const fx=(x+CX.half)/CX.step, fz=(z+CX.half)/CX.step, i=Math.max(0,Math.min(CX.n-2,Math.floor(fx))), j=Math.max(0,Math.min(CX.n-2,Math.floor(fz))), u=fx-i, v=fz-j, h=(a,b)=>CX.h[b*CX.n+a]; return (h(i,j)*(1-u)+h(i+1,j)*u)*(1-v)+(h(i,j+1)*(1-u)+h(i+1,j+1)*u)*v; };
@@ -136,7 +137,7 @@ function* buildSector(s){
   for(const w of D.water){ if(w.kind==='river'&&D.beds.length){ for(let o=-34;o<=34;o+=5.5) line(w.pts.map(([x,z],i)=>[x+o+Math.sin(i*1.7+o)*3,z]),.5+Math.abs(Math.sin(o))*.6,o%11?'rgba(150,125,90,.45)':'rgba(245,232,205,.6)'); }
     line(w.pts,w.hw*2+4,'#b9a07a'); line(w.pts,w.hw*2-1,'#dcc9a2'); line(w.pts,w.hw*.6,'#cbb48c'); }
   for(const l of D.lakes) for(const p of l.shore){ line(p,6,'#9c8a68'); line(p,2.5,'#7e6d52'); }
-  for(const rd of [...D.roads].sort((a,b)=>a.w-b.w)) line(rd.pts,rd.w+(rd.drive?2.4:.8),rd.paved?'#b8b1a3':'#b79f7b');
+  RK.paintGround(g,s,X,Z,px);
   g.imageSmoothingEnabled=true; g.drawImage(shadeCanvas(s.Hf,n,4),X(x0-4)-2*px,Z(z0-4)-2*px,n*4*px,n*4*px);
   const tex=new THREE.CanvasTexture(cv); tex.anisotropy=renderer.capabilities.getMaxAnisotropy();
   yield 'texture';
@@ -148,17 +149,8 @@ function* buildSector(s){
   { const pts=[]; for(const [ax,az,bx,bz] of [[x0,z0,x0+SEC,z0],[x0,z0,x0,z0+SEC]]) for(let t=0;t<SEC;t+=6){ const f=t/SEC, f2=(t+6)/SEC, p=[ax+(bx-ax)*f,az+(bz-az)*f], q=[ax+(bx-ax)*f2,az+(bz-az)*f2]; pts.push(p[0],heightAt(p[0],p[1])+.3,p[1],q[0],heightAt(q[0],q[1])+.3,q[1]); }
     const lg=new THREE.BufferGeometry(); lg.setAttribute('position',new THREE.Float32BufferAttribute(pts,3)); s.seam=new THREE.LineSegments(lg,new THREE.LineBasicMaterial({color:0xe0a526})); s.seam.visible=ui.seams; grp.add(s.seam); }
   yield 'terrain';
-  // roads
-  { const B=new Batch(), asphalt=mat('#4c4b49'), dirt=mat('#bfa47f'), walk=mat('#cfc8ba'), paint=mat('#e1b53c'), edge=mat('#e8e4da');
-    D.roads.forEach((rd,ri)=>{ const w=rd.w/2, m=!rd.drive?walk:rd.paved?asphalt:dirt, lift=.06+ri*.0004, pts=C.densify(rd.pts,5), br=rd.bridge>=0?IDX.bridges[rd.bridge]:null;
-      const Ls=[0]; for(let i=1;i<pts.length;i++) Ls.push(Ls[i-1]+Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]));
-      const yAt=(i,x,z)=>br?br.yAt(Ls[i]/Ls[Ls.length-1])+.07:heightAt(x,z)+lift;
-      const side=(i,off)=>{ const p=pts[i], q=pts[Math.min(pts.length-1,i+1)], o=pts[Math.max(0,i-1)], dx=q[0]-o[0], dz=q[1]-o[1], l=Math.hypot(dx,dz)||1, x=p[0]+dz/l*off, z=p[1]-dx/l*off; return [x,yAt(i,x,z),z]; };
-      for(let i=0;i<pts.length-1;i++){ B.quad(m,side(i,-w),side(i+1,-w),side(i+1,w),side(i,w));
-        if(m===asphalt && ['motorway','secondary','tertiary','primary','trunk'].includes(rd.cls)){ if(!rd.oneway) B.quad(paint,side(i,-.12),side(i+1,-.12),side(i+1,.12),side(i,.12)); for(const sg of [-1,1]) B.quad(edge,side(i,sg*(w-.45)),side(i+1,sg*(w-.45)),side(i+1,sg*(w-.3)),side(i,sg*(w-.3))); } }
-      if(!br) for(const [i,cut] of [[0,rd.cutStart],[pts.length-1,rd.cutEnd]]){ if(cut) continue; const c=pts[i], y=heightAt(c[0],c[1])+lift; for(let k=0;k<8;k++){ const a1=k/8*TAU, a2=(k+1)/8*TAU; B.tri(m,[c[0],y,c[1]],[c[0]+Math.cos(a1)*w,y,c[1]+Math.sin(a1)*w],[c[0]+Math.cos(a2)*w,y,c[1]+Math.sin(a2)*w]); } } });
-    for(const me of B.meshes(false)){ me.material=me.material.clone(); me.material.polygonOffset=true; me.material.polygonOffsetFactor=-2; me.material.polygonOffsetUnits=-2; me.userData.noInk=true; me.userData.ownMat=true; grp.add(me); } }
-  yield 'roads';
+  // roads: surfaces, paint, signs, signals and the roadside (tools/stream/road-kit.js)
+  yield* RK.build(s,grp);
   // buildings
   { const B=new Batch(), r=C.rng(11+s.c*13+s.r*17), glass=mat('#3b4247'), roofFlat=mat('#d8d2c8'), metal=mat('#9aa3a8');
     for(const b of D.buildings){ const pts=b.pts, A=C.area(pts), [cx,cz]=C.centroid(pts), hs=pts.map(([x,z])=>heightAt(x,z)), lo=Math.min(...hs)-.3, hiG=Math.max(...hs);
@@ -230,7 +222,7 @@ function buildPlants(s,full){
 const LAKE=new THREE.MeshStandardMaterial({color:0x3a8fae, roughness:.22, metalness:.1, transparent:true, opacity:.86, side:THREE.DoubleSide, polygonOffset:true, polygonOffsetFactor:-1});
 const POOL=new THREE.MeshStandardMaterial({color:0x56c3dc, roughness:.18, metalness:.05, transparent:true, opacity:.9, side:THREE.DoubleSide});
 function disposeSector(s){
-  if(s.group){ inkOff(s.group); scene.remove(s.group); s.group.traverse(o=>{ if(o.geometry && !SHARED.has(o.geometry)) o.geometry.dispose(); if(o.material){ if(o.material.map) o.material.map.dispose(); if(o.userData.ownMat||o.isLineSegments) o.material.dispose(); } if(o.isInstancedMesh) o.dispose&&o.dispose(); }); }
+  if(s.group){ inkOff(s.group); scene.remove(s.group); s.group.traverse(o=>{ if(o.geometry && !SHARED.has(o.geometry)) o.geometry.dispose(); if(o.material){ if(o.material.map&&!o.material.userData.keep) o.material.map.dispose(); if(o.userData.ownMat||o.isLineSegments) o.material.dispose(); } if(o.isInstancedMesh) o.dispose&&o.dispose(); }); }
   for(const l of s.labels||[]) l.el.remove();
   if(s.data){ const ns=s.data.nav.n; for(let j=0;j<ns;j++) kindG.fill(255,(s.r*ns+j)*GN+s.c*ns,(s.r*ns+j)*GN+s.c*ns+ns); }
   s.Hf=null; s.data=null; s.state='gone'; }
