@@ -6,3 +6,4 @@ wide_*.json
 *.json.tmp
 t[0-9]*_*_*.png
 fetch.log
+region_i17.json
