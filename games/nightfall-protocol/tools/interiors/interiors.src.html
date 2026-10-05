@@ -198,6 +198,7 @@ pre{margin:0;font:12px/1.45 var(--mono);background:var(--bg);border:1px solid va
       <div><span class="q">3 · Grid</span><p>A 1 m interior grid with walls on cell edges. Each outside door links its outside cell to one 2 m movement cell (the gold squares). Interior cells never touch the 2 m grid anywhere else.</p></div>
       <div><span class="q">4 · Storeys</span><p>One plan per storey from the same footprint. Stair and lift cores are chosen once (a main stair and lift near the middle, fire stairs at the far ends) and stay in the same cells on every floor. Upper floors get windows but no street doors. Floors below the one in view draw as shells, floors above are hidden, and the roof is its own level. Try the 42015 N Venture Dr offices.</p></div>
       <div><span class="q">5 · Decay</span><p>Decay is a separate seed stream layered on the plan, so a change of history never moves a wall. The strategy layer chooses the history (looted, holdout, den), and the seed picks which windows and doors were hit.</p></div>
+      <div><span class="q">Cutaway</span><p>Drawn like a building section. Walls between the camera and the cursor drop to a 0.9 m stub (under half-cover height) and slope back up around it. The cut faces are filled by build-up: light for drywall, brown for frame, near black for block and concrete. A faint outline keeps the full height. Outside walls facing the camera are always cut.</p></div>
       <div><span class="q">Walls</span><p>Each wall has a build-up, and that decides how it breaks. Drywall partitions take bullets through and open to a sledge or a nearby grenade. Stucco-over-frame house walls give way more slowly. Concrete block (shop and office exteriors, stair and lift shafts, walls between shops) stops rounds and opens only to a breaching charge; a vault takes two. Hover a wall to read it. Damage goes cracked, holed, breached, and stays in the change record.</p></div>
       <div><span class="q">6 · Lifetime</span><p>Generation takes about 5 to 20 ms for a house (the time shows in the view), so build near the squad and drop it on leaving. Only the change record persists. It is keyed by the generator version, because item ids are stable only while the rules are.</p></div>
     </div>
@@ -1410,6 +1411,49 @@ const inkMat=new THREE.LineBasicMaterial({color:0x1d1814});
 const solidMat=new THREE.MeshLambertMaterial({vertexColors:true,polygonOffset:true,polygonOffsetFactor:1,polygonOffsetUnits:1}); // faces sit a hair behind their ink
 const glassMat=new THREE.MeshLambertMaterial({color:0x9cc8d6,transparent:true,opacity:.35,depthWrite:false});
 const pickMat=new THREE.MeshBasicMaterial({visible:false});
+// ---------------------------------------------------------------- the cutaway, drawn as a building section
+// Walls are cut in the shader, not swapped for low copies. Everything above the cut height is not drawn. Through
+// the gap you see the inside of the wall, which is painted one flat tone per build-up (the poché of a section
+// drawing), and an ink line runs along the cut. The cut height is the stub height inside a zone that runs from the
+// point under the cursor toward the camera, and rises to above the wall tops at the zone's edge, so walls slope
+// down into it rather than popping. Outside walls facing the camera are cut along their whole length. Ink above
+// the cut stays as a faint outline of the full wall.
+const CUT={on:true,stub:.9,R:3.2,focus:new THREE.Vector3(),goal:new THREE.Vector3(),dir:new THREE.Vector2(0,1),low:{},lowGoal:{},
+  u:{uOn:{value:1},uFocus:{value:new THREE.Vector3()},uDir:{value:new THREE.Vector2(0,1)},uR:{value:3.2},uStub:{value:.9},uTop:{value:3},uFloorY:{value:0},uInk:{value:new THREE.Color(0x1d1814)}}};
+const CAPCOL={stud:'#8a8780',frame:'#5e4f40',block:'#33302c',vault:'#1c1b19'};
+const CUT_GLSL=`
+uniform float uOn, uR, uStub, uTop, uFloorY, uLow; uniform vec3 uFocus, uInk; uniform vec2 uDir; varying vec3 vCutW;
+float cutH(vec3 p){
+  if(uOn<.5) return 1e4;
+  vec2 d=p.xz-uFocus.xz; float t=dot(d,uDir), perp=abs(d.x*uDir.y-d.y*uDir.x);
+  float s=max(smoothstep(uR-1.2,uR,perp),1.-smoothstep(-1.4,-.5,t));
+  s=mix(s,0.,uLow);
+  return uFloorY+uStub+s*(uTop-uStub);
+}`;
+function cutMat(base,kind){ // kind: 'solid' (caps and cut line), 'ghost' (ink: faint above the cut), 'plain' (just cut)
+  const m=base.clone(); m.userData.uLow={value:0};
+  if(kind==='solid'){ m.side=THREE.DoubleSide; m.extensions={derivatives:true}; }
+  if(kind==='ghost') m.transparent=true;
+  m.onBeforeCompile=sh=>{
+    Object.assign(sh.uniforms,CUT.u,{uLow:m.userData.uLow});
+    sh.vertexShader=sh.vertexShader.replace('void main() {','varying vec3 vCutW;'+(kind==='solid'?'attribute vec3 capc; varying vec3 vCap;':'')+'\nvoid main() {')
+      .replace('#include <project_vertex>','#include <project_vertex>\nvCutW=(modelMatrix*vec4(transformed,1.)).xyz;'+(kind==='solid'?'vCap=capc;':''));
+    sh.fragmentShader=sh.fragmentShader.replace('void main() {',CUT_GLSL+(kind==='solid'?'varying vec3 vCap;':'')+'\nvoid main() {\nfloat cH=cutH(vCutW);'+(kind==='ghost'?'':'\nif(vCutW.y>cH) discard;'))
+      .replace('#include <dithering_fragment>','#include <dithering_fragment>\n'+(kind==='solid'?
+        'if(!gl_FrontFacing) gl_FragColor=vec4(vCap,1.); else if(cH<uFloorY+uTop-.02&&vCutW.y>cH-1.6*fwidth(vCutW.y)) gl_FragColor.rgb=uInk;':
+        kind==='ghost'?'if(vCutW.y>cH+.004) gl_FragColor.a*=.16;':''));
+  };
+  m.customProgramCacheKey=()=>'cut-'+kind;
+  return m;
+}
+const WM={}; for(const bk of ['e0','e1','e2','e3','int']){ WM[bk]={solid:cutMat(solidMat,'solid'),ink:cutMat(inkMat,'ghost'),glass:cutMat(glassMat,'plain')}; for(const k in WM[bk]) WM[bk][k].userData.uLow=WM[bk].solid.userData.uLow; }
+// JS twin of cutH for picking: height above the floor where this bucket's walls are cut at (x, z)
+function cutTop(x,z,bk){
+  if(!CUT.on) return Infinity; const F=CUT.focus, D=CUT.dir, ss=(a,b,v)=>{ const t=clamp((v-a)/(b-a),0,1); return t*t*(3-2*t); };
+  const dx=x-F.x, dz=z-F.z, t=dx*D.x+dz*D.y, perp=Math.abs(dx*D.y-dz*D.x);
+  let sv=Math.max(ss(CUT.R-1.2,CUT.R,perp),1-ss(-1.4,-.5,t)); sv*=1-(WM[bk]?WM[bk].solid.userData.uLow.value:0);
+  return CUT.stub+sv*(G.wallH+.2-CUT.stub);
+}
 let world=null; // current group
 const view={az:0,el:.95,dist:40,target:new THREE.Vector3(),mode:'cutaway',marks:true};
 
@@ -1470,7 +1514,8 @@ function storefront(K,typeKey){
 // it is dropped; those seams sat exactly on the faces and flickered.
 const BOX_EDGES=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
 class Batch{
-  constructor(){ this.p=[]; this.c=[]; this.e=[]; }
+  constructor(){ this.p=[]; this.c=[]; this.e=[]; this.cr=null; }
+  setCap(col){ const n=this.p.length/3; if(this.cr&&this.cr.length&&this.cr[this.cr.length-1][4]===col) return; const c=new THREE.Color(col); (this.cr=this.cr||[]).push([n,c.r,c.g,c.b,col]); }
   edges(v,pairs){ for(const [a,b] of pairs){ const p=v[a],q=v[b]; this.e.push(p[0],p[1],p[2],q[0],q[1],q[2]); } }
   box(x0,y0,z0,x1,y1,z1,col){
     const cc=new THREE.Color(col), r=cc.r,g=cc.g,b=cc.b;
@@ -1503,6 +1548,7 @@ class Batch{
   }
   mesh(mat,ink){
     const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(this.p,3)); g.setAttribute('color',new THREE.Float32BufferAttribute(this.c,3)); g.computeVertexNormals();
+    if(this.cr){ const n=this.p.length/3, a=new Float32Array(n*3); for(let k=0;k<this.cr.length;k++){ const [v0,r,gg,b]=this.cr[k], v1=k+1<this.cr.length?this.cr[k+1][0]:n; for(let v=v0;v<v1;v++){ a[v*3]=r; a[v*3+1]=gg; a[v*3+2]=b; } } g.setAttribute('capc',new THREE.BufferAttribute(a,3)); }
     const grp=new THREE.Group(); grp.add(new THREE.Mesh(g,mat||solidMat));
     if(ink&&this.p.length) grp.add(new THREE.LineSegments(this.inkLines(),inkMat));
     return grp;
@@ -1566,7 +1612,7 @@ function hitWall(e){ // the wall, door or window under the pointer, from the cel
   const o=ray.ray.origin.clone(), d=ray.ray.direction; o.y-=curFG.position.y+FY; if(d.y>=0) return null;
   const tFloor=-o.y/d.y; let hitE=null;
   walkEdges(o.x,o.z,d.x,d.z,tFloor,(or,key,t,a,sign)=>{ const ed=G.O.edges.get(key); if(!ed) return false; const b=buckets[ed.ext?'e'+ed.dir:'int']; const y=o.y+d.y*t;
-    const what=edgeAt(ed,a,y,b&&b.lowered?LOW:null); if(!what) return false; hitE={e:ed,a,y,what,face:faceFrom(ed,sign),x:o.x+d.x*t,z:o.z+d.z*t}; return true; });
+    const bk=ed.ext?'e'+ed.dir:'int', what=edgeAt(ed,a,y,cutTop(o.x+d.x*t,o.z+d.z*t,bk)); if(!what) return false; hitE={e:ed,a,y,what,face:faceFrom(ed,sign),x:o.x+d.x*t,z:o.z+d.z*t}; return true; });
   return hitE;
 }
 // The wall's state as the squad would read it
@@ -1660,7 +1706,8 @@ function build(G,rec){
   fg.add(fb.mesh(solidMat,false));
   // walls by bucket: four outside faces and the inside walls, full and low
   const groups={}, broken=[];
-  function seg(bk,o,fixed,along,y0,y1,a0,a1,ext,col){ const k=bk+'|'+o+'|'+fixed+'|'+y0+'|'+y1+'|'+a0+'|'+a1+'|'+col; (groups[k]=groups[k]||{bk,o,fixed,y0,y1,a0,a1,ext,col,al:[]}).al.push(along); }
+  let segMat='stud';
+  function seg(bk,o,fixed,along,y0,y1,a0,a1,ext,col){ const k=bk+'|'+o+'|'+fixed+'|'+y0+'|'+y1+'|'+a0+'|'+a1+'|'+col+'|'+segMat; (groups[k]=groups[k]||{bk,o,fixed,y0,y1,a0,a1,ext,col,mat:segMat,al:[]}).al.push(along); }
   const glassBy={}, boardBy={};
   const stucco=G.stucco||'#cfc3ae', inner='#e6dccb';
   for(const e of O.edges.values()){
@@ -1669,6 +1716,7 @@ function build(G,rec){
     const bk=e.ext?'e'+e.dir:'int', paintA=(G.style[e.a]||{}).paint||inner, paintB=e.b>=0?((G.style[e.b]||{}).paint||inner):stucco, t=e.th||(e.ext?.12:.06);
     const dm=rec.walls&&rec.walls[G.level+':'+e.key];
     if(dm&&dm.s>=2&&e.type!=='none'){ broken.push({e,o,fixed,along,bk,paintA,paintB,t,dm}); continue; }
+    segMat=e.mat||'stud';
     let parts=[[0,WH]];
     if(e.type==='window') parts=[[0,e.win.sill],[e.win.head,WH]];
     else if(e.type==='door') parts=[[2.1,WH]];
@@ -1690,7 +1738,7 @@ function build(G,rec){
   for(const k in groups){
     const g=groups[k]; g.al.sort((a,b)=>a-b);
     let s=g.al[0], prev=s;
-    const emit=(a,b)=>{ for(const low of [0,1]){ const y1=low?Math.min(g.y1,LOW):g.y1; if(low&&g.y0>=LOW) continue; const id=g.bk+(low?'L':'F'); const Bt=wallB[id]=wallB[id]||new Batch(), t=g.ext;
+    const emit=(a,b)=>{ for(const low of [0]){ const y1=g.y1; const id=g.bk+'F'; const Bt=wallB[id]=wallB[id]||new Batch(), t=g.ext; Bt.setCap(CAPCOL[g.mat]);
         if(g.o==='v') Bt.box(cx(g.fixed)+g.a0,FY+g.y0,cz(a)-t,cx(g.fixed)+g.a1,FY+y1,cz(b+1)+t,g.col); else Bt.box(cx(a)-t,FY+g.y0,cz(g.fixed)+g.a0,cx(b+1)+t,FY+y1,cz(g.fixed)+g.a1,g.col); } };
     for(let n=1;n<g.al.length;n++){ if(g.al[n]!==prev+1){ emit(s,prev); s=g.al[n]; } prev=g.al[n]; }
     emit(s,prev);
@@ -1698,7 +1746,7 @@ function build(G,rec){
   // a box in the edge's own frame: along a0..a1 of the cell, y0..y1 above the floor, f0..f1 across the fixed line
   const wbox=id=>wallB[id]=wallB[id]||new Batch();
   const edgeBox=(B,w,a0,a1,y0,y1,f0,f1,col)=>{ const {o,fixed,along}=w; if(o==='v') B.box(cx(fixed)+f0,FY+y0,cz(along+a0),cx(fixed)+f1,FY+y1,cz(along+a1),col); else B.box(cx(along+a0),FY+y0,cz(fixed)+f0,cx(along+a1),FY+y1,cz(fixed)+f1,col); };
-  const both=(bk,w,a0,a1,y0,y1,f0,f1,col)=>{ edgeBox(wbox(bk+'F'),w,a0,a1,y0,y1,f0,f1,col); if(y0<LOW) edgeBox(wbox(bk+'L'),w,a0,a1,y0,Math.min(y1,LOW),f0,f1,col); };
+  const both=(bk,w,a0,a1,y0,y1,f0,f1,col)=>{ const B=wbox(bk+'F'); B.setCap(CAPCOL[w.e?w.e.mat:'stud']||CAPCOL.stud); edgeBox(B,w,a0,a1,y0,y1,f0,f1,col); };
   // holed and breached walls: the solid that is left, its core showing at the cut, studs and rubble
   const rub=new Batch();
   for(const w of broken){
@@ -1719,7 +1767,7 @@ function build(G,rec){
   for(const bk of ['e0','e1','e2','e3','int']){
     const full=new THREE.Group(), low=new THREE.Group();
     if(wallB[bk+'F']) full.add(wallB[bk+'F'].mesh(solidMat,true));
-    if(wallB[bk+'L']) low.add(wallB[bk+'L'].mesh(solidMat,true));
+
     const gl=new Batch();
     for(const [o,L,s0,h0,st] of (glassBy[bk]||[])){ if(o==='v') gl.box(L[0]-.02,FY+s0,L[1],L[0]+.02,FY+h0,L[1]+1,'#9cc8d6'); else gl.box(L[0],FY+s0,L[1]-.02,L[0]+1,FY+h0,L[1]+.02,'#9cc8d6'); }
     if(gl.p.length) full.add(gl.mesh(glassMat,false));
@@ -1731,11 +1779,12 @@ function build(G,rec){
   }
   // wall finishes: skirting everywhere, then the room's own treatment (wainscot, tile, paper, brick, panels, an accent wall)
   const wf={};
-  const addF=(bk,low,x0,y0,z0,x1,y1,z1,col)=>{ const id=bk+(low?'L':'F'); (wf[id]=wf[id]||new Batch()).box(Math.min(x0,x1),FY+y0,Math.min(z0,z1),Math.max(x0,x1),FY+y1,Math.max(z0,z1),col); };
+  let fCap=CAPCOL.stud;
+  const addF=(bk,low,x0,y0,z0,x1,y1,z1,col)=>{ if(low) return; const id=bk+'F'; const B=wf[id]=wf[id]||new Batch(); B.setCap(fCap); B.box(Math.min(x0,x1),FY+y0,Math.min(z0,z1),Math.max(x0,x1),FY+y1,Math.max(z0,z1),col); };
   for(const e of O.edges.values()){
     if(e.type==='none'||e.type==='open'||e.type==='counter') continue;
     const o=e.key[0], [p,q]=e.key.slice(1).split(',').map(Number), fixed=o==='v'?p:q, along=o==='v'?q:p;
-    const dm=rec.walls&&rec.walls[G.level+':'+e.key], T=e.th||(e.ext?.12:.06);
+    const dm=rec.walls&&rec.walls[G.level+':'+e.key], T=e.th||(e.ext?.12:.06); fCap=CAPCOL[e.mat]||CAPCOL.stud;
     if(dm){ const bk=e.ext?'e'+e.dir:'int', w={o,fixed,along}, m=WALLMAT[e.mat], sA=aSide(e), q2=rngOf('marks|'+e.key+'|'+(dm.s||0));
       const mark=(face,a,y,sz,col,dz)=>{ const sg=face===1?sA:-sA, f0=sg*(T+.022+(dz||0)), f1=sg*(T+.03+(dz||0)); const B2=wf[bk+(y+sz/2<LOW?'L':'F')]=wf[bk+(y+sz/2<LOW?'L':'F')]||new Batch(); if(o==='v') B2.box(cx(fixed)+Math.min(f0,f1),FY+y-sz/2,cz(along+a-sz/2),cx(fixed)+Math.max(f0,f1),FY+y+sz/2,cz(along+a+sz/2),col); else B2.box(cx(along+a-sz/2),FY+y-sz/2,cz(fixed)+Math.min(f0,f1),cx(along+a+sz/2),FY+y+sz/2,cz(fixed)+Math.max(f0,f1),col); if(y+sz/2<LOW){ const B3=wf[bk+'F']=wf[bk+'F']||new Batch(); if(o==='v') B3.box(cx(fixed)+Math.min(f0,f1),FY+y-sz/2,cz(along+a-sz/2),cx(fixed)+Math.max(f0,f1),FY+y+sz/2,cz(along+a+sz/2),col); else B3.box(cx(along+a-sz/2),FY+y-sz/2,cz(fixed)+Math.min(f0,f1),cx(along+a+sz/2),FY+y+sz/2,cz(fixed)+Math.max(f0,f1),col); } };
       if(dm.s>=1&&dm.s<2){ const fcol=fc=>(fc===1?(G.style[e.a]||{}).paint:e.ext?stucco:(G.style[e.b]||{}).paint)||inner, shade=(c,k)=>new THREE.Color(c).multiplyScalar(k).getStyle();
@@ -1761,7 +1810,7 @@ function build(G,rec){
       if(w!=='tilefull'&&w!=='tilewain') box(0,.1,st.skirt,.02);
     }
   }
-  for(const id in wf){ const bk=id.slice(0,-1); (id.endsWith('L')?buckets[bk].low:buckets[bk].full).add(wf[id].mesh(solidMat,false)); }
+  for(const id in wf){ if(id.endsWith('L')) continue; const bk=id.slice(0,-1); buckets[bk].full.add(wf[id].mesh(solidMat,false)); }
   // door leaves
   const leafMat=new THREE.MeshLambertMaterial({color:0x8a6a4a}), liftMat=new THREE.MeshLambertMaterial({color:0xa9adb0}), gMat=new THREE.MeshLambertMaterial({color:0xd8d2c4});
   for(const e of O.doors){
@@ -1878,8 +1927,15 @@ function build(G,rec){
   const rb=new Batch();
   for(let j=0;j<H;j++){ let i=0; while(i<W){ if(mask[j*W+i]){ let k=i; while(k<W&&mask[j*W+k]) k++; rb.box(cx(i)-.3,FY+WH,cz(j)-(mask[(j-1)*W+i]?0:.3),cx(k)+.3,FY+WH+(G.typeKey==='canopy'?.7:.25),cz(j+1)+(mask[(j+1)*W+i]?0:.3),G.typeKey==='house'?G.roofCol:G.typeKey==='canopy'?'#e8e4da':'#b8b0a2'); i=k; } else i++; } }
   const roof=rb.mesh(solidMat,false); roof.name='roof'; if(G.fk===G.levels-1) fg.add(roof);
+  // everything that hangs on a wall bucket draws with that bucket's cut material; so do the door leaves
+  for(const bk in buckets){ const W2=WM[bk]; buckets[bk].full.traverse(o=>{ if(o.isLineSegments) o.material=W2.ink; else if(o.isMesh) o.material=o.material===glassMat?W2.glass:W2.solid; }); }
+  for(const l of leaves){ const bk=l.userData.bucket, W2=WM[bk]; l.traverse(o=>{ if(o.isLineSegments) o.material=W2.ink; else if(o.isMesh){ if(!o.geometry.attributes.capc){ const n=o.geometry.attributes.position.count, c=new THREE.Color(o.material.color).multiplyScalar(.45), arr=new Float32Array(n*3); for(let k=0;k<n;k++){ arr[k*3]=c.r; arr[k*3+1]=c.g; arr[k*3+2]=c.b; } o.geometry.setAttribute('capc',new THREE.BufferAttribute(arr,3)); } o.material=doorCut(bk,o.material.color); } }); }
+  CUT.u.uFloorY.value=fg.position.y+FY; CUT.u.uTop.value=WH+.2;
+  if(!CUT.placed){ CUT.goal.set(cx(W/2),0,cz(H/2)); CUT.focus.copy(CUT.goal); CUT.placed=true; }
   applyView();
 }
+const DOORM={};
+function doorCut(bk,col){ const k=bk+col.getHexString(); if(!DOORM[k]){ const m=cutMat(new THREE.MeshLambertMaterial({color:col.clone()}),'solid'); m.userData.uLow=WM[bk].solid.userData.uLow; m.extensions={derivatives:true}; DOORM[k]=m; } return DOORM[k]; }
 // A storey seen from above the floor in view: slab, outside walls with their windows, and the stairs.
 function shellFloor(G,F,y){
   const {M}=G, {W,H,u0,v0,mask}=M, WH=G.wallH, g=new THREE.Group(); g.position.y=y;
@@ -1960,10 +2016,9 @@ function applyView(){
     let low=false;
     if(view.mode==='low') low=true;
     else if(view.mode==='cutaway'&&bk!=='int'){ const d=DIRS[+bk[1]]; low=d[0]*cd[0]+d[1]*cd[1]>.3; }
-    buckets[bk].full.visible=!low; buckets[bk].low.visible=low;
-    buckets[bk].lowered=low;
+    buckets[bk].full.visible=true; buckets[bk].low.visible=false; buckets[bk].lowered=low; CUT.lowGoal[bk]=low?1:0;
   }
-  for(const l of leaves){ const b=buckets[l.userData.bucket]; l.visible=!(b&&b.lowered&&l.userData.bucket!=='int'); if(view.mode==='low'&&l.userData.bucket==='int') l.visible=false; }
+  CUT.on=view.mode!=='shell'&&!(G&&G.roofView); CUT.u.uOn.value=CUT.on?1:0;
   const roof=world.getObjectByName('roof'); if(roof) roof.visible=view.mode==='shell';
   const mk=world.getObjectByName('marks'); if(mk) mk.visible=view.marks;
 }
@@ -1989,7 +2044,13 @@ function sizeRT(){
   blitMat.uniforms.t.value=smooth.rt.texture; blitMat.uniforms.px.value.set(1/W,1/H);
 }
 function resize(){ const w=stage.clientWidth,h=stage.clientHeight; renderer.setSize(w,h,false); camera.aspect=w/Math.max(1,h); camera.updateProjectionMatrix(); sizeRT(); }
-let dirty=true; function frame(){ requestAnimationFrame(frame); if(!dirty) return; dirty=false; placeCamera(); applyView();
+function stepCut(){ // ease the cut toward where it is going; true while it still moves
+  let moving=false; const F=CUT.focus, d=F.distanceTo(CUT.goal); if(d>.01){ F.lerp(CUT.goal,d>8?1:.3); moving=true; }
+  for(const bk in WM){ const u=WM[bk].solid.userData.uLow, g=CUT.lowGoal[bk]||0; if(Math.abs(u.value-g)>.01){ u.value+=(g-u.value)*.25; moving=true; } else u.value=g; }
+  CUT.u.uFocus.value.copy(F); const dx=camera.position.x-F.x, dz=camera.position.z-F.z, L=Math.hypot(dx,dz)||1; CUT.dir.set(dx/L,dz/L); CUT.u.uDir.value.copy(CUT.dir);
+  return moving;
+}
+let dirty=true; function frame(){ requestAnimationFrame(frame); if(!dirty) return; dirty=false; placeCamera(); applyView(); if(stepCut()) dirty=true;
   if(smooth.on&&smooth.rt){ renderer.setRenderTarget(smooth.rt); renderer.render(scene,camera); renderer.setRenderTarget(null); renderer.render(blitScene,blitCam); }
   else renderer.render(scene,camera); }
 new ResizeObserver(()=>{ resize(); dirty=true; }).observe(stage);
@@ -2028,7 +2089,7 @@ function describe(u,h){
   const it=G.Fn.items[u.item]; const empty=it.searched||REC.taken.includes(G.level+':'+it.id); const sl=SLOTS[it.spec.slot];
   return sl.n+' · '+(empty?'searched':it.contents.length?it.contents.map(c=>c.name+(c.qty>1?' ×'+c.qty:'')).join(', '):'empty')+' · '+sl.t+' s';
 }
-function hover(e){ if(SIM) return; const u=WALL_TOOLS[TOOL]?null:hit(e), h=u?null:hitWall(e); hudHover.innerHTML=''; hudHover.textContent=describe(u,h); canvas.style.cursor=u||(h&&WALL_TOOLS[TOOL])?'pointer':'grab'; }
+function hover(e){ if(SIM) return; if(!G.roofView){ const fp=floorPoint(e); if(fp){ CUT.goal.set(fp.x,0,fp.z); dirty=true; } } const u=WALL_TOOLS[TOOL]?null:hit(e), h=u?null:hitWall(e); hudHover.innerHTML=''; hudHover.textContent=describe(u,h); canvas.style.cursor=u||(h&&WALL_TOOLS[TOOL])?'pointer':'grab'; }
 function click(e){
   if(SIM) return;
   if(TOOL==='grenade'){ const p=floorPoint(e); if(p) grenade(p); return; }
@@ -2322,7 +2383,7 @@ function floorChips(){
 function goLevel(k){ if(!G||G.levels<2) return; viewLevel=clamp(k,0,G.levels); setLevel(G,viewLevel); view.target.y=Math.min(G.level,G.levels-1)*G.FH+(G.roofView?G.wallH:0); floorChips(); refresh(false); }
 addEventListener('keydown',e=>{ if(e.key==='PageUp'){ e.preventDefault(); goLevel(viewLevel+1); } if(e.key==='PageDown'){ e.preventDefault(); goLevel(viewLevel-1); } });
 function regen(keepCam){
-  const s=SITES[+bSel.value];
+  const s=SITES[+bSel.value]; if(!keepCam) CUT.placed=false;
   G=generate(s,typeNow(),seedNow(),hSel.value);
   if(!keepCam) viewLevel=0;
   setLevel(G,Math.min(viewLevel,G.levels>1?G.levels:0)); viewLevel=G.level;
@@ -2385,5 +2446,5 @@ const smoothBtn=document.getElementById('smoothBtn'); smoothBtn.onclick=()=>{ sm
 const markBtn=document.getElementById('markBtn'); markBtn.onclick=()=>{ view.marks=!view.marks; markBtn.setAttribute('aria-pressed',view.marks?'true':'false'); dirty=true; };
 
 resize(); regen(false); frame();
-window.__interiors={generate,SITES,view,get G(){return G;},get REC(){return REC;},redraw(){dirty=true;},grenade:p=>grenade(p),overturn:it=>overturn(it),shoot:h=>shoot(h),sledge:h=>sledge(h),charge:h=>charge(h),WALLMAT};
+window.__interiors={generate,SITES,view,get G(){return G;},get REC(){return REC;},redraw(){dirty=true;},grenade:p=>grenade(p),overturn:it=>overturn(it),shoot:h=>shoot(h),sledge:h=>sledge(h),charge:h=>charge(h),WALLMAT,CUT};
 </script>

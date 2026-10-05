@@ -56,3 +56,12 @@ Rebuild after editing: `python3 tools/interiors/build.py`.
 
 
 Rendering: the scene draws at about twice the screen's pixels (multisampled where WebGL 2 allows) and is filtered down ("Smoothing" toggles it). Floor and wall patterns are carried by colour at half a metre or more, with no hairline grout or plank gaps. Ink outlines only pieces with some body; seams where two boxes abut are dropped, and faces sit a hair behind their ink so lines don't flicker.
+
+Cutaway: walls are cut in the shader (`cutMat`, `CUT`), not swapped for low copies.
+- **The zone:** above the cut height nothing is drawn. The cut height is a 0.9 m stub inside a zone that runs from the point under the cursor toward the camera. At the zone's edge it rises above the wall tops, so walls slope down into it.
+- **Outside walls** facing the camera are cut along their whole length, and "Low walls" cuts every wall.
+- **The section look:**
+  - the inside of a cut wall draws as one flat tone per build-up (`CAPCOL`: drywall light, frame brown, block and concrete near black), like the poché of a section drawing;
+  - an ink line runs along the cut;
+  - the ink above the cut stays as a faint outline of the full wall.
+- **Motion:** the focus and the lowering ease in. Picking uses the same cut (`cutTop`), so you click what you see.
