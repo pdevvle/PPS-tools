@@ -2043,7 +2043,13 @@ SPEC[K.BPV].lo=[LO([trunk(2.4,.16)],'#9cb25a'),LO([[ico(),mtx(0,3.2,0,2.8,1.1,2.
 SPEC[K.IRW].lo=[LO([trunk(2,.18)],'#6b675f'),LO([[ico(),mtx(0,2.7,0,2.3,1.4,2.2)]],'#7a8763')];
 SPEC[K.TBC].lo=[LO([trunk(.9,.12)],'#4a4030'),LO([[ico(),mtx(0,1.2,0,.4,.45,.4)]],'#dccb8a')];
 SPEC[K.OCO].lo=[LO(fan(5,3.6,.35,.05,3),'#6c6646')];
-const SHARED=new Set(); for(const sp of SPEC) for(const p of [...sp.parts,...(sp.lo||[])]) SHARED.add(p[0]);
+// each kind's coloured parts become one geometry with vertex colours, so a kind is one draw call, not one per part
+const VC=new THREE.MeshStandardMaterial({vertexColors:true, flatShading:true, roughness:.92, metalness:0, side:THREE.DoubleSide}); VC.userData.keep=true;
+function oneOf(parts){ const P=[],N=[],Co=[], c=new THREE.Color(); for(const [g0,col] of parts){ const g=g0.index?g0.toNonIndexed():g0; if(!g.attributes.normal) g.computeVertexNormals(); c.set(col);
+    P.push(...g.attributes.position.array); N.push(...g.attributes.normal.array); for(let i=0;i<g.attributes.position.count;i++) Co.push(c.r,c.g,c.b); }
+  const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(P,3)); g.setAttribute('normal',new THREE.Float32BufferAttribute(N,3)); g.setAttribute('color',new THREE.Float32BufferAttribute(Co,3)); return g; }
+for(const sp of SPEC){ if(!sp) continue; sp.one=oneOf(sp.parts); sp.loOne=sp.lo?oneOf(sp.lo):sp.one; }
+const SHARED=new Set(); for(const sp of SPEC) if(sp) for(const g of [sp.one,sp.loOne,...[...sp.parts,...(sp.lo||[])].map(p=>p[0])]) SHARED.add(g);
 
 // Plants are drawn by distance from the camera, not by sector. Each sector draws the plants the ring keeps (trees, cacti,
 // big shrubs) as light stand-ins, one instanced mesh per kind. Within reach of the camera, 150 m tiles with tight bounds
@@ -2061,21 +2067,21 @@ function* buildSteps(s){
     const T=tiles[Math.min(NT-1,Math.max(0,Math.floor((p[3]-s.z0)/TS)))*NT+Math.min(NT-1,Math.max(0,Math.floor((p[1]-s.x0)/TS)))];
     T.all[p[0]].push(p); if(t.ring===1||(t.ring&&p[4]>t.ring)) T.keep[p[0]].push(p); T.y+=p[2]; T.n++; }
   // tilt first, then turn: a rock face leans into its slope facing down it
-  const fill=(list,parts,geoOf,into)=>{ const out=[]; for(const [geo,col] of parts){ const me=new THREE.InstancedMesh(geoOf(geo),mat(col),list.length);
+  const fill=(list,geo,geoOf,into)=>{ const out=[]; { const me=new THREE.InstancedMesh(geoOf(geo),VC,list.length);
       list.forEach((p,i)=>{ e.set(p[7],p[8],0,'YXZ'); q.setFromEuler(e); me.setMatrixAt(i,m.compose(v.set(p[1],p[2],p[3]),q,sc.set(p[4],p[5],p[6]))); }); me.castShadow=true; me.receiveShadow=true; into.add(me); out.push(me); } return out; };
   // the far layer: kept plants as stand-ins, in tile order so a tile's run of instances can be hidden in one go
   const far=new THREE.Group(), runs=[]; s.gen.add(far);
   SPEC.forEach((sp,t)=>{ const list=[], at=[]; tiles.forEach(T=>{ at.push(list.length); list.push(...T.keep[t]); }); at.push(list.length); if(!list.length) return;
-    for(const me of fill(list,sp.lo||sp.parts,g=>sectorGeo(g,s),far)){ me.userData.full=Float32Array.from(me.instanceMatrix.array); runs.push({me,at}); } });
+    for(const me of fill(list,sp.loOne,g=>sectorGeo(g,s),far)){ me.userData.full=Float32Array.from(me.instanceMatrix.array); runs.push({me,at}); } });
   yield 'plants';
   const near=[]; s.flora={far,runs,near,on:new Array(NT*NT).fill(false)};
   for(let i=0;i<tiles.length;i++){ const T=tiles[i], G=new THREE.Group(), ink=[]; G.visible=false; near.push({box:[T.x0,T.z0,T.x0+TS,T.z0+TS],G,ink}); s.gen.add(G); if(!T.n) continue;
     const cx=T.x0+TS/2, cz=T.z0+TS/2, geoOf=g=>proxy(g,cx,T.y/T.n,cz,TS*.72+14);
-    T.all.forEach((list,t)=>{ if(list.length) for(const me of fill(list,SPEC[t].parts,geoOf,G)) ink.push(shell(me)); });
+    T.all.forEach((list,t)=>{ if(list.length) for(const me of fill(list,SPEC[t].one,geoOf,G)) ink.push(shell(me)); });
     if(i%4===3) yield 'plants'; } }
 function build(s){ for(const _ of buildSteps(s)); }
 // distance from the camera's target to each tile: full plants (and their ink, closer still) near, stand-ins beyond
-function frame(sectors,tx,tz,dist){ const RN=Math.min(400,130+dist*.4), RI=Math.min(260,90+dist*.3);
+function frame(sectors,tx,tz,dist){ const RN=Math.min(300,130+dist*.15), RI=Math.min(160,90+dist*.1);
   for(const s of sectors){ const F=s.flora; if(!F) continue; let dirty=false;
     F.near.forEach((N,i)=>{ const b=N.box, d=Math.hypot(Math.max(b[0]-tx,0,tx-b[2]),Math.max(b[1]-tz,0,tz-b[3])), on=d<RN, ink=d<RI;
       for(const sh of N.ink) if(sh&&sh.visible!==ink) sh.visible=ink;
