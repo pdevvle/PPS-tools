@@ -23,9 +23,10 @@ renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
 scene.add(new THREE.AmbientLight(0xffffff,.18));
 
 // ---------- state ----------
-const S={timeScale:1,slow:1,w:null,G:null,rec:null,units:[],sel:null,phase:'explore',busy:false,mode:'move',round:1,minutes:14*60,seed:0,F:null,camGoal:null,camHold:0,sight:true,free:false,fps:false,destroyed:new Set(),stats:null,mission:null,declined:new Set(),prompt:false};
+const S={labels:true,timeScale:1,slow:1,w:null,G:null,rec:null,units:[],sel:null,phase:'explore',busy:false,mode:'move',round:1,minutes:14*60,seed:0,F:null,camGoal:null,camHold:0,sight:true,free:false,fps:false,destroyed:new Set(),stats:null,mission:null,declined:new Set(),prompt:false};
 let dirtyBuild=false, shake=0;
 const order=SITES.map((s,i)=>i).sort((a,b)=>(SITES[b].id==='newriver/2_2/0')-(SITES[a].id==='newriver/2_2/0'));
+{ const o=document.createElement('option'); o.value='test'; o.textContent='Test range · every combat case'; $('bSel').appendChild(o); }
 for(const i of order){ const s=SITES[i]; const o=document.createElement('option'); o.value=i; o.textContent=(s.name||(s.house?'House':'Building'))+' · '+s.id; $('bSel').appendChild(o); }
 const P=u=>[u.x,u.z];
 const yOf=(x,z)=>S.w.floorY(x,z);
@@ -161,6 +162,7 @@ function drawBadges(){ const out=[], u=S.sel, M=S.mission, put=(x,y,z,cls,txt)=>
   if(S.phase==='plan') for(const v of squad()) if(v.alive&&v.order&&(v.order.move||v.order.act)){ const p=planned(v); put(p[0],yOf(...p)+.55,p[1],'plan',v.name+(v.order.act?' · '+ACT_LABEL[v.order.act.type]:'')); }
   if(M&&M.stash&&!M.stashTaken&&S.phase!=='over') put(M.stash[0],yOf(...M.stash)+1.4,M.stash[1],'loot','Stash');
   if(M&&M.stashTaken&&S.phase!=='over') put(M.evac[0],.6,M.evac[1],'evac','Way out');
+  if(S.G.test&&S.labels) for(const L of S.G.test.labels) put(L.p[0],.3,L.p[1],'zone',L.text);
   badgesEl.innerHTML=out.join(''); }
 
 // ---------- figures (the shared motion module poses them) ----------
@@ -183,20 +185,20 @@ const clock=()=>{ const m=S.minutes%(24*60); return String(Math.floor(m/60)).pad
 
 // ---------- setting up a fight ----------
 function setup(){
-  const site=SITES[+$('bSel').value], hist=$('hSel').value, seedStr=site.id+(S.seed?'#'+S.seed:'');
+  const test=$('bSel').value==='test', site=test?null:SITES[+$('bSel').value], hist=test?'den':$('hSel').value, seedStr=test?'test/range':site.id+(S.seed?'#'+S.seed:'');
   for(const u of S.units) if(u.fig) scene.remove(u.fig.root);
   closeMenu();
-  const g=generate(site,'auto',seedStr,hist); const rec={doors:{},taken:[],moved:{},windows:{},blasts:[],walls:{}}; const w=InteriorSpace.fromGenerated(g,{doors:rec.doors,walls:rec.walls});
+  const g=test?CombatTestMap.build({prepFootprint,streetSense,R,IT,edgeKey,DIRS,styleFor,rngOf,setLevel,noise2,TYPES,WALLMAT}):generate(site,'auto',seedStr,hist); const rec={doors:{},taken:[],moved:{},windows:{},blasts:[],walls:{}}; const w=InteriorSpace.fromGenerated(g,{doors:rec.doors,walls:rec.walls});
   G=g; REC=rec;   // the interiors physics code works on these page globals
   Object.assign(S,{G:g,w,rec,units:[],phase:'explore',round:1,minutes:14*60,busy:false,free:false,slow:1,mode:'move',prompt:false,declined:new Set(),rng:CR.rng(seedStr+'|fight'),destroyed:new Set(),stats:{shots:0,hits:0,bombs:0,wasted:0}});
   logEl.innerHTML=''; bannerEl.hidden=true;
   rebuild();
-  const ppl=w.posted(seedStr), tr=CR.rng(seedStr+'|types'), pool=['brute','enforcer','raider','raider','brute','raider'];
+  const ppl=g.test?g.test.posts.map(q=>({p:q.p.slice(),boss:q.boss,role:q.post,face:q.face,type:q.type,side:'raider'})):w.posted(seedStr), tr=CR.rng(seedStr+'|types'), pool=['brute','enforcer','raider','raider','brute','raider'];
   let k=Math.floor(tr()*2);
-  ppl.forEach((p,i)=>{ const type=p.boss?'boss':p.role==='sentry'?'raider':pool[(k++)%pool.length], label=type==='boss'?(p.side==='raider'?'Raider boss':'Holdout leader'):p.role==='sentry'?'Sentry':CR.ROLES[type].label;
+  ppl.forEach((p,i)=>{ const type=p.type||(p.boss?'boss':p.role==='sentry'?'raider':pool[(k++)%pool.length]), label=type==='boss'?(p.side==='raider'?'Raider boss':'Holdout leader'):p.role==='sentry'?'Sentry':CR.ROLES[type].label;
     const u=CR.makeUnit(type,{id:'r'+i,team:'raider',boss:p.boss,name:label,x:p.p[0],z:p.p[1],ap:0,unaware:true,face:p.face,post:p.role,look:p.face,lookT:0,vis:true});
     u.fig=makeFig(4000+i*13+S.seed*7,i%2===1,INKS.raider,gunKind(u.weapon)); S.units.push(u); });
-  const camp=S.units.filter(u=>u.post==='camp'&&u.role!=='brute'); if(camp.length) setPatrol(camp[0]);
+  const camp=S.units.filter(u=>u.post==='camp'&&u.role!=='brute'); if(camp.length&&!g.test) setPatrol(camp[0]);
   const fa=w.frontApproach(); const start=fa?fa.out:[w.X0+14,w.Z0+14]; const nrm=fa?[fa.out[0]-fa.in[0],fa.out[1]-fa.in[1]]:[0,1], L=Math.hypot(...nrm); const n=[nrm[0]/L,nrm[1]/L], t=[-n[1],n[0]];
   const spots=[]; const ok=q=>w.clearAt(q[0],q[1],w.R+.1)&&!w.insideAt(q[0],q[1])&&!spots.some(s=>Math.hypot(s[0]-q[0],s[1]-q[1])<1.1)&&!S.units.some(r=>CR.sees(w,r,q));
   for(let d=6;d<30&&spots.length<4;d+=.5) for(const s of [0,1.2,-1.2,2.4,-2.4,3.6,-3.6]){ const q=[start[0]+n[0]*d+t[0]*s,start[1]+n[1]*d+t[1]*s]; if(spots.length<4&&ok(q)) spots.push(q); }
@@ -209,7 +211,7 @@ function setup(){
   S.mission={stashItem:stash,stash:so?[(so.box.x0+so.box.x1)/2,(so.box.z0+so.box.z1)/2]:null,stashTaken:false,evac:[start[0]+n[0]*9,start[1]+n[1]*9],evacR:2.4,reinforceIn:null,evacuated:[]};
   S.sel=S.units.find(u=>u.team==='squad'); view.target.set(S.sel.x,0,S.sel.z); view.az=Math.atan2(n[0],n[1]);
   updateVision(0); inkAll(); select(S.sel); drawHud(); drawEntries(); drawEvac();
-  log(`${g.label}, ${hist==='den'?'raider den':'holdout'}. Generated in ${g.ms|0} ms.`);
+  log(g.test?'Test range: every wall build-up, window sill, door, counter and kind of cover, and every enemy type. Labels: the Labels button.':`${g.label}, ${hist==='den'?'raider den':'holdout'}. Generated in ${g.ms|0} ms.`);
   flash('Concealed','You only see what your squad sees. Walk in real time (left click); spot one of them first and you choose: strike first or hold back. Gold rings are doors, blue rings windows: right click one to stack there, then breach. In a fight, give everyone orders (left click: move, right click: what to do), then Go: the whole squad moves at once.',true);
 }
 const dist2=(it,u)=>{ const c=it.cells[0], M=S.G.M; return Math.hypot(M.u0+(c%M.W)+.5-u.x,M.v0+((c/M.W)|0)+.5-u.z); };
@@ -645,6 +647,7 @@ function frame(now){ requestAnimationFrame(frame); const real=Math.min(.05,(now-
 // ---------- header ----------
 $('bSel').onchange=()=>{ S.seed=0; setup(); }; $('hSel').onchange=()=>setup();
 $('rerollBtn').onclick=()=>{ S.seed++; setup(); }; $('restartBtn').onclick=()=>setup();
+$('labelsBtn').onclick=()=>{ S.labels=!S.labels; $('labelsBtn').setAttribute('aria-pressed',S.labels); };
 $('sightBtn').onclick=()=>{ S.sight=!S.sight; $('sightBtn').setAttribute('aria-pressed',S.sight); drawSight(); };
 $('fpsBtn').onclick=()=>{ S.fps=!S.fps; $('fpsBtn').setAttribute('aria-pressed',S.fps); };
 $('rosterBtn').onclick=()=>{ const mem=S.roster.memorial; S.roster=freshRoster(); S.roster.memorial=mem; saveRoster(); setup(); log('A fresh squad. The memorial keeps '+mem.length+' name'+(mem.length===1?'':'s')+'.'); };

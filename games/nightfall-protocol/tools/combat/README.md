@@ -51,6 +51,16 @@ Fighting inside procedurally generated buildings (task 7 in `briefs/combat-tasks
   - sight symmetry and determinism.
 
   Then hand checks on the Roadrunner: range is round, any point can be stood on, snapping, angled cover and a seeded replay. Run `node tools/combat/test-space.js`, or add `--quick` for the Roadrunner only.
+- `testmap.js` is the **test range**, a hand-laid 32 × 22 m building, first in the page's building list. It is not procedural; the interiors generator's own helpers (footprint frame, room records, colours) are called, never changed. It holds every case the rules handle, labelled in the page (the Labels button):
+  - four rooms off a long lane, each showing the lane a different wall build-up: drywall and stucco let rounds through, block stops them, reinforced concrete takes two charges; a raider stands behind each;
+  - a 32 m lane, end to end, for range profiles and corridor overwatch, with a raider at the far end and one half-cover crate;
+  - windows of every sill and state: 0.6, 0.9, 1.0 and 1.2 m (climbable), 1.8 m (too high), broken and boarded;
+  - front double door, side door into the lane, back door; inside, open and closed doors, a 3 m archway, and counters (half cover you can see and climb across);
+  - a cover gallery with full, half and flippable pieces in rows, and the stash safe;
+  - a drywall wall between the stockroom and the gallery to breach, and a low and a high yard wall outside;
+  - every enemy type: boss, brute, two enforcers, five raiders (one a sentry at a window).
+
+  `test-space.js` checks that the range still has all of these.
 - `demo-script.js` and `demo.src.html` are the playable page.
   - **Pacing**: exploring is real time. A fight runs in rounds: you give every soldier orders, then press Go and the whole squad carries them out at once; then the raiders all act at once. Shots resolve as each soldier gets there, so two soldiers sent onto the same raider can find the second shot has nothing left to hit (the log says so and the summary counts wasted shots). Each raider badge shows how many shots are planned on them and their HP, and turns pink when more than one is.
   - **Orders**: left click moves the selected soldier, inside the blue outline (move, then act) or the gold one (dash, no action). Right click a raider for that soldier's attacks with odds from where they will stand (free shot, shoot, shooting through a thin wall, revolver, slash, pipe bomb). Right click a thing for what can be done to it (stash, overturn furniture, close a door, set a breaching charge on a wall, get out), the soldier for their own actions (overwatch, hunker, reload, run and gun, first aid), and the ground to move then overwatch or hunker. There is no separate action menu.

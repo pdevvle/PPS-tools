@@ -22,6 +22,6 @@ function loadGenerator(){
   class Color{ constructor(c){ this.r=this.g=this.b=.5; } getHSL(h){ h.h=0;h.s=0;h.l=.5; return h; } setHSL(){ return this; } getHexString(){ return '808080'; } multiplyScalar(){ return this; } getStyle(){ return '#808080'; } }
   const ctx={THREE:{Color},performance:{now:()=>Date.now()},console,Math,Map,Set,Int32Array,Uint8Array,Float32Array,Array,Object,JSON};
   vm.createContext(ctx);
-  return vm.runInContext(gen+';({SITES,TYPES,ROOM,IT,DIRS,edgeKey,generate,rngOf})',ctx);
+  return vm.runInContext(gen+';({SITES,TYPES,ROOM,IT,DIRS,edgeKey,generate,rngOf,prepFootprint,streetSense,R,styleFor,setLevel,noise2,WALLMAT})',ctx);
 }
 module.exports={read,loadGenerator};

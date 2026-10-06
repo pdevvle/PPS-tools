@@ -136,4 +136,20 @@ check('odds match the foundation table',()=>{
   assert.strictEqual(o(88,100,{},{hunker:true}),12); assert.strictEqual(o(0,12,{reaction:true}),57); assert.strictEqual(o(0,12,{free:true}),82);
   assert.strictEqual(o(0,34),57); assert.strictEqual(o(0,60),32); });
 
+check('test range: every case it promises is there',()=>{
+  const TM=require('./testmap.js'), G=TM.build(I), w=SP.fromGenerated(G), M=G.M, at=(i,j)=>[M.u0+i+.5,M.v0+j+.5];
+  const ents=w.entries(), sills=ents.filter(e=>e.kind==='window').map(e=>[e.e.win.sill,e.e.win.state,w.props(e.o).cross]);
+  for(const [sill,state] of [[.6,'intact'],[.6,'broken'],[.9,'broken'],[.9,'boarded'],[1.0,'intact'],[1.2,'intact'],[1.8,'intact']]) assert.ok(sills.some(x=>x[0]===sill&&x[1]===state),`window ${sill} ${state}`);
+  for(const x of sills) assert.strictEqual(x[2],x[1]!=='boarded'&&x[0]<=1.3,`window ${x[0]} ${x[1]} climbable`);
+  assert.ok(['front','side','back'].every(r=>ents.some(e=>e.role===r)),'front, side and back doors');
+  const F=w.field(w.frontApproach().out,300,[]);
+  for(const p of G.test.posts){ assert.ok(w.clearAt(...p.p),`${p.type} stands clear`); const c=w.costTo(F,p.p); assert.ok(c&&!c.over,`${p.type} at ${p.p} can be reached`); }
+  assert.deepStrictEqual([...new Set(G.test.posts.map(p=>p.type))].sort(),['boss','brute','enforcer','raider']);
+  // each test room shows the lane its own build-up: drywall and stucco let a round through, block and concrete stop it
+  for(const [i,mat,through] of [[4,'stud',true],[10,'frame',true],[16,'block',false],[22,'vault',false]]){ const e=G.O.edges.get(I.edgeKey(i,9,1)); assert.strictEqual(e.mat,mat);
+    assert.strictEqual(!!w.shotThrough(at(i,10),at(i,8)),through,`${mat} wall`); assert.ok(!w.sight(at(i,10),at(i,8)),`${mat} wall blocks sight`); }
+  assert.ok(w.sight(at(1,10),at(32,10)),'the long lane is clear end to end');
+  assert.ok(G.O.edges.get(I.edgeKey(20,14,0)).type==='counter'&&w.sight(at(19,14),at(22,14)),'counters: see across');
+  assert.ok(G.Fn.items.some(it=>it.stash&&it.contents.length),'a stash'); });
+
 console.log(`${pass} passed, ${fail} failed`); if(fail){ for(const f of fails.slice(0,30)) console.log('  ✗ '+f); process.exit(1); }

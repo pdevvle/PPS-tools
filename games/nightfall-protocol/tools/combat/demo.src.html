@@ -37,6 +37,7 @@ button.pri{background:var(--gold);color:#211b10;border-color:var(--gold)}
 .badge.plan{border-color:#4aa3ff;color:#cfe6ff}.badge.ghost{border-color:#6c6a66;color:#b9b6ae;background:rgba(24,24,26,.6)}.badge.over{border-color:#e2b0a8;color:#e2b0a8}
 .unit small{display:block;font:11px var(--mono);color:#9fc6ec;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px}
 .badges{position:absolute;inset:0;pointer-events:none;z-index:2}.badge{position:absolute;transform:translate(-50%,-100%);font:600 12px var(--mono);background:rgba(24,24,26,.82);border:1px solid #6e1a10;color:#f1eee8;padding:1px 5px;border-radius:3px;white-space:nowrap}
+.badge.zone{border-color:#3f6f8f;color:#cfe6ff;background:rgba(20,32,44,.78);font-weight:400;font-size:11px;transform:translate(-50%,-50%)}
 .badge.flank{border-color:var(--gold);color:#f3d38a}.badge .arm{color:#9fd3e6}.badge.evac{border-color:#3fae7f;color:#9fd3a8}.badge.loot{border-color:var(--gold);color:#f3d38a}
 #stage.fp .bar,#stage.fp .hud,#stage.fp .log,#stage.fp .banner,#stage.fp .badges,#stage.fp .hover,#stage.fp .pop{display:none}
 .fps{position:absolute;inset:0;z-index:4;cursor:none}.fps-vig{position:absolute;inset:0;background:radial-gradient(circle at 50% 50%,transparent 38%,rgba(0,0,0,.55) 75%);pointer-events:none}
@@ -55,6 +56,7 @@ button.pri{background:var(--gold);color:#211b10;border-color:var(--gold)}
   <label>Inside <select id="hSel"><option value="den">Raider den</option><option value="holdout">Holdout (hostile)</option></select></label>
   <button type="button" id="rerollBtn" title="Same building, another procedural layout">Reroll layout</button>
   <button type="button" id="restartBtn">Restart</button>
+  <button type="button" id="labelsBtn" aria-pressed="true" title="On the test range: what each part of the building tests">Labels</button>
   <button type="button" id="sightBtn" aria-pressed="true" title="Show what is seen: the raiders' eyes while you are concealed, your selected soldier's sight in a fight">Sight</button>
   <button type="button" id="wallsBtn" title="Cutaway: walls facing the camera drop to knee height">Walls: cutaway</button>
   <button type="button" id="fpsBtn" aria-pressed="false" title="When one of your soldiers takes an overwatch shot, aim it yourself in first person">Aim overwatch</button>
@@ -88,6 +90,7 @@ function refresh(){ if(window.__combatRefresh) window.__combatRefresh(); }
 </script>
 <script>/*RULES*/</script>
 <script>/*WORLD*/</script>
+<script>/*TESTMAP*/</script>
 <script>
 /*DEMO*/
 </script>
