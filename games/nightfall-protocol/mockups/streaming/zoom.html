@@ -1988,7 +1988,7 @@ SPEC[K.WOLF]={parts:[[merge([[ico(),mtx(0,.45,0,.9,.55,.85)],[ico(),mtx(.4,.35,.
 SPEC[K.RCK]={parts:[[merge([[dod(),mtx(0,.3,0,1,.6,.8)]]),'#a8937a']]};
 SPEC[K.REED]={parts:[[merge([0,1,2,3,4,5].map(i=>[cone(.05,1.5+i%3*.3),mtx(Math.cos(i*2.1)*.22,.8,Math.sin(i*2.1)*.22,1,1,1,Math.sin(i)*.15,0,Math.cos(i)*.15)])),'#7f9248']]};
 // creosote: an open vase of thin dark stems with small clumps of resinous olive leaves at their tips
-SPEC[K.CRE]={parts:[[merge(fan(7,1.4,.45,.03,4)),'#6a5a40'],[merge(Array.from({length:8},(_,i)=>{ const a=i/8*TAU+R()*.4, l=1.1+R()*.5, le=.45*(.6+R()*.8); return [ico(1),mtx(Math.cos(a)*l*le,l*.92,Math.sin(a)*l*le,.28,.2,.28)]; })),'#55602f']]};
+SPEC[K.CRE]={parts:[[merge(fan(6,1.4,.45,.03,3)),'#6a5a40'],[merge(Array.from({length:6},(_,i)=>{ const a=i/6*TAU+R()*.4, l=1.1+R()*.5, le=.45*(.6+R()*.8); return [ico(1),mtx(Math.cos(a)*l*le,l*.92,Math.sin(a)*l*le,.28,.2,.28)]; })),'#55602f']]};
 // white bursage: a low pale grey mound
 SPEC[K.BUR]={parts:[[merge([[ico(),mtx(0,.18,0,.45,.3,.45)],[ico(),mtx(.18,.14,.1,.28,.2,.28)]]),'#a3a487']]};
 // brittlebush: a silver-grey dome
@@ -2019,7 +2019,7 @@ SPEC[K.JOJ]={parts:[[merge([[ico(),mtx(0,.6,0,.85,.65,.85)],...blobs(4,.65,.5,.4
 // agave: a rosette of thick, pointed, blue-grey leaves
 SPEC[K.AGV]={parts:[[merge(Array.from({length:13},(_,i)=>{ const a=i/13*TAU, up=i%2?.55:.95, g=cone(.11,.95,4); g.translate(0,.475,0); return [g,new THREE.Matrix4().compose(new THREE.Vector3(0,.05,0),new THREE.Quaternion().setFromEuler(new THREE.Euler(0,-a,up,'YXZ')),new THREE.Vector3(1,1,1))]; })),'#8c9b80']]};
 // bunch grass: a tuft of straw-coloured blades
-SPEC[K.GRS]={parts:[[merge(fan(16,.55,.45,.025,3)),'#c3ad6c']]};
+SPEC[K.GRS]={parts:[[merge(Array.from({length:11},(_,i)=>{ const a=i/11*TAU+R()*.5, l=.45+R()*.25, le=.2+R()*.35, g=new THREE.ConeGeometry(.03,l,3,1,true); g.translate(0,l/2,0); return [g,mtx(Math.cos(a)*.05,0,Math.sin(a)*.05,1,1,1,Math.sin(a)*le,0,-Math.cos(a)*le)]; })),'#c3ad6c']]};
 // catclaw acacia: a tangled, thorny, grey-green thicket
 SPEC[K.CAT]={parts:[[merge(fan(10,1.6,.6,.035,4)),'#6e6650'],[merge(blobs(6,1.1,.7,.45,.6)),'#7d8358']]};
 // granite tors: big, rounded-angular blocks, desert varnish on their tops
@@ -2031,43 +2031,57 @@ SPEC[K.COB]={parts:[[merge([[dod(),mtx(0,.3,0,1,.6,.8)]]),'#9b8f80']]};
 SPEC[K.DRF]={parts:[[merge([stick([-1.1,.08,0],[1.1,.1,.1],.09,.06),stick([.2,.1,.05],[.8,.15,.5],.05,.03),stick([-.5,.1,0],[-.9,.12,-.4],.04,.03)]),'#bdb19b']]};
 // a dead tree: grey trunk and bare branches
 SPEC[K.SNAG]={parts:[[merge([stick([0,0,0],[.2,2.6,.1],.15,.08,6),stick([.1,1.4,0],[1,2.6,.3],.06,.03),stick([.15,1.9,.05],[-.8,3,-.2],.05,.03),stick([.2,2.6,.1],[.6,3.4,-.2],.04,.02)]),'#8e857a']]};
+// light stand-ins for what is drawn farther out: a few big facets in the same colours
+const LO=(list,col)=>[merge(list),col], trunk=(h,r=.15)=>[cyl(r*.7,r,h,4),mtx(0,h/2,0)];
+SPEC[K.CRE].lo=[LO([[ico(),mtx(0,.95,0,.75,.55,.75)],[ico(),mtx(.35,.7,.2,.45,.4,.45)]],'#55602f')];
+SPEC[K.BHC].lo=[LO([trunk(.8,.08),[ico(),mtx(0,1.15,0,.55,.45,.55)]],'#7c7550')];
+SPEC[K.PV].lo=[LO([trunk(2,.12)],'#8a9a52'),LO([[ico(),mtx(.1,2.3,0,1.9,.8,1.8)]],'#a7b85a')];
+SPEC[K.CAT].lo=[LO([[ico(),mtx(0,.9,0,.95,.7,.95)]],'#7d8358')];
+SPEC[K.JOJ].lo=[LO([[ico(),mtx(0,.6,0,.9,.7,.9)]],'#7a8758')];
+SPEC[K.MES].lo=[LO([trunk(2.2,.18)],'#4e3d2c'),LO([[ico(),mtx(0,2.8,0,2.8,.9,2.6)]],'#5b6a33')];
+SPEC[K.BPV].lo=[LO([trunk(2.4,.16)],'#9cb25a'),LO([[ico(),mtx(0,3.2,0,2.8,1.1,2.6)]],'#a9bd6c')];
+SPEC[K.IRW].lo=[LO([trunk(2,.18)],'#6b675f'),LO([[ico(),mtx(0,2.7,0,2.3,1.4,2.2)]],'#7a8763')];
+SPEC[K.TBC].lo=[LO([trunk(.9,.12)],'#4a4030'),LO([[ico(),mtx(0,1.2,0,.4,.45,.4)]],'#dccb8a')];
+SPEC[K.OCO].lo=[LO(fan(5,3.6,.35,.05,3),'#6c6646')];
 const SHARED=new Set(); for(const sp of SPEC) for(const p of [...sp.parts,...(sp.lo||[])]) SHARED.add(p[0]);
 
-// Plants are split by how far they carry. Kinds the ring keeps (trees, cacti, big shrubs) without a lighter stand-in
-// are one mesh per part for the whole sector. Everything else goes into 300 m tiles with tight bounds, so the camera
-// and the sun's shadow camera skip whole tiles: small plants show only near the camera, and a kind with a stand-in
-// (the saguaro) swaps between its full and light shapes by distance. frame() sets that, and the ink, every frame,
-// so crossing into another sector rebuilds nothing.
-const TILE=300;
+// Plants are drawn by distance from the camera, not by sector. Each sector draws the plants the ring keeps (trees, cacti,
+// big shrubs) as light stand-ins, one instanced mesh per kind. Within reach of the camera, 150 m tiles with tight bounds
+// draw every plant in full, and the stand-ins under those tiles are hidden (their matrices zeroed), so nothing is drawn
+// twice. Small plants beyond the near tiles are not drawn. frame() keeps this up to date as the camera moves, so crossing
+// into another sector rebuilds nothing; the tight bounds also let the sun's shadow camera skip tiles out of its reach.
+const TILE=150, ZERO=new Float32Array(16);
 function proxy(shape,cx,cy,cz,r){ const g=new THREE.BufferGeometry(); for(const k in shape.attributes) g.setAttribute(k,shape.attributes[k]); g.boundingSphere=new THREE.Sphere(new THREE.Vector3(cx,cy,cz),r); g.userData.proxy=true; return g; }
-function shell(me){ if(!o.ink) return; const sh=new THREE.InstancedMesh(me.geometry,o.ink,me.count); sh.instanceMatrix=me.instanceMatrix; sh.userData.ink=true; sh.matrixAutoUpdate=false; me.add(sh); return sh; }
+function shell(me){ if(!o.ink) return null; const sh=new THREE.InstancedMesh(me.geometry,o.ink,me.count); sh.instanceMatrix=me.instanceMatrix; sh.userData.ink=true; sh.matrixAutoUpdate=false; me.add(sh); return sh; }
 function* buildSteps(s){
   for(const c of [...s.gen.children]){ s.gen.remove(c); c.traverse(q=>{ if(q.isInstancedMesh&&!q.userData.ink) q.geometry.dispose(); }); }
   const SEC=o.SEC||600, NT=Math.max(1,Math.round(SEC/TILE)), TS=SEC/NT, e=new THREE.Euler(0,0,0,'YXZ'), q=new THREE.Quaternion(), v=new THREE.Vector3(), sc=new THREE.Vector3(), m=new THREE.Matrix4();
-  // sort every record into the sector list or its tile's near / stand-in lists
-  const keepL=SPEC.map(()=>[]), tiles=Array.from({length:NT*NT},(_,i)=>({x0:s.x0+(i%NT)*TS,z0:s.z0+Math.floor(i/NT)*TS,near:SPEC.map(()=>[]),lod:SPEC.map(()=>[]),y:0,n:0}));
-  for(const p of s.data.plants){ const t=C.PLANTS[p[0]]; if(!t||!SPEC[p[0]]) continue; const keep=t.ring===1||(t.ring&&p[4]>t.ring);
-    if(keep&&!SPEC[p[0]].lo){ keepL[p[0]].push(p); continue; }
-    const ti=Math.min(NT-1,Math.max(0,Math.floor((p[3]-s.z0)/TS)))*NT+Math.min(NT-1,Math.max(0,Math.floor((p[1]-s.x0)/TS))), T=tiles[ti]; (keep?T.lod:T.near)[p[0]].push(p); T.y+=p[2]; T.n++; }
+  const tiles=Array.from({length:NT*NT},(_,i)=>({x0:s.x0+(i%NT)*TS,z0:s.z0+Math.floor(i/NT)*TS,all:SPEC.map(()=>[]),keep:SPEC.map(()=>[]),y:0,n:0}));
+  for(const p of s.data.plants){ const t=C.PLANTS[p[0]]; if(!t||!SPEC[p[0]]) continue;
+    const T=tiles[Math.min(NT-1,Math.max(0,Math.floor((p[3]-s.z0)/TS)))*NT+Math.min(NT-1,Math.max(0,Math.floor((p[1]-s.x0)/TS)))];
+    T.all[p[0]].push(p); if(t.ring===1||(t.ring&&p[4]>t.ring)) T.keep[p[0]].push(p); T.y+=p[2]; T.n++; }
   // tilt first, then turn: a rock face leans into its slope facing down it
   const fill=(list,parts,geoOf,into)=>{ const out=[]; for(const [geo,col] of parts){ const me=new THREE.InstancedMesh(geoOf(geo),mat(col),list.length);
       list.forEach((p,i)=>{ e.set(p[7],p[8],0,'YXZ'); q.setFromEuler(e); me.setMatrixAt(i,m.compose(v.set(p[1],p[2],p[3]),q,sc.set(p[4],p[5],p[6]))); }); me.castShadow=true; me.receiveShadow=true; into.add(me); out.push(me); } return out; };
-  const whole=new THREE.Group(); whole.userData.box=[s.x0,s.z0,s.x0+SEC,s.z0+SEC]; whole.userData.ink=[]; s.gen.add(whole);
-  keepL.forEach((list,t)=>{ if(list.length) for(const me of fill(list,SPEC[t].parts,g=>sectorGeo(g,s),whole)) whole.userData.ink.push(shell(me)); });
+  // the far layer: kept plants as stand-ins, in tile order so a tile's run of instances can be hidden in one go
+  const far=new THREE.Group(), runs=[]; s.gen.add(far);
+  SPEC.forEach((sp,t)=>{ const list=[], at=[]; tiles.forEach(T=>{ at.push(list.length); list.push(...T.keep[t]); }); at.push(list.length); if(!list.length) return;
+    for(const me of fill(list,sp.lo||sp.parts,g=>sectorGeo(g,s),far)){ me.userData.full=Float32Array.from(me.instanceMatrix.array); runs.push({me,at}); } });
   yield 'plants';
-  for(const T of tiles){ if(!T.n) continue; const cx=T.x0+TS/2, cz=T.z0+TS/2, cy=T.y/T.n, r=TS*.72+12, geoOf=g=>proxy(g,cx,cy,cz,r);
-    const G=new THREE.Group(), near=new THREE.Group(), far=new THREE.Group(); G.add(near,far); G.userData={box:[T.x0,T.z0,T.x0+TS,T.z0+TS],near,far,ink:[]}; s.gen.add(G);
-    T.near.forEach((list,t)=>{ if(list.length) for(const me of fill(list,SPEC[t].parts,geoOf,near)) G.userData.ink.push(shell(me)); });
-    T.lod.forEach((list,t)=>{ if(!list.length) return; for(const me of fill(list,SPEC[t].parts,geoOf,near)) G.userData.ink.push(shell(me)); fill(list,SPEC[t].lo,geoOf,far); });
-    yield 'plants'; }
-  }
+  const near=[]; s.flora={far,runs,near,on:new Array(NT*NT).fill(false)};
+  for(let i=0;i<tiles.length;i++){ const T=tiles[i], G=new THREE.Group(), ink=[]; G.visible=false; near.push({box:[T.x0,T.z0,T.x0+TS,T.z0+TS],G,ink}); s.gen.add(G); if(!T.n) continue;
+    const cx=T.x0+TS/2, cz=T.z0+TS/2, geoOf=g=>proxy(g,cx,T.y/T.n,cz,TS*.72+14);
+    T.all.forEach((list,t)=>{ if(list.length) for(const me of fill(list,SPEC[t].parts,geoOf,G)) ink.push(shell(me)); });
+    if(i%4===3) yield 'plants'; } }
 function build(s){ for(const _ of buildSteps(s)); }
-// distance from the camera's target to each tile sets what shows: near detail, the stand-ins beyond, ink closest in
-function frame(sectors,tx,tz,dist){ const RN=Math.min(520,240+dist*.45), RI=Math.min(320,150+dist*.3);
-  for(const s of sectors){ if(!s.gen) continue; for(const G of s.gen.children){ const u=G.userData, b=u.box; if(!b) continue;
-    const d=Math.hypot(Math.max(b[0]-tx,0,tx-b[2]),Math.max(b[1]-tz,0,tz-b[3])), ink=d<RI;
-    if(u.near){ const on=d<RN; if(u.near.visible!==on){ u.near.visible=on; u.far.visible=!on; } }
-    for(const sh of u.ink) if(sh&&sh.visible!==ink) sh.visible=ink; } } }
+// distance from the camera's target to each tile: full plants (and their ink, closer still) near, stand-ins beyond
+function frame(sectors,tx,tz,dist){ const RN=Math.min(400,130+dist*.4), RI=Math.min(260,90+dist*.3);
+  for(const s of sectors){ const F=s.flora; if(!F) continue; let dirty=false;
+    F.near.forEach((N,i)=>{ const b=N.box, d=Math.hypot(Math.max(b[0]-tx,0,tx-b[2]),Math.max(b[1]-tz,0,tz-b[3])), on=d<RN, ink=d<RI;
+      for(const sh of N.ink) if(sh&&sh.visible!==ink) sh.visible=ink;
+      if(on===F.on[i]) return; F.on[i]=on; N.G.visible=on; dirty=true;
+      for(const {me,at} of F.runs){ const a=me.instanceMatrix.array, full=me.userData.full; if(on) for(let k=at[i];k<at[i+1];k++) a.set(ZERO,k*16); else a.set(full.subarray(at[i]*16,at[i+1]*16),at[i]*16); } });
+    if(dirty) for(const {me} of F.runs) me.instanceMatrix.needsUpdate=true; } }
 
 // ---------- the ground: rock exposed on steep slopes, wash beds, the braided river bed ----------
 function paintGround(g,s,X,Z,px){ const D=s.data, n=s.hn, H=s.Hf, rnd=C.rng(400+s.c*17+s.r*29);
