@@ -1,7 +1,7 @@
 // ---------- Nightfall flora kit: the plants and rock of the Arizona Upland Sonoran Desert, and the ground they stand on ----------
-// FloraKit(ctx) returns {build(s,full), paintGround(g,s,X,Z,px)}. Plant records come from the bake ([type,x,y,z,sx,sy,sz,rx,ry],
-// types in SectorCore.PLANTS). build fills s.gen with one instanced mesh per plant part; the centre sector shows everything,
-// the ring only what the table keeps there. paintGround paints wash beds, the braided river bed and exposed rock on steep ground.
+// FloraKit(ctx) returns {build(s), buildSteps(s), frame(sectors,x,z,dist), paintGround(g,s,X,Z,px)}. Plant records come from the bake ([type,x,y,z,sx,sy,sz,rx,ry],
+// types in SectorCore.PLANTS). buildSteps fills s.gen with instanced meshes, a step at a time; frame() shows each tile's
+// detail by its distance from the camera. paintGround paints wash beds, the braided river bed and exposed rock on steep ground.
 (function(root){
 function FloraKit(o){
 const {THREE,mat,C,sectorGeo}=o, TAU=Math.PI*2, K=C.PT;
@@ -69,15 +69,41 @@ SPEC[K.DRF]={parts:[[merge([stick([-1.1,.08,0],[1.1,.1,.1],.09,.06),stick([.2,.1
 SPEC[K.SNAG]={parts:[[merge([stick([0,0,0],[.2,2.6,.1],.15,.08,6),stick([.1,1.4,0],[1,2.6,.3],.06,.03),stick([.15,1.9,.05],[-.8,3,-.2],.05,.03),stick([.2,2.6,.1],[.6,3.4,-.2],.04,.02)]),'#8e857a']]};
 const SHARED=new Set(); for(const sp of SPEC) for(const p of [...sp.parts,...(sp.lo||[])]) SHARED.add(p[0]);
 
-function build(s,full){
-  for(const o of [...s.gen.children]){ s.gen.remove(o); o.geometry.dispose(); }
-  const L=SPEC.map(()=>[]), tmp=new THREE.Matrix4(), q=new THREE.Quaternion(), e=new THREE.Euler(0,0,0,'YXZ'), v=new THREE.Vector3(), sc=new THREE.Vector3();
-  for(const p of s.data.plants){ const t=C.PLANTS[p[0]]; if(!t||!SPEC[p[0]]) continue; if(!full&&!(t.ring===1||(t.ring&&p[4]>t.ring))) continue;
-    // tilt first, then turn: a rock face leans into its slope facing down it
-    e.set(p[7],p[8],0,'YXZ'); q.setFromEuler(e); L[p[0]].push(new THREE.Matrix4().compose(v.set(p[1],p[2],p[3]),q,sc.set(p[4],p[5],p[6]))); }
-  L.forEach((list,t)=>{ if(!list.length) return; const parts=!full&&SPEC[t].lo?SPEC[t].lo:SPEC[t].parts;
-    for(const [geo,col] of parts){ const me=new THREE.InstancedMesh(sectorGeo(geo,s),mat(col),list.length); list.forEach((m,i)=>me.setMatrixAt(i,m)); me.castShadow=true; me.receiveShadow=true; s.gen.add(me); } });
-  s.full=full; }
+// Plants are split by how far they carry. Kinds the ring keeps (trees, cacti, big shrubs) without a lighter stand-in
+// are one mesh per part for the whole sector. Everything else goes into 300 m tiles with tight bounds, so the camera
+// and the sun's shadow camera skip whole tiles: small plants show only near the camera, and a kind with a stand-in
+// (the saguaro) swaps between its full and light shapes by distance. frame() sets that, and the ink, every frame,
+// so crossing into another sector rebuilds nothing.
+const TILE=300;
+function proxy(shape,cx,cy,cz,r){ const g=new THREE.BufferGeometry(); for(const k in shape.attributes) g.setAttribute(k,shape.attributes[k]); g.boundingSphere=new THREE.Sphere(new THREE.Vector3(cx,cy,cz),r); g.userData.proxy=true; return g; }
+function shell(me){ if(!o.ink) return; const sh=new THREE.InstancedMesh(me.geometry,o.ink,me.count); sh.instanceMatrix=me.instanceMatrix; sh.userData.ink=true; sh.matrixAutoUpdate=false; me.add(sh); return sh; }
+function* buildSteps(s){
+  for(const c of [...s.gen.children]){ s.gen.remove(c); c.traverse(q=>{ if(q.isInstancedMesh&&!q.userData.ink) q.geometry.dispose(); }); }
+  const SEC=o.SEC||600, NT=Math.max(1,Math.round(SEC/TILE)), TS=SEC/NT, e=new THREE.Euler(0,0,0,'YXZ'), q=new THREE.Quaternion(), v=new THREE.Vector3(), sc=new THREE.Vector3(), m=new THREE.Matrix4();
+  // sort every record into the sector list or its tile's near / stand-in lists
+  const keepL=SPEC.map(()=>[]), tiles=Array.from({length:NT*NT},(_,i)=>({x0:s.x0+(i%NT)*TS,z0:s.z0+Math.floor(i/NT)*TS,near:SPEC.map(()=>[]),lod:SPEC.map(()=>[]),y:0,n:0}));
+  for(const p of s.data.plants){ const t=C.PLANTS[p[0]]; if(!t||!SPEC[p[0]]) continue; const keep=t.ring===1||(t.ring&&p[4]>t.ring);
+    if(keep&&!SPEC[p[0]].lo){ keepL[p[0]].push(p); continue; }
+    const ti=Math.min(NT-1,Math.max(0,Math.floor((p[3]-s.z0)/TS)))*NT+Math.min(NT-1,Math.max(0,Math.floor((p[1]-s.x0)/TS))), T=tiles[ti]; (keep?T.lod:T.near)[p[0]].push(p); T.y+=p[2]; T.n++; }
+  // tilt first, then turn: a rock face leans into its slope facing down it
+  const fill=(list,parts,geoOf,into)=>{ const out=[]; for(const [geo,col] of parts){ const me=new THREE.InstancedMesh(geoOf(geo),mat(col),list.length);
+      list.forEach((p,i)=>{ e.set(p[7],p[8],0,'YXZ'); q.setFromEuler(e); me.setMatrixAt(i,m.compose(v.set(p[1],p[2],p[3]),q,sc.set(p[4],p[5],p[6]))); }); me.castShadow=true; me.receiveShadow=true; into.add(me); out.push(me); } return out; };
+  const whole=new THREE.Group(); whole.userData.box=[s.x0,s.z0,s.x0+SEC,s.z0+SEC]; whole.userData.ink=[]; s.gen.add(whole);
+  keepL.forEach((list,t)=>{ if(list.length) for(const me of fill(list,SPEC[t].parts,g=>sectorGeo(g,s),whole)) whole.userData.ink.push(shell(me)); });
+  yield 'plants';
+  for(const T of tiles){ if(!T.n) continue; const cx=T.x0+TS/2, cz=T.z0+TS/2, cy=T.y/T.n, r=TS*.72+12, geoOf=g=>proxy(g,cx,cy,cz,r);
+    const G=new THREE.Group(), near=new THREE.Group(), far=new THREE.Group(); G.add(near,far); G.userData={box:[T.x0,T.z0,T.x0+TS,T.z0+TS],near,far,ink:[]}; s.gen.add(G);
+    T.near.forEach((list,t)=>{ if(list.length) for(const me of fill(list,SPEC[t].parts,geoOf,near)) G.userData.ink.push(shell(me)); });
+    T.lod.forEach((list,t)=>{ if(!list.length) return; for(const me of fill(list,SPEC[t].parts,geoOf,near)) G.userData.ink.push(shell(me)); fill(list,SPEC[t].lo,geoOf,far); });
+    yield 'plants'; }
+  }
+function build(s){ for(const _ of buildSteps(s)); }
+// distance from the camera's target to each tile sets what shows: near detail, the stand-ins beyond, ink closest in
+function frame(sectors,tx,tz,dist){ const RN=Math.min(520,240+dist*.45), RI=Math.min(320,150+dist*.3);
+  for(const s of sectors){ if(!s.gen) continue; for(const G of s.gen.children){ const u=G.userData, b=u.box; if(!b) continue;
+    const d=Math.hypot(Math.max(b[0]-tx,0,tx-b[2]),Math.max(b[1]-tz,0,tz-b[3])), ink=d<RI;
+    if(u.near){ const on=d<RN; if(u.near.visible!==on){ u.near.visible=on; u.far.visible=!on; } }
+    for(const sh of u.ink) if(sh&&sh.visible!==ink) sh.visible=ink; } } }
 
 // ---------- the ground: rock exposed on steep slopes, wash beds, the braided river bed ----------
 function paintGround(g,s,X,Z,px){ const D=s.data, n=s.hn, H=s.Hf, rnd=C.rng(400+s.c*17+s.r*29);
@@ -109,7 +135,7 @@ function paintGround(g,s,X,Z,px){ const D=s.data, n=s.hn, H=s.Hf, rnd=C.rng(400+
     // a wash: dark cut-bank band, pale sandy bed, coarser gravel down the thalweg, a speckle of cobbles
     line(w.pts,w.hw*2+4,'#b39a74'); line(w.pts,w.hw*2-1,'#dcc9a2'); line(w.pts,Math.max(.8,w.hw*.55),'#c8b088');
     const d=C.densify(w.pts,3); for(const [x,z] of d) for(let k=0;k<3;k++){ const o=(rnd()-.5)*w.hw*1.6; g.fillStyle=rnd()<.5?'rgba(120,106,90,.55)':'rgba(236,224,200,.6)'; g.fillRect(X(x+o),Z(z+(rnd()-.5)*3),1.4,1.4); } } }
-return {build,paintGround,SHARED};
+return {build,buildSteps,frame,paintGround,SHARED};
 }
 root.FloraKit=FloraKit;
 })(typeof self!=='undefined'?self:this);

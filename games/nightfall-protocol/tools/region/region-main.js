@@ -313,6 +313,14 @@ function dive(x,z){ if(!NF.inBlock(x,z)){ NF.tip('Tactical ground is baked only 
   NF.encounter=null; NF.mapPose={yaw:camS.yaw,pitch:camS.pitch,dist:camS.dist}; NF.enterTactical(x,z,here?{x:here.x,z:here.z,name:here.name,people:here.people,index:sqs.indexOf(here)}:null); }
 if(ZOOM){ renderer.domElement.addEventListener('dblclick',e=>{ const p=pick(e); if(p) dive(p.x,p.z); });
   document.getElementById('diveBtn').onclick=()=>{ const sq=S().squads[selSquad]; dive(NF.inBlock(sq.x,sq.z)?sq.x:camT.tx, NF.inBlock(sq.x,sq.z)?sq.z:camT.tz); }; }
+// camera keys: W A S D move the view, Q and E turn it, Shift moves faster
+const held=new Set(), CAMKEYS=new Set(['KeyW','KeyA','KeyS','KeyD','KeyQ','KeyE']);
+window.addEventListener('keydown',e=>{ if((e.target.closest&&e.target.closest('input,textarea,select'))||e.ctrlKey||e.metaKey||e.altKey||(ZOOM&&NF.mode!=='region')) return; if(CAMKEYS.has(e.code)){ e.preventDefault(); held.add(e.code); } else if(e.key==='Shift') held.add(e.code); });
+window.addEventListener('keyup',e=>held.delete(e.code)); window.addEventListener('blur',()=>held.clear());
+function camKeys(dt){ if(!held.size) return; const h=k=>held.has(k)?1:0, f=h('KeyW')-h('KeyS'), r=h('KeyD')-h('KeyA'), t=h('KeyQ')-h('KeyE');
+  if(t) camT.yaw+=t*dt*1.5;
+  if(f||r){ const k=camT.dist*.9*(h('ShiftLeft')||h('ShiftRight')?3:1)*dt/Math.hypot(f,r), s=Math.sin(camT.yaw), c=Math.cos(camT.yaw);
+    camT.tx=Math.max(-HX,Math.min(HX,camT.tx+(c*r-s*f)*k)); camT.tz=Math.max(-HZ,Math.min(HZ,camT.tz-(s*r+c*f)*k)); } }
 document.getElementById('homeBtn').onclick=()=>{ camT.tx=hx0; camT.tz=hz0; camT.dist=6000; };
 document.getElementById('realmBtn').onclick=()=>{ camT.tx=0; camT.tz=0; camT.dist=Math.max(HX,HZ)*2.6; camT.pitch=Math.max(camT.pitch,.75); };
 let speed=1;   // 1× = 10 game minutes per real second
@@ -333,6 +341,7 @@ function loop(now){
   for(const [id,v] of bandViews) if(v.show) v.mesh.position.set(v.x,Y(v.x,v.z),v.z);
   uiAcc+=dt; if(uiAcc>.5){ uiAcc=0; drawSky(); if(run){ drawSquads(); syncBands(); } }
   saveT+=dt; if(saveT>2) save();
+  camKeys(dt);
   const k=1-Math.exp(-dt*5); for(const key in camS){ if(key==='yaw'){ const d=Math.atan2(Math.sin(camT.yaw-camS.yaw),Math.cos(camT.yaw-camS.yaw)); camS.yaw+=d*k; } else camS[key]+=(camT[key]-camS[key])*k; }
   const ty=Y(camS.tx,camS.tz); cam.position.set(camS.tx+Math.sin(camS.yaw)*Math.cos(camS.pitch)*camS.dist, ty+Math.sin(camS.pitch)*camS.dist, camS.tz+Math.cos(camS.yaw)*Math.cos(camS.pitch)*camS.dist); cam.lookAt(camS.tx,ty,camS.tz); followView(camS.tx,ty,camS.tz,camS.dist);
   if(Math.abs(camS.dist-marksAt)/marksAt>.25){ marksAt=camS.dist; drawMarks(); }

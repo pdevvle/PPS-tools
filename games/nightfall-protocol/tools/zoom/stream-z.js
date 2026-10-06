@@ -6,7 +6,7 @@ const miniEl=document.getElementById('mini'), costEl=document.getElementById('co
 const fail=t=>{ loadingEl.textContent=t; };
 if(!window.THREE){ fail('The 3D view needs three.js, which could not load. Check your connection and reload.'); return; }
 let renderer; try{ renderer=new THREE.WebGLRenderer({antialias:true, alpha:true}); }catch(e){ fail('This browser could not start WebGL.'); return; }
-renderer.setPixelRatio(Math.min(2,window.devicePixelRatio||1)); renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap; renderer.setClearColor(0x000000,0); stage.prepend(renderer.domElement);
+renderer.setPixelRatio(Math.min(1.5,window.devicePixelRatio||1)); renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap; renderer.setClearColor(0x000000,0); stage.prepend(renderer.domElement);
 stage.style.background='linear-gradient(180deg,#9fc6e4,#e8dcc2)';
 const scene=new THREE.Scene(); scene.fog=new THREE.Fog(0xe2d8c2,380,980);
 const cam=new THREE.PerspectiveCamera(38,1,.5,20000);
@@ -57,7 +57,7 @@ const LIVEH=(typeof Campaign!=='undefined'&&window.__region&&Campaign.state)?(x,
 for(const b of IDX.bridges){ const d=b.d; b.yAt=t=>C.bridgeY(b,t); b.tan=k=>{ const p=d[Math.max(0,k-1)], q=d[Math.min(d.length-1,k+1)], l=Math.hypot(q[0]-p[0],q[1]-p[1])||1; return [(q[0]-p[0])/l,(q[1]-p[1])/l]; }; b.nrm=k=>{ const [tx,tz]=b.tan(k); return [tz,-tx]; };
   b.sec=[Math.floor((b.mid[0]-BX0)/SEC),Math.floor((b.mid[1]-BZ0)/SEC)]; b.bb=C.bbox(d); }
 const RK=RoadKit({THREE,C,heightAt:(x,z)=>heightAt(x,z),IDX,renderer,mat,SHAPES,sectorGeo:(g,s)=>sectorGeo(g,s),kindAt:(x,z)=>{ const c=cellOf(x,z); return c<0?255:kindG[c]; }});
-const FK=FloraKit({THREE,mat,C,sectorGeo:(g,s)=>sectorGeo(g,s)});   // desert plants, rock and wash beds (tools/stream/flora-kit.js)   // road surfaces, paint, signs and signals
+const FK=FloraKit({THREE,mat,C,SEC,ink:INK,sectorGeo:(g,s)=>sectorGeo(g,s)});   // desert plants, rock and wash beds (tools/stream/flora-kit.js)
 const sectors=new Map(), key=(c,r)=>c+','+r;
 const secAt=(x,z)=>{ const c=Math.floor((x-BX0)/SEC), r=Math.floor((z-BZ0)/SEC); return c>=0&&r>=0&&c<NBX&&r<NBZ?[c,r]:null; };
 const CX=IDX.context, CCX=CX.cx||0, CCZ=CX.cz||0, ctxH=(x,z)=>{ const fx=(x-CCX+CX.half)/CX.step, fz=(z-CCZ+CX.half)/CX.step, i=Math.max(0,Math.min(CX.n-2,Math.floor(fx))), j=Math.max(0,Math.min(CX.n-2,Math.floor(fz))), u=fx-i, v=fz-j, h=(a,b)=>CX.h[b*CX.n+a]; return (h(i,j)*(1-u)+h(i+1,j)*u)*(1-v)+(h(i,j+1)*(1-u)+h(i+1,j+1)*u)*v; };
@@ -206,8 +206,7 @@ function* buildSector(s){
   yield 'structures';
   // crease lines for the ink worked out now, one mesh a step, so taking the centre doesn't stall on them
   for(const o of [...s.props.children]) if(o.isMesh&&!o.isInstancedMesh&&!o.userData.noInk&&!o.userData.crease){ o.userData.crease=new THREE.EdgesGeometry(o.geometry,28); yield 'creases'; }
-  buildPlants(s,!!centre&&s.c===centre[0]&&s.r===centre[1]);
-  yield 'plants';
+  yield* FK.buildSteps(s);
   // loot pins and labels
   for(const p of [...D.pois,...(s.extraPois||[])]){ const k=KIND[p.kind]; if(!k) continue; const x=p.p[0], z=p.p[1], top=p.top!==undefined?p.top:heightAt(x,z)+6.5;
     const pin=new THREE.Mesh(SHAPES.pin,mat(k.c)); pin.position.set(x,top+3,z); pin.scale.set(1,1.5,1); pin.userData.noInk=true; grp.add(pin); const stem=new THREE.Mesh(SHAPES.stem,mat(k.c)); stem.position.set(x,top+1.5,z); stem.userData.noInk=true; grp.add(stem);
@@ -216,9 +215,7 @@ function* buildSector(s){
 }
 // plants: one instanced mesh per kind. Each sector gets geometry that shares the shape's buffers but carries
 // bounds covering the whole sector, so three.js doesn't cull the lot when the shape's own origin is off screen.
-// The centre sector shows every plant; the ring keeps trees, cacti and big shrubs, with a lighter saguaro.
 function sectorGeo(shape,s){ const g=new THREE.BufferGeometry(); for(const k in shape.attributes) g.setAttribute(k,shape.attributes[k]); g.boundingSphere=new THREE.Sphere(new THREE.Vector3(s.x0+SEC/2,heightAt(s.x0+SEC/2,s.z0+SEC/2),s.z0+SEC/2),SEC*.75); g.userData.proxy=true; return g; }
-function buildPlants(s,full){ FK.build(s,full); }
 const LAKE=new THREE.MeshStandardMaterial({color:0x3a8fae, roughness:.22, metalness:.1, transparent:true, opacity:.86, side:THREE.DoubleSide, polygonOffset:true, polygonOffsetFactor:-1});
 const POOL=new THREE.MeshStandardMaterial({color:0x56c3dc, roughness:.18, metalness:.05, transparent:true, opacity:.9, side:THREE.DoubleSide});
 function disposeSector(s){
@@ -240,12 +237,12 @@ function ensureWindow(){
   for(const [k,s] of sectors){ if(want(s.c,s.r)) continue; const i=jobs.findIndex(j=>j.s===s); if(i>=0) jobs.splice(i,1); disposeSector(s); sectors.delete(k); stats.drops++; }
 }
 function setCentre(c,r){ const old=centre&&sectors.get(key(...centre)); centre=[c,r]; const t0=performance.now();
-  if(old&&old.state==='built'){ inkOff(old.props); inkOff(old.gen); buildPlants(old,false); }
-  const s=sectors.get(key(c,r)); if(s&&s.state==='built'){ buildPlants(s,true); inkOn(s.props); inkOn(s.gen); }
+  if(old&&old.state==='built') inkOff(old.props);
+  const s=sectors.get(key(c,r)); if(s&&s.state==='built') inkOn(s.props);
   stats.swap=performance.now()-t0; ensureWindow(); }
 function pump(budget){ const t0=performance.now();
   while(jobs.length && performance.now()-t0<budget){ const j=jobs[0]; j.s.state='building'; const ts=performance.now(), res=j.it.next(), dt=performance.now()-ts; j.s.buildMs+=dt; stats.maxStep=Math.max(stats.maxStep,dt); stats.steps.push([res.value||'labels',dt]); if(stats.steps.length>12) stats.steps.shift();
-    if(res.done){ jobs.shift(); j.s.state='built'; CB.onBuilt(j.s); stats.lastBuild=j.s.buildMs; stats.loads++; if(centre&&j.s.c===centre[0]&&j.s.r===centre[1]){ if(!j.s.full) buildPlants(j.s,true); inkOn(j.s.props); inkOn(j.s.gen); } } } }
+    if(res.done){ jobs.shift(); j.s.state='built'; CB.onBuilt(j.s); stats.lastBuild=j.s.buildMs; stats.loads++; if(centre&&j.s.c===centre[0]&&j.s.r===centre[1])inkOn(j.s.props); } } }
 
 // ---------- squad ----------
 const squad={x:0,z:0,l:0,heading:0,path:null,trail:[]}; let figs=[], target=new THREE.Vector3(), follow=true;
@@ -511,6 +508,14 @@ const clkEl=clockBox.querySelector('#tclk');
 function setSpeed(k){ TM.speed=k; clockBox.querySelectorAll('[data-ts]').forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.ts===k))); }
 clockBox.addEventListener('click',e=>{ const b=e.target.closest('[data-ts]'); if(b) setSpeed(+b.dataset.ts); });
 window.addEventListener('keydown',e=>{ if((e.target.closest&&e.target.closest('input,textarea,button,select'))||NF.mode!=='tactical') return; if(e.code==='Space'){ e.preventDefault(); setSpeed(TM.speed?0:1); } });
+// camera keys: W A S D move the view over the ground, Q and E turn it, Shift moves faster, F goes back to the squad
+const held=new Set(), CAMKEYS=new Set(['KeyW','KeyA','KeyS','KeyD','KeyQ','KeyE']);
+window.addEventListener('keydown',e=>{ if((e.target.closest&&e.target.closest('input,textarea,select'))||e.ctrlKey||e.metaKey||e.altKey||NF.mode!=='tactical') return; if(CAMKEYS.has(e.code)){ e.preventDefault(); held.add(e.code); } else if(e.key==='Shift') held.add(e.code); else if(e.code==='KeyF') follow=true; });
+window.addEventListener('keyup',e=>held.delete(e.code)); window.addEventListener('blur',()=>held.clear());
+function camKeys(rdt,fast){ if(!held.size) return; const h=k=>held.has(k)?1:0, f=h('KeyW')-h('KeyS'), r=h('KeyD')-h('KeyA'), t=h('KeyQ')-h('KeyE');
+  if(t){ camT.yaw+=t*rdt*1.7; camS.yaw+=t*rdt*1.7; }
+  if(f||r){ const k=Math.max(14,camS.dist*1.1)*(fast?3:1)*rdt/Math.hypot(f,r), s=Math.sin(camS.yaw), c=Math.cos(camS.yaw); follow=false;
+    target.x=Math.max(BX0-(LIVE?9000:300),Math.min(BX1+(LIVE?9000:300),target.x+(c*r-s*f)*k)); target.z=Math.max(BZ0-(LIVE?9000:300),Math.min(BZ1+(LIVE?9000:300),target.z-(s*r+c*f)*k)); } }
 let clkShown='';
 function drawClock(){ const m=TM.base+TM.sec/60, d=Math.floor(m/1440)+1, h=Math.floor((m%1440)/60), mm=Math.floor(m%60), ss=Math.floor((m*60)%60), t=`Day ${d} ${String(h).padStart(2,'0')}:${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`; if(t!==clkShown){ clkShown=t; clkEl.textContent=t; } }
 // jump to a sector from the overview: the squad is set down at its middle, then on the nearest walkable cell once it has loaded
@@ -678,6 +683,8 @@ function loop(now){
   if(marker.visible){ const a=(now-markerT)/900; marker.material.opacity=Math.max(0,.8-a*.6); marker.scale.setScalar(1+a*.4); if(a>1.4) marker.visible=false; }
   // camera
   const sy=figs.length?figs[0].y||0:heightAt(target.x,target.z);
+  camKeys(rdt,held.has('ShiftLeft')||held.has('ShiftRight'));
+  if(!follow) target.y+=(heightAt(target.x,target.z)-target.y)*Math.min(1,rdt*6);
   if(follow){ target.x+=(squad.x-target.x)*Math.min(1,rdt*3); target.z+=(squad.z-target.z)*Math.min(1,rdt*3); target.y+=(sy+(ui.view==='street'?1.4:0)-target.y)*Math.min(1,rdt*4); }
   const V=VIEWS[ui.view], kk=1-Math.exp(-rdt*6); camS.dist+=(V.dist-camS.dist)*kk; camS.pitch+=(V.pitch-camS.pitch)*kk; const ay=camT.yaw-camS.yaw; camS.yaw+=Math.atan2(Math.sin(ay),Math.cos(ay))*kk;
   cam.position.set(target.x+Math.sin(camS.yaw)*Math.cos(camS.pitch)*camS.dist, target.y+Math.sin(camS.pitch)*camS.dist, target.z+Math.cos(camS.yaw)*Math.cos(camS.pitch)*camS.dist);
@@ -685,6 +692,7 @@ function loop(now){
   { const o=LIVE?LIVE.sunOff:{x:180,y:320,z:140}; sun.position.set(target.x+o.x,target.y+o.y,target.z+o.z); } sun.target.position.copy(target); const R=ui.view==='high'?420:110;
   Object.assign(sun.shadow.camera,{left:-R,right:R,top:R,bottom:-R,near:10,far:1400}); sun.shadow.camera.updateProjectionMatrix();
   if(LIVE){ scene.fog.far=Math.max(1400,camS.dist*16); scene.fog.near=scene.fog.far*.3; } else { scene.fog.near=ui.view==='high'?700:380; scene.fog.far=ui.view==='high'?1600:980; }
+  FK.frame(sectors.values(),target.x,target.z,camS.dist);
   updateReadout(); renderer.render(scene,cam);
   for(const s of sectors.values()) for(const l of s.labels||[]){ if(LIVE){ l.el.style.display='none'; l.pin.visible=false; continue; } l.pin.rotation.y=now/900; tmp.set(l.x,l.top+5.2,l.z); const p=tmp.project(cam), show=p.z<1&&Math.hypot(l.x-target.x,l.z-target.z)<(ui.view==='high'?900:180)&&Math.abs(p.x)<1.05&&Math.abs(p.y)<1.05; l.el.style.display=show?'':'none'; if(show) l.el.style.transform=`translate(${(p.x+1)/2*W}px,${(1-p.y)/2*H}px) translate(-50%,-100%)`; }
   whereEl.textContent=`New River · sector ${centre[0]+1},${centre[1]+1}`;
@@ -695,6 +703,6 @@ NF.tacEnter=(x,z,sq)=>{ TM.sec=0; TM.base=window.Campaign&&Campaign.state?Campai
   if(LIVE) LIVE.enter(sq); const c=secAt(x,z)||[2,2]; ready=false; pending=sq; loadingEl.hidden=false; resize(); setCentre(...c); };
 NF.tacSeconds=()=>LIVE&&LIVE.live?0:TM.sec;   // game seconds spent here, for the map clock to catch up
 NF.tacState=()=>({pose:{yaw:camS.yaw,pitch:camS.pitch,dist:camS.dist},x:target.x,z:target.z,squad:squadInfo?{x:squad.x,z:squad.z,index:squadInfo.index,people:figs.length}:null}); NF.tacBusy=()=>CB.active;
-window.__stream={CB,scene,squad,sectors,stats,orderMove:(x,z,deck)=>orderMove({p:new THREE.Vector3(x,heightAt(x,z),z),deck}),boost:k=>{ boost=k; },heightAt,ui,look:(x,z,yaw,pitch,dist)=>{ follow=false; target.set(x,heightAt(x,z),z); camT.yaw=yaw; VIEWS[ui.view].pitch=pitch; VIEWS[ui.view].dist=dist; },follow:()=>{ follow=true; },renderer,teleport:(x,z)=>{ Object.assign(squad,{x,z,l:0,path:null,trail:[{x,z,l:0}]}); figs.forEach((f,i)=>{ f.x=x; f.z=z+i*.01; f.y=undefined; }); target.set(x,heightAt(x,z),z); follow=true; },lowfi:()=>{ renderer.shadowMap.enabled=false; renderer.setPixelRatio(1); resize(); }};
+window.__stream={CB,target,camT,camS,scene,squad,sectors,stats,orderMove:(x,z,deck)=>orderMove({p:new THREE.Vector3(x,heightAt(x,z),z),deck}),boost:k=>{ boost=k; },heightAt,ui,look:(x,z,yaw,pitch,dist)=>{ follow=false; target.set(x,heightAt(x,z),z); camT.yaw=yaw; VIEWS[ui.view].pitch=pitch; VIEWS[ui.view].dist=dist; },follow:()=>{ follow=true; },renderer,teleport:(x,z)=>{ Object.assign(squad,{x,z,l:0,path:null,trail:[{x,z,l:0}]}); figs.forEach((f,i)=>{ f.x=x; f.z=z+i*.01; f.y=undefined; }); target.set(x,heightAt(x,z),z); follow=true; },lowfi:()=>{ renderer.shadowMap.enabled=false; renderer.setPixelRatio(1); resize(); }};
 requestAnimationFrame(loop);
 })();

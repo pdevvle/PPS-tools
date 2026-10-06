@@ -121,7 +121,7 @@ dt{color:var(--muted)} dd{margin:0;text-align:right}
       <div id="rstage" aria-label="3D map of the region">
         <div id="rlabels"></div>
         <div class="hud"><b id="clock">Day 1 07:30</b><button type="button" data-s="0" aria-pressed="false">❚❚</button><button type="button" data-s="1" aria-pressed="true">1×</button><button type="button" data-s="4" aria-pressed="false">4×</button><button type="button" id="homeBtn">Home</button><button type="button" id="diveBtn">Go tactical</button></div>
-        <div class="hint">Drag to turn · right-drag to pan · zoom all the way in on the gold block to go tactical</div>
+        <div class="hint">Drag or Q/E to turn · right-drag or WASD to pan · zoom all the way in on the gold block to go tactical</div>
       </div>
       <div id="stage" aria-label="3D view of the tactical ground" hidden>
         <div id="labels"></div>
@@ -770,6 +770,14 @@ function dive(x,z){ if(!NF.inBlock(x,z)){ NF.tip('Tactical ground is baked only 
   NF.encounter=null; NF.mapPose={yaw:camS.yaw,pitch:camS.pitch,dist:camS.dist}; NF.enterTactical(x,z,here?{x:here.x,z:here.z,name:here.name,people:here.people,index:sqs.indexOf(here)}:null); }
 if(ZOOM){ renderer.domElement.addEventListener('dblclick',e=>{ const p=pick(e); if(p) dive(p.x,p.z); });
   document.getElementById('diveBtn').onclick=()=>{ const sq=S().squads[selSquad]; dive(NF.inBlock(sq.x,sq.z)?sq.x:camT.tx, NF.inBlock(sq.x,sq.z)?sq.z:camT.tz); }; }
+// camera keys: W A S D move the view, Q and E turn it, Shift moves faster
+const held=new Set(), CAMKEYS=new Set(['KeyW','KeyA','KeyS','KeyD','KeyQ','KeyE']);
+window.addEventListener('keydown',e=>{ if((e.target.closest&&e.target.closest('input,textarea,select'))||e.ctrlKey||e.metaKey||e.altKey||(ZOOM&&NF.mode!=='region')) return; if(CAMKEYS.has(e.code)){ e.preventDefault(); held.add(e.code); } else if(e.key==='Shift') held.add(e.code); });
+window.addEventListener('keyup',e=>held.delete(e.code)); window.addEventListener('blur',()=>held.clear());
+function camKeys(dt){ if(!held.size) return; const h=k=>held.has(k)?1:0, f=h('KeyW')-h('KeyS'), r=h('KeyD')-h('KeyA'), t=h('KeyQ')-h('KeyE');
+  if(t) camT.yaw+=t*dt*1.5;
+  if(f||r){ const k=camT.dist*.9*(h('ShiftLeft')||h('ShiftRight')?3:1)*dt/Math.hypot(f,r), s=Math.sin(camT.yaw), c=Math.cos(camT.yaw);
+    camT.tx=Math.max(-HX,Math.min(HX,camT.tx+(c*r-s*f)*k)); camT.tz=Math.max(-HZ,Math.min(HZ,camT.tz-(s*r+c*f)*k)); } }
 document.getElementById('homeBtn').onclick=()=>{ camT.tx=hx0; camT.tz=hz0; camT.dist=6000; };
 document.getElementById('realmBtn').onclick=()=>{ camT.tx=0; camT.tz=0; camT.dist=Math.max(HX,HZ)*2.6; camT.pitch=Math.max(camT.pitch,.75); };
 let speed=1;   // 1× = 10 game minutes per real second
@@ -790,6 +798,7 @@ function loop(now){
   for(const [id,v] of bandViews) if(v.show) v.mesh.position.set(v.x,Y(v.x,v.z),v.z);
   uiAcc+=dt; if(uiAcc>.5){ uiAcc=0; drawSky(); if(run){ drawSquads(); syncBands(); } }
   saveT+=dt; if(saveT>2) save();
+  camKeys(dt);
   const k=1-Math.exp(-dt*5); for(const key in camS){ if(key==='yaw'){ const d=Math.atan2(Math.sin(camT.yaw-camS.yaw),Math.cos(camT.yaw-camS.yaw)); camS.yaw+=d*k; } else camS[key]+=(camT[key]-camS[key])*k; }
   const ty=Y(camS.tx,camS.tz); cam.position.set(camS.tx+Math.sin(camS.yaw)*Math.cos(camS.pitch)*camS.dist, ty+Math.sin(camS.pitch)*camS.dist, camS.tz+Math.cos(camS.yaw)*Math.cos(camS.pitch)*camS.dist); cam.lookAt(camS.tx,ty,camS.tz); followView(camS.tx,ty,camS.tz,camS.dist);
   if(Math.abs(camS.dist-marksAt)/marksAt>.25){ marksAt=camS.dist; drawMarks(); }
@@ -1954,9 +1963,9 @@ return {add,TYPES:T};
 root.CarKit=CarKit;
 })(typeof self!=='undefined'?self:this);
 // ---------- Nightfall flora kit: the plants and rock of the Arizona Upland Sonoran Desert, and the ground they stand on ----------
-// FloraKit(ctx) returns {build(s,full), paintGround(g,s,X,Z,px)}. Plant records come from the bake ([type,x,y,z,sx,sy,sz,rx,ry],
-// types in SectorCore.PLANTS). build fills s.gen with one instanced mesh per plant part; the centre sector shows everything,
-// the ring only what the table keeps there. paintGround paints wash beds, the braided river bed and exposed rock on steep ground.
+// FloraKit(ctx) returns {build(s), buildSteps(s), frame(sectors,x,z,dist), paintGround(g,s,X,Z,px)}. Plant records come from the bake ([type,x,y,z,sx,sy,sz,rx,ry],
+// types in SectorCore.PLANTS). buildSteps fills s.gen with instanced meshes, a step at a time; frame() shows each tile's
+// detail by its distance from the camera. paintGround paints wash beds, the braided river bed and exposed rock on steep ground.
 (function(root){
 function FloraKit(o){
 const {THREE,mat,C,sectorGeo}=o, TAU=Math.PI*2, K=C.PT;
@@ -2024,15 +2033,41 @@ SPEC[K.DRF]={parts:[[merge([stick([-1.1,.08,0],[1.1,.1,.1],.09,.06),stick([.2,.1
 SPEC[K.SNAG]={parts:[[merge([stick([0,0,0],[.2,2.6,.1],.15,.08,6),stick([.1,1.4,0],[1,2.6,.3],.06,.03),stick([.15,1.9,.05],[-.8,3,-.2],.05,.03),stick([.2,2.6,.1],[.6,3.4,-.2],.04,.02)]),'#8e857a']]};
 const SHARED=new Set(); for(const sp of SPEC) for(const p of [...sp.parts,...(sp.lo||[])]) SHARED.add(p[0]);
 
-function build(s,full){
-  for(const o of [...s.gen.children]){ s.gen.remove(o); o.geometry.dispose(); }
-  const L=SPEC.map(()=>[]), tmp=new THREE.Matrix4(), q=new THREE.Quaternion(), e=new THREE.Euler(0,0,0,'YXZ'), v=new THREE.Vector3(), sc=new THREE.Vector3();
-  for(const p of s.data.plants){ const t=C.PLANTS[p[0]]; if(!t||!SPEC[p[0]]) continue; if(!full&&!(t.ring===1||(t.ring&&p[4]>t.ring))) continue;
-    // tilt first, then turn: a rock face leans into its slope facing down it
-    e.set(p[7],p[8],0,'YXZ'); q.setFromEuler(e); L[p[0]].push(new THREE.Matrix4().compose(v.set(p[1],p[2],p[3]),q,sc.set(p[4],p[5],p[6]))); }
-  L.forEach((list,t)=>{ if(!list.length) return; const parts=!full&&SPEC[t].lo?SPEC[t].lo:SPEC[t].parts;
-    for(const [geo,col] of parts){ const me=new THREE.InstancedMesh(sectorGeo(geo,s),mat(col),list.length); list.forEach((m,i)=>me.setMatrixAt(i,m)); me.castShadow=true; me.receiveShadow=true; s.gen.add(me); } });
-  s.full=full; }
+// Plants are split by how far they carry. Kinds the ring keeps (trees, cacti, big shrubs) without a lighter stand-in
+// are one mesh per part for the whole sector. Everything else goes into 300 m tiles with tight bounds, so the camera
+// and the sun's shadow camera skip whole tiles: small plants show only near the camera, and a kind with a stand-in
+// (the saguaro) swaps between its full and light shapes by distance. frame() sets that, and the ink, every frame,
+// so crossing into another sector rebuilds nothing.
+const TILE=300;
+function proxy(shape,cx,cy,cz,r){ const g=new THREE.BufferGeometry(); for(const k in shape.attributes) g.setAttribute(k,shape.attributes[k]); g.boundingSphere=new THREE.Sphere(new THREE.Vector3(cx,cy,cz),r); g.userData.proxy=true; return g; }
+function shell(me){ if(!o.ink) return; const sh=new THREE.InstancedMesh(me.geometry,o.ink,me.count); sh.instanceMatrix=me.instanceMatrix; sh.userData.ink=true; sh.matrixAutoUpdate=false; me.add(sh); return sh; }
+function* buildSteps(s){
+  for(const c of [...s.gen.children]){ s.gen.remove(c); c.traverse(q=>{ if(q.isInstancedMesh&&!q.userData.ink) q.geometry.dispose(); }); }
+  const SEC=o.SEC||600, NT=Math.max(1,Math.round(SEC/TILE)), TS=SEC/NT, e=new THREE.Euler(0,0,0,'YXZ'), q=new THREE.Quaternion(), v=new THREE.Vector3(), sc=new THREE.Vector3(), m=new THREE.Matrix4();
+  // sort every record into the sector list or its tile's near / stand-in lists
+  const keepL=SPEC.map(()=>[]), tiles=Array.from({length:NT*NT},(_,i)=>({x0:s.x0+(i%NT)*TS,z0:s.z0+Math.floor(i/NT)*TS,near:SPEC.map(()=>[]),lod:SPEC.map(()=>[]),y:0,n:0}));
+  for(const p of s.data.plants){ const t=C.PLANTS[p[0]]; if(!t||!SPEC[p[0]]) continue; const keep=t.ring===1||(t.ring&&p[4]>t.ring);
+    if(keep&&!SPEC[p[0]].lo){ keepL[p[0]].push(p); continue; }
+    const ti=Math.min(NT-1,Math.max(0,Math.floor((p[3]-s.z0)/TS)))*NT+Math.min(NT-1,Math.max(0,Math.floor((p[1]-s.x0)/TS))), T=tiles[ti]; (keep?T.lod:T.near)[p[0]].push(p); T.y+=p[2]; T.n++; }
+  // tilt first, then turn: a rock face leans into its slope facing down it
+  const fill=(list,parts,geoOf,into)=>{ const out=[]; for(const [geo,col] of parts){ const me=new THREE.InstancedMesh(geoOf(geo),mat(col),list.length);
+      list.forEach((p,i)=>{ e.set(p[7],p[8],0,'YXZ'); q.setFromEuler(e); me.setMatrixAt(i,m.compose(v.set(p[1],p[2],p[3]),q,sc.set(p[4],p[5],p[6]))); }); me.castShadow=true; me.receiveShadow=true; into.add(me); out.push(me); } return out; };
+  const whole=new THREE.Group(); whole.userData.box=[s.x0,s.z0,s.x0+SEC,s.z0+SEC]; whole.userData.ink=[]; s.gen.add(whole);
+  keepL.forEach((list,t)=>{ if(list.length) for(const me of fill(list,SPEC[t].parts,g=>sectorGeo(g,s),whole)) whole.userData.ink.push(shell(me)); });
+  yield 'plants';
+  for(const T of tiles){ if(!T.n) continue; const cx=T.x0+TS/2, cz=T.z0+TS/2, cy=T.y/T.n, r=TS*.72+12, geoOf=g=>proxy(g,cx,cy,cz,r);
+    const G=new THREE.Group(), near=new THREE.Group(), far=new THREE.Group(); G.add(near,far); G.userData={box:[T.x0,T.z0,T.x0+TS,T.z0+TS],near,far,ink:[]}; s.gen.add(G);
+    T.near.forEach((list,t)=>{ if(list.length) for(const me of fill(list,SPEC[t].parts,geoOf,near)) G.userData.ink.push(shell(me)); });
+    T.lod.forEach((list,t)=>{ if(!list.length) return; for(const me of fill(list,SPEC[t].parts,geoOf,near)) G.userData.ink.push(shell(me)); fill(list,SPEC[t].lo,geoOf,far); });
+    yield 'plants'; }
+  }
+function build(s){ for(const _ of buildSteps(s)); }
+// distance from the camera's target to each tile sets what shows: near detail, the stand-ins beyond, ink closest in
+function frame(sectors,tx,tz,dist){ const RN=Math.min(520,240+dist*.45), RI=Math.min(320,150+dist*.3);
+  for(const s of sectors){ if(!s.gen) continue; for(const G of s.gen.children){ const u=G.userData, b=u.box; if(!b) continue;
+    const d=Math.hypot(Math.max(b[0]-tx,0,tx-b[2]),Math.max(b[1]-tz,0,tz-b[3])), ink=d<RI;
+    if(u.near){ const on=d<RN; if(u.near.visible!==on){ u.near.visible=on; u.far.visible=!on; } }
+    for(const sh of u.ink) if(sh&&sh.visible!==ink) sh.visible=ink; } } }
 
 // ---------- the ground: rock exposed on steep slopes, wash beds, the braided river bed ----------
 function paintGround(g,s,X,Z,px){ const D=s.data, n=s.hn, H=s.Hf, rnd=C.rng(400+s.c*17+s.r*29);
@@ -2064,7 +2099,7 @@ function paintGround(g,s,X,Z,px){ const D=s.data, n=s.hn, H=s.Hf, rnd=C.rng(400+
     // a wash: dark cut-bank band, pale sandy bed, coarser gravel down the thalweg, a speckle of cobbles
     line(w.pts,w.hw*2+4,'#b39a74'); line(w.pts,w.hw*2-1,'#dcc9a2'); line(w.pts,Math.max(.8,w.hw*.55),'#c8b088');
     const d=C.densify(w.pts,3); for(const [x,z] of d) for(let k=0;k<3;k++){ const o=(rnd()-.5)*w.hw*1.6; g.fillStyle=rnd()<.5?'rgba(120,106,90,.55)':'rgba(236,224,200,.6)'; g.fillRect(X(x+o),Z(z+(rnd()-.5)*3),1.4,1.4); } } }
-return {build,paintGround,SHARED};
+return {build,buildSteps,frame,paintGround,SHARED};
 }
 root.FloraKit=FloraKit;
 })(typeof self!=='undefined'?self:this);
@@ -2906,7 +2941,7 @@ const miniEl=document.getElementById('mini'), costEl=document.getElementById('co
 const fail=t=>{ loadingEl.textContent=t; };
 if(!window.THREE){ fail('The 3D view needs three.js, which could not load. Check your connection and reload.'); return; }
 let renderer; try{ renderer=new THREE.WebGLRenderer({antialias:true, alpha:true}); }catch(e){ fail('This browser could not start WebGL.'); return; }
-renderer.setPixelRatio(Math.min(2,window.devicePixelRatio||1)); renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap; renderer.setClearColor(0x000000,0); stage.prepend(renderer.domElement);
+renderer.setPixelRatio(Math.min(1.5,window.devicePixelRatio||1)); renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap; renderer.setClearColor(0x000000,0); stage.prepend(renderer.domElement);
 stage.style.background='linear-gradient(180deg,#9fc6e4,#e8dcc2)';
 const scene=new THREE.Scene(); scene.fog=new THREE.Fog(0xe2d8c2,380,980);
 const cam=new THREE.PerspectiveCamera(38,1,.5,20000);
@@ -2957,7 +2992,7 @@ const LIVEH=(typeof Campaign!=='undefined'&&window.__region&&Campaign.state)?(x,
 for(const b of IDX.bridges){ const d=b.d; b.yAt=t=>C.bridgeY(b,t); b.tan=k=>{ const p=d[Math.max(0,k-1)], q=d[Math.min(d.length-1,k+1)], l=Math.hypot(q[0]-p[0],q[1]-p[1])||1; return [(q[0]-p[0])/l,(q[1]-p[1])/l]; }; b.nrm=k=>{ const [tx,tz]=b.tan(k); return [tz,-tx]; };
   b.sec=[Math.floor((b.mid[0]-BX0)/SEC),Math.floor((b.mid[1]-BZ0)/SEC)]; b.bb=C.bbox(d); }
 const RK=RoadKit({THREE,C,heightAt:(x,z)=>heightAt(x,z),IDX,renderer,mat,SHAPES,sectorGeo:(g,s)=>sectorGeo(g,s),kindAt:(x,z)=>{ const c=cellOf(x,z); return c<0?255:kindG[c]; }});
-const FK=FloraKit({THREE,mat,C,sectorGeo:(g,s)=>sectorGeo(g,s)});   // desert plants, rock and wash beds (tools/stream/flora-kit.js)   // road surfaces, paint, signs and signals
+const FK=FloraKit({THREE,mat,C,SEC,ink:INK,sectorGeo:(g,s)=>sectorGeo(g,s)});   // desert plants, rock and wash beds (tools/stream/flora-kit.js)
 const sectors=new Map(), key=(c,r)=>c+','+r;
 const secAt=(x,z)=>{ const c=Math.floor((x-BX0)/SEC), r=Math.floor((z-BZ0)/SEC); return c>=0&&r>=0&&c<NBX&&r<NBZ?[c,r]:null; };
 const CX=IDX.context, CCX=CX.cx||0, CCZ=CX.cz||0, ctxH=(x,z)=>{ const fx=(x-CCX+CX.half)/CX.step, fz=(z-CCZ+CX.half)/CX.step, i=Math.max(0,Math.min(CX.n-2,Math.floor(fx))), j=Math.max(0,Math.min(CX.n-2,Math.floor(fz))), u=fx-i, v=fz-j, h=(a,b)=>CX.h[b*CX.n+a]; return (h(i,j)*(1-u)+h(i+1,j)*u)*(1-v)+(h(i,j+1)*(1-u)+h(i+1,j+1)*u)*v; };
@@ -3106,8 +3141,7 @@ function* buildSector(s){
   yield 'structures';
   // crease lines for the ink worked out now, one mesh a step, so taking the centre doesn't stall on them
   for(const o of [...s.props.children]) if(o.isMesh&&!o.isInstancedMesh&&!o.userData.noInk&&!o.userData.crease){ o.userData.crease=new THREE.EdgesGeometry(o.geometry,28); yield 'creases'; }
-  buildPlants(s,!!centre&&s.c===centre[0]&&s.r===centre[1]);
-  yield 'plants';
+  yield* FK.buildSteps(s);
   // loot pins and labels
   for(const p of [...D.pois,...(s.extraPois||[])]){ const k=KIND[p.kind]; if(!k) continue; const x=p.p[0], z=p.p[1], top=p.top!==undefined?p.top:heightAt(x,z)+6.5;
     const pin=new THREE.Mesh(SHAPES.pin,mat(k.c)); pin.position.set(x,top+3,z); pin.scale.set(1,1.5,1); pin.userData.noInk=true; grp.add(pin); const stem=new THREE.Mesh(SHAPES.stem,mat(k.c)); stem.position.set(x,top+1.5,z); stem.userData.noInk=true; grp.add(stem);
@@ -3116,9 +3150,7 @@ function* buildSector(s){
 }
 // plants: one instanced mesh per kind. Each sector gets geometry that shares the shape's buffers but carries
 // bounds covering the whole sector, so three.js doesn't cull the lot when the shape's own origin is off screen.
-// The centre sector shows every plant; the ring keeps trees, cacti and big shrubs, with a lighter saguaro.
 function sectorGeo(shape,s){ const g=new THREE.BufferGeometry(); for(const k in shape.attributes) g.setAttribute(k,shape.attributes[k]); g.boundingSphere=new THREE.Sphere(new THREE.Vector3(s.x0+SEC/2,heightAt(s.x0+SEC/2,s.z0+SEC/2),s.z0+SEC/2),SEC*.75); g.userData.proxy=true; return g; }
-function buildPlants(s,full){ FK.build(s,full); }
 const LAKE=new THREE.MeshStandardMaterial({color:0x3a8fae, roughness:.22, metalness:.1, transparent:true, opacity:.86, side:THREE.DoubleSide, polygonOffset:true, polygonOffsetFactor:-1});
 const POOL=new THREE.MeshStandardMaterial({color:0x56c3dc, roughness:.18, metalness:.05, transparent:true, opacity:.9, side:THREE.DoubleSide});
 function disposeSector(s){
@@ -3140,12 +3172,12 @@ function ensureWindow(){
   for(const [k,s] of sectors){ if(want(s.c,s.r)) continue; const i=jobs.findIndex(j=>j.s===s); if(i>=0) jobs.splice(i,1); disposeSector(s); sectors.delete(k); stats.drops++; }
 }
 function setCentre(c,r){ const old=centre&&sectors.get(key(...centre)); centre=[c,r]; const t0=performance.now();
-  if(old&&old.state==='built'){ inkOff(old.props); inkOff(old.gen); buildPlants(old,false); }
-  const s=sectors.get(key(c,r)); if(s&&s.state==='built'){ buildPlants(s,true); inkOn(s.props); inkOn(s.gen); }
+  if(old&&old.state==='built') inkOff(old.props);
+  const s=sectors.get(key(c,r)); if(s&&s.state==='built') inkOn(s.props);
   stats.swap=performance.now()-t0; ensureWindow(); }
 function pump(budget){ const t0=performance.now();
   while(jobs.length && performance.now()-t0<budget){ const j=jobs[0]; j.s.state='building'; const ts=performance.now(), res=j.it.next(), dt=performance.now()-ts; j.s.buildMs+=dt; stats.maxStep=Math.max(stats.maxStep,dt); stats.steps.push([res.value||'labels',dt]); if(stats.steps.length>12) stats.steps.shift();
-    if(res.done){ jobs.shift(); j.s.state='built'; CB.onBuilt(j.s); stats.lastBuild=j.s.buildMs; stats.loads++; if(centre&&j.s.c===centre[0]&&j.s.r===centre[1]){ if(!j.s.full) buildPlants(j.s,true); inkOn(j.s.props); inkOn(j.s.gen); } } } }
+    if(res.done){ jobs.shift(); j.s.state='built'; CB.onBuilt(j.s); stats.lastBuild=j.s.buildMs; stats.loads++; if(centre&&j.s.c===centre[0]&&j.s.r===centre[1])inkOn(j.s.props); } } }
 
 // ---------- squad ----------
 const squad={x:0,z:0,l:0,heading:0,path:null,trail:[]}; let figs=[], target=new THREE.Vector3(), follow=true;
@@ -3411,6 +3443,14 @@ const clkEl=clockBox.querySelector('#tclk');
 function setSpeed(k){ TM.speed=k; clockBox.querySelectorAll('[data-ts]').forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.ts===k))); }
 clockBox.addEventListener('click',e=>{ const b=e.target.closest('[data-ts]'); if(b) setSpeed(+b.dataset.ts); });
 window.addEventListener('keydown',e=>{ if((e.target.closest&&e.target.closest('input,textarea,button,select'))||NF.mode!=='tactical') return; if(e.code==='Space'){ e.preventDefault(); setSpeed(TM.speed?0:1); } });
+// camera keys: W A S D move the view over the ground, Q and E turn it, Shift moves faster, F goes back to the squad
+const held=new Set(), CAMKEYS=new Set(['KeyW','KeyA','KeyS','KeyD','KeyQ','KeyE']);
+window.addEventListener('keydown',e=>{ if((e.target.closest&&e.target.closest('input,textarea,select'))||e.ctrlKey||e.metaKey||e.altKey||NF.mode!=='tactical') return; if(CAMKEYS.has(e.code)){ e.preventDefault(); held.add(e.code); } else if(e.key==='Shift') held.add(e.code); else if(e.code==='KeyF') follow=true; });
+window.addEventListener('keyup',e=>held.delete(e.code)); window.addEventListener('blur',()=>held.clear());
+function camKeys(rdt,fast){ if(!held.size) return; const h=k=>held.has(k)?1:0, f=h('KeyW')-h('KeyS'), r=h('KeyD')-h('KeyA'), t=h('KeyQ')-h('KeyE');
+  if(t){ camT.yaw+=t*rdt*1.7; camS.yaw+=t*rdt*1.7; }
+  if(f||r){ const k=Math.max(14,camS.dist*1.1)*(fast?3:1)*rdt/Math.hypot(f,r), s=Math.sin(camS.yaw), c=Math.cos(camS.yaw); follow=false;
+    target.x=Math.max(BX0-(LIVE?9000:300),Math.min(BX1+(LIVE?9000:300),target.x+(c*r-s*f)*k)); target.z=Math.max(BZ0-(LIVE?9000:300),Math.min(BZ1+(LIVE?9000:300),target.z-(s*r+c*f)*k)); } }
 let clkShown='';
 function drawClock(){ const m=TM.base+TM.sec/60, d=Math.floor(m/1440)+1, h=Math.floor((m%1440)/60), mm=Math.floor(m%60), ss=Math.floor((m*60)%60), t=`Day ${d} ${String(h).padStart(2,'0')}:${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`; if(t!==clkShown){ clkShown=t; clkEl.textContent=t; } }
 // jump to a sector from the overview: the squad is set down at its middle, then on the nearest walkable cell once it has loaded
@@ -3578,6 +3618,8 @@ function loop(now){
   if(marker.visible){ const a=(now-markerT)/900; marker.material.opacity=Math.max(0,.8-a*.6); marker.scale.setScalar(1+a*.4); if(a>1.4) marker.visible=false; }
   // camera
   const sy=figs.length?figs[0].y||0:heightAt(target.x,target.z);
+  camKeys(rdt,held.has('ShiftLeft')||held.has('ShiftRight'));
+  if(!follow) target.y+=(heightAt(target.x,target.z)-target.y)*Math.min(1,rdt*6);
   if(follow){ target.x+=(squad.x-target.x)*Math.min(1,rdt*3); target.z+=(squad.z-target.z)*Math.min(1,rdt*3); target.y+=(sy+(ui.view==='street'?1.4:0)-target.y)*Math.min(1,rdt*4); }
   const V=VIEWS[ui.view], kk=1-Math.exp(-rdt*6); camS.dist+=(V.dist-camS.dist)*kk; camS.pitch+=(V.pitch-camS.pitch)*kk; const ay=camT.yaw-camS.yaw; camS.yaw+=Math.atan2(Math.sin(ay),Math.cos(ay))*kk;
   cam.position.set(target.x+Math.sin(camS.yaw)*Math.cos(camS.pitch)*camS.dist, target.y+Math.sin(camS.pitch)*camS.dist, target.z+Math.cos(camS.yaw)*Math.cos(camS.pitch)*camS.dist);
@@ -3585,6 +3627,7 @@ function loop(now){
   { const o=LIVE?LIVE.sunOff:{x:180,y:320,z:140}; sun.position.set(target.x+o.x,target.y+o.y,target.z+o.z); } sun.target.position.copy(target); const R=ui.view==='high'?420:110;
   Object.assign(sun.shadow.camera,{left:-R,right:R,top:R,bottom:-R,near:10,far:1400}); sun.shadow.camera.updateProjectionMatrix();
   if(LIVE){ scene.fog.far=Math.max(1400,camS.dist*16); scene.fog.near=scene.fog.far*.3; } else { scene.fog.near=ui.view==='high'?700:380; scene.fog.far=ui.view==='high'?1600:980; }
+  FK.frame(sectors.values(),target.x,target.z,camS.dist);
   updateReadout(); renderer.render(scene,cam);
   for(const s of sectors.values()) for(const l of s.labels||[]){ if(LIVE){ l.el.style.display='none'; l.pin.visible=false; continue; } l.pin.rotation.y=now/900; tmp.set(l.x,l.top+5.2,l.z); const p=tmp.project(cam), show=p.z<1&&Math.hypot(l.x-target.x,l.z-target.z)<(ui.view==='high'?900:180)&&Math.abs(p.x)<1.05&&Math.abs(p.y)<1.05; l.el.style.display=show?'':'none'; if(show) l.el.style.transform=`translate(${(p.x+1)/2*W}px,${(1-p.y)/2*H}px) translate(-50%,-100%)`; }
   whereEl.textContent=`New River · sector ${centre[0]+1},${centre[1]+1}`;
@@ -3595,7 +3638,7 @@ NF.tacEnter=(x,z,sq)=>{ TM.sec=0; TM.base=window.Campaign&&Campaign.state?Campai
   if(LIVE) LIVE.enter(sq); const c=secAt(x,z)||[2,2]; ready=false; pending=sq; loadingEl.hidden=false; resize(); setCentre(...c); };
 NF.tacSeconds=()=>LIVE&&LIVE.live?0:TM.sec;   // game seconds spent here, for the map clock to catch up
 NF.tacState=()=>({pose:{yaw:camS.yaw,pitch:camS.pitch,dist:camS.dist},x:target.x,z:target.z,squad:squadInfo?{x:squad.x,z:squad.z,index:squadInfo.index,people:figs.length}:null}); NF.tacBusy=()=>CB.active;
-window.__stream={CB,scene,squad,sectors,stats,orderMove:(x,z,deck)=>orderMove({p:new THREE.Vector3(x,heightAt(x,z),z),deck}),boost:k=>{ boost=k; },heightAt,ui,look:(x,z,yaw,pitch,dist)=>{ follow=false; target.set(x,heightAt(x,z),z); camT.yaw=yaw; VIEWS[ui.view].pitch=pitch; VIEWS[ui.view].dist=dist; },follow:()=>{ follow=true; },renderer,teleport:(x,z)=>{ Object.assign(squad,{x,z,l:0,path:null,trail:[{x,z,l:0}]}); figs.forEach((f,i)=>{ f.x=x; f.z=z+i*.01; f.y=undefined; }); target.set(x,heightAt(x,z),z); follow=true; },lowfi:()=>{ renderer.shadowMap.enabled=false; renderer.setPixelRatio(1); resize(); }};
+window.__stream={CB,target,camT,camS,scene,squad,sectors,stats,orderMove:(x,z,deck)=>orderMove({p:new THREE.Vector3(x,heightAt(x,z),z),deck}),boost:k=>{ boost=k; },heightAt,ui,look:(x,z,yaw,pitch,dist)=>{ follow=false; target.set(x,heightAt(x,z),z); camT.yaw=yaw; VIEWS[ui.view].pitch=pitch; VIEWS[ui.view].dist=dist; },follow:()=>{ follow=true; },renderer,teleport:(x,z)=>{ Object.assign(squad,{x,z,l:0,path:null,trail:[{x,z,l:0}]}); figs.forEach((f,i)=>{ f.x=x; f.z=z+i*.01; f.y=undefined; }); target.set(x,heightAt(x,z),z); follow=true; },lowfi:()=>{ renderer.shadowMap.enabled=false; renderer.setPixelRatio(1); resize(); }};
 requestAnimationFrame(loop);
 })();
 // ---------- handing over between the map and the ground ----------
