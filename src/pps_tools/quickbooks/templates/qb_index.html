@@ -1,0 +1,37 @@
+{% extends "qb_base.html" %}
+{% block title %}QuickBooks Categorizer{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>Connection</h2>
+  {% if not configured %}
+    <p class="flash error">
+      Missing <code>QBO_CLIENT_ID</code> / <code>QBO_CLIENT_SECRET</code>.
+      Set them in your <code>.env</code> file (see <code>.env.example</code>) and restart.
+    </p>
+  {% elif connected %}
+    <p>Connected to QuickBooks
+      <span class="pill">{{ environment }}</span>
+    </p>
+    <p>
+      <a class="btn" href="{{ url_for('review') }}">Review uncategorized transactions &rarr;</a>
+      <form style="display:inline" method="post" action="{{ url_for('disconnect') }}">
+        <button type="submit" class="secondary">Disconnect</button>
+      </form>
+    </p>
+  {% else %}
+    <p>Not connected yet.</p>
+    <p><a class="btn" href="{{ url_for('oauth_start') }}">Connect to QuickBooks</a></p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h3>How it works</h3>
+  <ol>
+    <li>Connect your QuickBooks Online company.</li>
+    <li>We pull transactions posted to <em>Uncategorized Expense</em> / <em>Ask My Accountant</em>
+        (or any transactions in a date range if you prefer).</li>
+    <li>Claude suggests a category from your chart of accounts with a confidence score and reasoning.</li>
+    <li>You approve, edit, or skip each suggestion — approved changes are pushed back to QBO.</li>
+  </ol>
+</div>
+{% endblock %}
