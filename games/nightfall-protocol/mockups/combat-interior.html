@@ -3129,6 +3129,59 @@ const inkMat=new THREE.LineBasicMaterial({color:0x1d1814});
 const solidMat=new THREE.MeshLambertMaterial({vertexColors:true,polygonOffset:true,polygonOffsetFactor:1,polygonOffsetUnits:1}); // faces sit a hair behind their ink
 const glassMat=new THREE.MeshLambertMaterial({color:0x9cc8d6,transparent:true,opacity:.35,depthWrite:false});
 const pickMat=new THREE.MeshBasicMaterial({visible:false});
+// ---------------------------------------------------------------- the cutaway, drawn as a building section
+// Walls are cut in the shader, not swapped for low copies. Everything above the cut height is not drawn. Through
+// the gap you see the inside of the wall, which is painted one flat tone per build-up (the poché of a section
+// drawing), and an ink line runs along the cut. The cut height is the stub height inside a zone that runs from the
+// point under the cursor toward the camera, and rises to above the wall tops at the zone's edge, so walls slope
+// down into it rather than popping. Outside walls facing the camera are cut along their whole length. Ink above
+// the cut stays as a faint outline of the full wall.
+const CUT={on:true,stub:.9,R:3.2,focus:new THREE.Vector3(),goal:new THREE.Vector3(),dir:new THREE.Vector2(0,1),low:{},lowGoal:{},
+  u:{uOn:{value:1},uFocus:{value:new THREE.Vector3()},uDir:{value:new THREE.Vector2(0,1)},uR:{value:3.2},uStub:{value:.9},uTop:{value:3},uFloorY:{value:0},uInk:{value:new THREE.Color(0x1d1814)}}};
+const CAPCOL={stud:'#8a8780',frame:'#5e4f40',block:'#33302c',vault:'#1c1b19'};
+const CUT_GLSL=`
+uniform float uOn, uR, uStub, uTop, uFloorY, uLow; uniform vec3 uFocus, uInk; uniform vec2 uDir; varying vec3 vCutW;
+float cutH(vec3 p){
+  if(uOn<.5) return 1e4;
+  vec2 d=p.xz-uFocus.xz; float t=dot(d,uDir), perp=abs(d.x*uDir.y-d.y*uDir.x);
+  float s=max(smoothstep(uR-1.2,uR,perp),1.-smoothstep(-1.4,-.5,t));
+  s=mix(s,0.,uLow);
+  return uFloorY+uStub+s*(uTop-uStub);
+}`;
+// kind: 'solid' (caps and cut line), 'ghost' (wall ink: above the cut it turns into the blueprint outline of the
+// full wall, pale, its top edges strong and its uprights faint; inside the cut only level lines stay, so seams and
+// jambs don't clutter the section), 'plain' (just cut), 'plan' (door and window symbols: drawn only where the walls
+// are cut right down)
+function cutMat(base,kind){
+  const m=base.clone(); m.userData.uLow={value:0};
+  if(kind==='solid'){ m.side=THREE.DoubleSide; m.extensions={derivatives:true}; }
+  if(kind==='ghost') m.transparent=true;
+    m.onBeforeCompile=sh=>{
+    Object.assign(sh.uniforms,CUT.u,{uLow:m.userData.uLow});
+    const vx=kind==='solid'?'attribute vec3 capc; varying vec3 vCap;':kind==='ghost'?'attribute float hz; varying float vHz;':'';
+    sh.vertexShader=sh.vertexShader.replace('void main() {','varying vec3 vCutW;'+vx+'\nvoid main() {')
+      .replace('#include <project_vertex>','#include <project_vertex>\nvCutW=(modelMatrix*vec4(transformed,1.)).xyz;'+(kind==='solid'?'vCap=capc;':kind==='ghost'?'vHz=hz;':''));
+    const head={solid:'\nif(vCutW.y>cH) discard;',plain:'\nif(vCutW.y>cH) discard;',plan:'\nif(cH>uFloorY+uStub+.06) discard;',
+      ghost:'\nbool cut=cH<uFloorY+uTop-.05;'+
+        '\nbool over=vCutW.y>cH+.004, top=vHz>.5&&vCutW.y>uFloorY+uTop-.26;'+
+        '\nif(!over&&cut&&vHz<.5) discard;'+
+        '\nif(over&&vHz>.5&&!top) discard;'}[kind];
+    sh.fragmentShader=sh.fragmentShader.replace('void main() {',CUT_GLSL+(kind==='solid'?'varying vec3 vCap;':kind==='ghost'?'varying float vHz;':'')+'\nvoid main() {\nfloat cH=cutH(vCutW);'+head)
+      .replace('#include <dithering_fragment>','#include <dithering_fragment>\n'+(kind==='solid'?
+        'if(!gl_FrontFacing) gl_FragColor=vec4(vCap,1.); else if(cH<uFloorY+uTop-.02&&vCutW.y>cH-2.6*fwidth(vCutW.y)) gl_FragColor.rgb=uInk;':
+        kind==='ghost'?'if(over) gl_FragColor=vec4(.91,.96,1.,top?.95:.4);':''));
+  };
+  m.customProgramCacheKey=()=>'cut-'+kind;
+  return m;
+}
+const WM={}; for(const bk of ['e0','e1','e2','e3','int']){ WM[bk]={solid:cutMat(solidMat,'solid'),ink:cutMat(inkMat,'ghost'),glass:cutMat(glassMat,'plain'),plan:cutMat(solidMat,'plan')}; for(const k in WM[bk]) WM[bk][k].userData.uLow=WM[bk].solid.userData.uLow; }
+// JS twin of cutH for picking: height above the floor where this bucket's walls are cut at (x, z)
+function cutTop(x,z,bk){
+  if(!CUT.on) return Infinity; const F=CUT.focus, D=CUT.dir, ss=(a,b,v)=>{ const t=clamp((v-a)/(b-a),0,1); return t*t*(3-2*t); };
+  const dx=x-F.x, dz=z-F.z, t=dx*D.x+dz*D.y, perp=Math.abs(dx*D.y-dz*D.x);
+  let sv=Math.max(ss(CUT.R-1.2,CUT.R,perp),1-ss(-1.4,-.5,t)); sv*=1-(WM[bk]?WM[bk].solid.userData.uLow.value:0);
+  return CUT.stub+sv*(G.wallH+.2-CUT.stub);
+}
 let world=null; // current group
 const view={az:0,el:.95,dist:40,target:new THREE.Vector3(),mode:'cutaway',marks:true};
 
@@ -3189,7 +3242,8 @@ function storefront(K,typeKey){
 // it is dropped; those seams sat exactly on the faces and flickered.
 const BOX_EDGES=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
 class Batch{
-  constructor(){ this.p=[]; this.c=[]; this.e=[]; }
+  constructor(){ this.p=[]; this.c=[]; this.e=[]; this.cr=null; }
+  setCap(col){ const n=this.p.length/3; if(this.cr&&this.cr.length&&this.cr[this.cr.length-1][4]===col) return; const c=new THREE.Color(col); (this.cr=this.cr||[]).push([n,c.r,c.g,c.b,col]); }
   edges(v,pairs){ for(const [a,b] of pairs){ const p=v[a],q=v[b]; this.e.push(p[0],p[1],p[2],q[0],q[1],q[2]); } }
   box(x0,y0,z0,x1,y1,z1,col){
     const cc=new THREE.Color(col), r=cc.r,g=cc.g,b=cc.b;
@@ -3217,11 +3271,12 @@ class Batch{
   inkLines(){
     const E=this.e, n=E.length/6, cnt=new Map(), key=new Array(n), R=x=>Math.round(x*500);
     for(let k=0;k<n;k++){ const o=k*6; let a=R(E[o])+','+R(E[o+1])+','+R(E[o+2]), b=R(E[o+3])+','+R(E[o+4])+','+R(E[o+5]); if(a===b){ key[k]=null; continue; } const kk=a<b?a+'|'+b:b+'|'+a; key[k]=kk; cnt.set(kk,(cnt.get(kk)||0)+1); }
-    const out=[], done=new Set(); for(let k=0;k<n;k++){ const kk=key[k]; if(!kk||done.has(kk)) continue; done.add(kk); const c=cnt.get(kk); if(c===2||c===4) continue; for(let a=0;a<6;a++) out.push(E[k*6+a]); }
-    const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(out,3)); return g;
+    const out=[], hz=[], done=new Set(); for(let k=0;k<n;k++){ const kk=key[k]; if(!kk||done.has(kk)) continue; done.add(kk); const c=cnt.get(kk); if(c===2||c===4) continue; for(let a=0;a<6;a++) out.push(E[k*6+a]); const f=Math.abs(E[k*6+1]-E[k*6+4])<1e-4?1:0; hz.push(f,f); }
+    const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(out,3)); g.setAttribute('hz',new THREE.Float32BufferAttribute(hz,1)); return g;
   }
   mesh(mat,ink){
     const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(this.p,3)); g.setAttribute('color',new THREE.Float32BufferAttribute(this.c,3)); g.computeVertexNormals();
+    if(this.cr){ const n=this.p.length/3, a=new Float32Array(n*3); for(let k=0;k<this.cr.length;k++){ const [v0,r,gg,b]=this.cr[k], v1=k+1<this.cr.length?this.cr[k+1][0]:n; for(let v=v0;v<v1;v++){ a[v*3]=r; a[v*3+1]=gg; a[v*3+2]=b; } } g.setAttribute('capc',new THREE.BufferAttribute(a,3)); }
     const grp=new THREE.Group(); grp.add(new THREE.Mesh(g,mat||solidMat));
     if(ink&&this.p.length) grp.add(new THREE.LineSegments(this.inkLines(),inkMat));
     return grp;
@@ -3285,7 +3340,7 @@ function hitWall(e){ // the wall, door or window under the pointer, from the cel
   const o=ray.ray.origin.clone(), d=ray.ray.direction; o.y-=curFG.position.y+FY; if(d.y>=0) return null;
   const tFloor=-o.y/d.y; let hitE=null;
   walkEdges(o.x,o.z,d.x,d.z,tFloor,(or,key,t,a,sign)=>{ const ed=G.O.edges.get(key); if(!ed) return false; const b=buckets[ed.ext?'e'+ed.dir:'int']; const y=o.y+d.y*t;
-    const what=edgeAt(ed,a,y,b&&b.lowered?LOW:null); if(!what) return false; hitE={e:ed,a,y,what,face:faceFrom(ed,sign),x:o.x+d.x*t,z:o.z+d.z*t}; return true; });
+    const bk=ed.ext?'e'+ed.dir:'int', what=edgeAt(ed,a,y,cutTop(o.x+d.x*t,o.z+d.z*t,bk)); if(!what) return false; hitE={e:ed,a,y,what,face:faceFrom(ed,sign),x:o.x+d.x*t,z:o.z+d.z*t}; return true; });
   return hitE;
 }
 // The wall's state as the squad would read it
@@ -3379,8 +3434,12 @@ function build(G,rec){
   fg.add(fb.mesh(solidMat,false));
   // walls by bucket: four outside faces and the inside walls, full and low
   const groups={}, broken=[];
-  function seg(bk,o,fixed,along,y0,y1,a0,a1,ext,col){ const k=bk+'|'+o+'|'+fixed+'|'+y0+'|'+y1+'|'+a0+'|'+a1+'|'+col; (groups[k]=groups[k]||{bk,o,fixed,y0,y1,a0,a1,ext,col,al:[]}).al.push(along); }
-  const glassBy={}, boardBy={};
+  let segMat='stud';
+  function seg(bk,o,fixed,along,y0,y1,a0,a1,ext,col){ const k=bk+'|'+o+'|'+fixed+'|'+y0+'|'+y1+'|'+a0+'|'+a1+'|'+col+'|'+segMat; (groups[k]=groups[k]||{bk,o,fixed,y0,y1,a0,a1,ext,col,mat:segMat,al:[]}).al.push(along); }
+  const glassBy={}, boardBy={}, planB={}, PB=bk=>planB[bk]=planB[bk]||new Batch();
+  // a flat two-tone ribbon (dark edge, light core) through points on the floor plane, readable on any floor
+  const ribbon=(B,pts,y,w,dark,light)=>{ for(const [ww,col,dy] of [[w,dark,0],[w*.45,light,.004]]) for(let k=0;k<pts.length-1;k++){ const [ax,az]=pts[k],[bx,bz]=pts[k+1], dx=bx-ax,dz=bz-az,L=Math.hypot(dx,dz)||1, ux=dx/L*ww*.5, uz=dz/L*ww*.5, nx=-uz, nz=ux, x0=ax-ux,z0=az-uz,x1=bx+ux,z1=bz+uz;
+      B.quad([x0+nx,y+dy,z0+nz],[x1+nx,y+dy,z1+nz],[x1-nx,y+dy,z1-nz],[x0-nx,y+dy,z0-nz],col); B.quad([x0-nx,y+dy,z0-nz],[x1-nx,y+dy,z1-nz],[x1+nx,y+dy,z1+nz],[x0+nx,y+dy,z0+nz],col); } };
   const stucco=G.stucco||'#cfc3ae', inner='#e6dccb';
   for(const e of O.edges.values()){
     const o=e.key[0], [p,q]=e.key.slice(1).split(',').map(Number);
@@ -3388,6 +3447,7 @@ function build(G,rec){
     const bk=e.ext?'e'+e.dir:'int', paintA=(G.style[e.a]||{}).paint||inner, paintB=e.b>=0?((G.style[e.b]||{}).paint||inner):stucco, t=e.th||(e.ext?.12:.06);
     const dm=rec.walls&&rec.walls[G.level+':'+e.key];
     if(dm&&dm.s>=2&&e.type!=='none'){ broken.push({e,o,fixed,along,bk,paintA,paintB,t,dm}); continue; }
+    segMat=e.mat||'stud';
     let parts=[[0,WH]];
     if(e.type==='window') parts=[[0,e.win.sill],[e.win.head,WH]];
     else if(e.type==='door') parts=[[2.1,WH]];
@@ -3403,13 +3463,18 @@ function build(G,rec){
       const L=o==='v'?[cx(fixed),cz(along)]:[cx(along),cz(fixed)];
       (glassBy[bk]=glassBy[bk]||[]).push([o,L,e.win.sill,e.win.head,e.win.state]);
     }
+    if(e.type==='window'){ // in section: a raised glazing bar with a dark rim, sitting on the cut
+      const bw=REC&&REC.windows&&REC.windows[G.level+':'+e.key]||e.win.state==='broken', y=FY+CUT.stub, B=PB(bk);
+      const bar=(a0,a1,f,y0,y1,col)=>{ if(o==='v') B.box(cx(fixed)-f,y0,cz(along+a0),cx(fixed)+f,y1,cz(along+a1),col); else B.box(cx(along+a0),y0,cz(fixed)-f,cx(along+a1),y1,cz(fixed)+f,col); };
+      bar(-.005,1.005,t+.05,y+.004,y+.03,'#1d1814');
+      bar(.07,.93,t-.01,y+.004,y+.045,e.win.state==='boarded'?'#8a6a4a':bw?'#5a5650':'#8fd0e6'); }
     if(e.type==='window'&&e.win.state==='boarded'){ const L=o==='v'?[cx(fixed),cz(along)]:[cx(along),cz(fixed)]; (boardBy[bk]=boardBy[bk]||[]).push([o,L,e.win.sill,e.win.head,e.dir]); }
   }
   const wallB={};
   for(const k in groups){
     const g=groups[k]; g.al.sort((a,b)=>a-b);
     let s=g.al[0], prev=s;
-    const emit=(a,b)=>{ for(const low of [0,1]){ const y1=low?Math.min(g.y1,LOW):g.y1; if(low&&g.y0>=LOW) continue; const id=g.bk+(low?'L':'F'); const Bt=wallB[id]=wallB[id]||new Batch(), t=g.ext;
+    const emit=(a,b)=>{ for(const low of [0]){ const y1=g.y1; const id=g.bk+'F'; const Bt=wallB[id]=wallB[id]||new Batch(), t=g.ext; Bt.setCap(CAPCOL[g.mat]);
         if(g.o==='v') Bt.box(cx(g.fixed)+g.a0,FY+g.y0,cz(a)-t,cx(g.fixed)+g.a1,FY+y1,cz(b+1)+t,g.col); else Bt.box(cx(a)-t,FY+g.y0,cz(g.fixed)+g.a0,cx(b+1)+t,FY+y1,cz(g.fixed)+g.a1,g.col); } };
     for(let n=1;n<g.al.length;n++){ if(g.al[n]!==prev+1){ emit(s,prev); s=g.al[n]; } prev=g.al[n]; }
     emit(s,prev);
@@ -3417,7 +3482,7 @@ function build(G,rec){
   // a box in the edge's own frame: along a0..a1 of the cell, y0..y1 above the floor, f0..f1 across the fixed line
   const wbox=id=>wallB[id]=wallB[id]||new Batch();
   const edgeBox=(B,w,a0,a1,y0,y1,f0,f1,col)=>{ const {o,fixed,along}=w; if(o==='v') B.box(cx(fixed)+f0,FY+y0,cz(along+a0),cx(fixed)+f1,FY+y1,cz(along+a1),col); else B.box(cx(along+a0),FY+y0,cz(fixed)+f0,cx(along+a1),FY+y1,cz(fixed)+f1,col); };
-  const both=(bk,w,a0,a1,y0,y1,f0,f1,col)=>{ edgeBox(wbox(bk+'F'),w,a0,a1,y0,y1,f0,f1,col); if(y0<LOW) edgeBox(wbox(bk+'L'),w,a0,a1,y0,Math.min(y1,LOW),f0,f1,col); };
+  const both=(bk,w,a0,a1,y0,y1,f0,f1,col)=>{ const B=wbox(bk+'F'); B.setCap(CAPCOL[w.e?w.e.mat:'stud']||CAPCOL.stud); edgeBox(B,w,a0,a1,y0,y1,f0,f1,col); };
   // holed and breached walls: the solid that is left, its core showing at the cut, studs and rubble
   const rub=new Batch();
   for(const w of broken){
@@ -3438,7 +3503,7 @@ function build(G,rec){
   for(const bk of ['e0','e1','e2','e3','int']){
     const full=new THREE.Group(), low=new THREE.Group();
     if(wallB[bk+'F']) full.add(wallB[bk+'F'].mesh(solidMat,true));
-    if(wallB[bk+'L']) low.add(wallB[bk+'L'].mesh(solidMat,true));
+
     const gl=new Batch();
     for(const [o,L,s0,h0,st] of (glassBy[bk]||[])){ if(o==='v') gl.box(L[0]-.02,FY+s0,L[1],L[0]+.02,FY+h0,L[1]+1,'#9cc8d6'); else gl.box(L[0],FY+s0,L[1]-.02,L[0]+1,FY+h0,L[1]+.02,'#9cc8d6'); }
     if(gl.p.length) full.add(gl.mesh(glassMat,false));
@@ -3450,11 +3515,12 @@ function build(G,rec){
   }
   // wall finishes: skirting everywhere, then the room's own treatment (wainscot, tile, paper, brick, panels, an accent wall)
   const wf={};
-  const addF=(bk,low,x0,y0,z0,x1,y1,z1,col)=>{ const id=bk+(low?'L':'F'); (wf[id]=wf[id]||new Batch()).box(Math.min(x0,x1),FY+y0,Math.min(z0,z1),Math.max(x0,x1),FY+y1,Math.max(z0,z1),col); };
+  let fCap=CAPCOL.stud;
+  const addF=(bk,low,x0,y0,z0,x1,y1,z1,col)=>{ if(low) return; const id=bk+'F'; const B=wf[id]=wf[id]||new Batch(); B.setCap(fCap); B.box(Math.min(x0,x1),FY+y0,Math.min(z0,z1),Math.max(x0,x1),FY+y1,Math.max(z0,z1),col); };
   for(const e of O.edges.values()){
     if(e.type==='none'||e.type==='open'||e.type==='counter') continue;
     const o=e.key[0], [p,q]=e.key.slice(1).split(',').map(Number), fixed=o==='v'?p:q, along=o==='v'?q:p;
-    const dm=rec.walls&&rec.walls[G.level+':'+e.key], T=e.th||(e.ext?.12:.06);
+    const dm=rec.walls&&rec.walls[G.level+':'+e.key], T=e.th||(e.ext?.12:.06); fCap=CAPCOL[e.mat]||CAPCOL.stud;
     if(dm){ const bk=e.ext?'e'+e.dir:'int', w={o,fixed,along}, m=WALLMAT[e.mat], sA=aSide(e), q2=rngOf('marks|'+e.key+'|'+(dm.s||0));
       const mark=(face,a,y,sz,col,dz)=>{ const sg=face===1?sA:-sA, f0=sg*(T+.022+(dz||0)), f1=sg*(T+.03+(dz||0)); const B2=wf[bk+(y+sz/2<LOW?'L':'F')]=wf[bk+(y+sz/2<LOW?'L':'F')]||new Batch(); if(o==='v') B2.box(cx(fixed)+Math.min(f0,f1),FY+y-sz/2,cz(along+a-sz/2),cx(fixed)+Math.max(f0,f1),FY+y+sz/2,cz(along+a+sz/2),col); else B2.box(cx(along+a-sz/2),FY+y-sz/2,cz(fixed)+Math.min(f0,f1),cx(along+a+sz/2),FY+y+sz/2,cz(fixed)+Math.max(f0,f1),col); if(y+sz/2<LOW){ const B3=wf[bk+'F']=wf[bk+'F']||new Batch(); if(o==='v') B3.box(cx(fixed)+Math.min(f0,f1),FY+y-sz/2,cz(along+a-sz/2),cx(fixed)+Math.max(f0,f1),FY+y+sz/2,cz(along+a+sz/2),col); else B3.box(cx(along+a-sz/2),FY+y-sz/2,cz(fixed)+Math.min(f0,f1),cx(along+a+sz/2),FY+y+sz/2,cz(fixed)+Math.max(f0,f1),col); } };
       if(dm.s>=1&&dm.s<2){ const fcol=fc=>(fc===1?(G.style[e.a]||{}).paint:e.ext?stucco:(G.style[e.b]||{}).paint)||inner, shade=(c,k)=>new THREE.Color(c).multiplyScalar(k).getStyle();
@@ -3480,7 +3546,7 @@ function build(G,rec){
       if(w!=='tilefull'&&w!=='tilewain') box(0,.1,st.skirt,.02);
     }
   }
-  for(const id in wf){ const bk=id.slice(0,-1); (id.endsWith('L')?buckets[bk].low:buckets[bk].full).add(wf[id].mesh(solidMat,false)); }
+  for(const id in wf){ if(id.endsWith('L')) continue; const bk=id.slice(0,-1); buckets[bk].full.add(wf[id].mesh(solidMat,false)); }
   // door leaves
   const leafMat=new THREE.MeshLambertMaterial({color:0x8a6a4a}), liftMat=new THREE.MeshLambertMaterial({color:0xa9adb0}), gMat=new THREE.MeshLambertMaterial({color:0xd8d2c4});
   for(const e of O.doors){
@@ -3493,6 +3559,12 @@ function build(G,rec){
     let geo, mesh;
     const inward=e.ext?(e.dir+2)%4:e.dir; // swing into the room on the a side for outside doors
     const n=DIRS[inward];
+    { // plan symbol: the leaf drawn open and its swing arc; a garage door as a dashed line where it rolls up
+      const bk=e.ext?'e'+e.dir:'int', B=PB(bk), y=FY+.012, P2=(a,f)=>o==='v'?[cx(fixed)+n[0]*f,cz(a)]:[cx(a),cz(fixed)+n[1]*f], lw0=width>1&&!isG?len/2:len;
+      if(isG){ for(let k=0;k<6;k++) ribbon(B,[P2(along+.1+k*(width-.2)/6,.6),P2(along+.1+(k+.55)*(width-.2)/6,.6)],y,.07,'#1d1814','#f1ede4'); }
+      else if(st!=='broken') for(const [h,sg] of (width>1?[[along+.06,1],[along+width-.06,-1]]:[[along+.06,1]])){
+        const arc=[]; for(let k=0;k<=12;k++){ const a=k/12*Math.PI/2; arc.push(P2(h+sg*Math.cos(a)*lw0,Math.sin(a)*lw0)); }
+        ribbon(B,arc,y,.05,'#1d1814','#f1ede4'); ribbon(B,[P2(h,0),P2(h,lw0)],y,.09,'#1d1814','#f1ede4'); } }
     if(isG){
       geo=new THREE.BoxGeometry(o==='v'?.08:len,st==='closed'||st==='barricaded'?2.25:.08,o==='v'?len:.08);
       mesh=new THREE.Mesh(geo,gMat);
@@ -3534,14 +3606,22 @@ function build(G,rec){
   applyMoves(G,rec);
   for(const it of Fn.items){
     const opened=it.searched||rec.taken.includes(G.level+':'+it.id);
-    const L0=itemL(it.i,it.j,it.f,FY), parts=it.spec.build(lookOf(G,it,opened)), mv=rec.moved&&rec.moved[G.level+':'+it.id];
+    let L0=itemL(it.i,it.j,it.f,FY); const parts=it.spec.build(lookOf(G,it,opened)), mv=rec.moved&&rec.moved[G.level+':'+it.id];
+    { // a prop backed onto a wall stands clear of that wall's thickness (walls are drawn centred on the cell edge)
+      let push=0; for(const c of it.cells0||it.cells){ const e=O.edges.get(edgeKey(c%W,(c/W)|0,(it.f+2)%4)); if(e&&e.type!=='none'&&e.type!=='open'&&e.type!=='counter') push=Math.max(push,(e.th||.06)-.025); }
+      // and a prop run into a corner stands clear of the side wall
+      const mine=new Set(it.cells0||it.cells), sidePush=d=>{ let m=0; for(const c of mine){ const i=c%W, j=(c/W)|0, n=(j+DIRS[d][1])*W+i+DIRS[d][0]; if(mine.has(n)) continue; const e=O.edges.get(edgeKey(i,j,d)); if(e&&e.type!=='none'&&e.type!=='open'&&e.type!=='counter') m=Math.max(m,(e.th||.06)-.025); } return m; };
+      const sR=sidePush((it.f+1)%4), sL=sidePush((it.f+3)%4), side=sL&&sR?0:sL-sR, F=DIRS[it.f], Tt=DIRS[(it.f+1)%4];
+      if(push>0||side) L0=new THREE.Matrix4().makeTranslation(F[0]*push+Tt[0]*side,0,F[1]*push+Tt[1]*side).multiply(L0); }
     it.L0=L0;
     if(DYN&&DYN.items.has(it.id)){ DYN.collect(it,parts,L0,mv); continue; }
     if(mv){ for(const pt of parts){ const pc=(pt[7]&&pt[7].piece)||'m'; emit([pt],mv.m&&mv.m[pc]?new THREE.Matrix4().fromArray(mv.m[pc]):L0); } }
     else emit(parts,L0);
-    if(mv&&mv.box){ // a moved prop is picked where it lies now
-      const [x0,y0,z0,x1,y1,z1]=mv.box; const pm=new THREE.Mesh(new THREE.BoxGeometry(Math.max(.3,x1-x0),Math.max(.3,y1-y0),Math.max(.3,z1-z0)),pickMat); pm.position.set((x0+x1)/2,(y0+y1)/2,(z0+z1)/2);
-      pm.userData={item:it.id}; fg.add(pm); picks.push(pm); it.top=[(x0+x1)/2,y1,(z0+z1)/2]; continue; }
+    if(mv&&mv.box){ // a moved prop is picked where it lies now, piece by piece (a thrown chair is its own pick)
+      const gp={}; for(const pt of parts){ const pc=(pt[7]&&pt[7].piece)||'m'; (gp[pc]=gp[pc]||[]).push(pt); }
+      for(const pc in gp){ const Bq=new Batch(); emitTo(Bq,gp[pc],mv.m&&mv.m[pc]?new THREE.Matrix4().fromArray(mv.m[pc]):L0); if(!Bq.p.length) continue; const [x0,y0,z0,x1,y1,z1]=boundsOf(Bq);
+        const pm=new THREE.Mesh(new THREE.BoxGeometry(Math.max(.3,x1-x0),Math.max(.3,y1-y0),Math.max(.3,z1-z0)),pickMat); pm.position.set((x0+x1)/2,(y0+y1)/2,(z0+z1)/2); pm.userData={item:it.id,pc}; fg.add(pm); picks.push(pm); }
+      const [x0,,z0,x1,y1,z1]=mv.box; it.top=[(x0+x1)/2,y1,(z0+z1)/2]; continue; }
     if(!it.spec.slot&&FLIP_PROPS.has(it.key)){
       let mi=1e9,ma=-1e9,ni=1e9,na=-1e9; for(const c of it.cells){ const i=c%W,j=(c/W)|0; mi=Math.min(mi,cx(i)); ma=Math.max(ma,cx(i+1)); ni=Math.min(ni,cz(j)); na=Math.max(na,cz(j+1)); }
       const pm=new THREE.Mesh(new THREE.BoxGeometry(ma-mi,1,na-ni),pickMat); pm.position.set((mi+ma)/2,FY+.5,(ni+na)/2); pm.userData={item:it.id}; fg.add(pm); picks.push(pm); }
@@ -3597,8 +3677,16 @@ function build(G,rec){
   const rb=new Batch();
   for(let j=0;j<H;j++){ let i=0; while(i<W){ if(mask[j*W+i]){ let k=i; while(k<W&&mask[j*W+k]) k++; rb.box(cx(i)-.3,FY+WH,cz(j)-(mask[(j-1)*W+i]?0:.3),cx(k)+.3,FY+WH+(G.typeKey==='canopy'?.7:.25),cz(j+1)+(mask[(j+1)*W+i]?0:.3),G.typeKey==='house'?G.roofCol:G.typeKey==='canopy'?'#e8e4da':'#b8b0a2'); i=k; } else i++; } }
   const roof=rb.mesh(solidMat,false); roof.name='roof'; if(G.fk===G.levels-1) fg.add(roof);
+  // everything that hangs on a wall bucket draws with that bucket's cut material; so do the door leaves
+  for(const bk in buckets){ const W2=WM[bk]; buckets[bk].full.traverse(o=>{ if(o.isLineSegments) o.material=W2.ink; else if(o.isMesh) o.material=o.material===glassMat?W2.glass:W2.solid; }); }
+  for(const bk in planB){ const m=planB[bk].mesh(WM[bk].plan,false); buckets[bk].full.add(m); }
+  for(const l of leaves){ const bk=l.userData.bucket, W2=WM[bk]; l.traverse(o=>{ if(o.isLineSegments) o.material=W2.ink; else if(o.isMesh){ if(!o.geometry.attributes.capc){ const n=o.geometry.attributes.position.count, c=new THREE.Color(o.material.color).multiplyScalar(.45), arr=new Float32Array(n*3); for(let k=0;k<n;k++){ arr[k*3]=c.r; arr[k*3+1]=c.g; arr[k*3+2]=c.b; } o.geometry.setAttribute('capc',new THREE.BufferAttribute(arr,3)); } o.material=doorCut(bk,o.material.color); } }); }
+  CUT.u.uFloorY.value=fg.position.y+FY; CUT.u.uTop.value=WH+.2;
+  if(!CUT.placed){ CUT.goal.set(cx(W/2),0,cz(H/2)); CUT.focus.copy(CUT.goal); CUT.placed=true; }
   applyView();
 }
+const DOORM={};
+function doorCut(bk,col){ const k=bk+col.getHexString(); if(!DOORM[k]){ const m=cutMat(new THREE.MeshLambertMaterial({color:col.clone()}),'solid'); m.userData.uLow=WM[bk].solid.userData.uLow; m.extensions={derivatives:true}; DOORM[k]=m; } return DOORM[k]; }
 // A storey seen from above the floor in view: slab, outside walls with their windows, and the stairs.
 function shellFloor(G,F,y){
   const {M}=G, {W,H,u0,v0,mask}=M, WH=G.wallH, g=new THREE.Group(); g.position.y=y;
@@ -3679,10 +3767,9 @@ function applyView(){
     let low=false;
     if(view.mode==='low') low=true;
     else if(view.mode==='cutaway'&&bk!=='int'){ const d=DIRS[+bk[1]]; low=d[0]*cd[0]+d[1]*cd[1]>.3; }
-    buckets[bk].full.visible=!low; buckets[bk].low.visible=low;
-    buckets[bk].lowered=low;
+    buckets[bk].full.visible=true; buckets[bk].low.visible=false; buckets[bk].lowered=low; CUT.lowGoal[bk]=low?1:0;
   }
-  for(const l of leaves){ const b=buckets[l.userData.bucket]; l.visible=!(b&&b.lowered&&l.userData.bucket!=='int'); if(view.mode==='low'&&l.userData.bucket==='int') l.visible=false; }
+  CUT.on=view.mode!=='shell'&&!(G&&G.roofView); CUT.u.uOn.value=CUT.on?1:0;
   const roof=world.getObjectByName('roof'); if(roof) roof.visible=view.mode==='shell';
   const mk=world.getObjectByName('marks'); if(mk) mk.visible=view.marks;
 }
@@ -3708,6 +3795,13 @@ function sizeRT(){
   blitMat.uniforms.t.value=smooth.rt.texture; blitMat.uniforms.px.value.set(1/W,1/H);
 }
 
+function stepCut(){ // ease the cut toward where it is going; true while it still moves
+  let moving=false; const F=CUT.focus, d=F.distanceTo(CUT.goal); if(d>.01){ F.lerp(CUT.goal,d>8?1:.3); moving=true; }
+  for(const bk in WM){ const u=WM[bk].solid.userData.uLow, g=CUT.lowGoal[bk]||0; if(Math.abs(u.value-g)>.01){ u.value+=(g-u.value)*.25; moving=true; } else u.value=g; }
+  CUT.u.uFocus.value.copy(F); const dx=camera.position.x-F.x, dz=camera.position.z-F.z, L=Math.hypot(dx,dz)||1; CUT.dir.set(dx/L,dz/L); CUT.u.uDir.value.copy(CUT.dir);
+  return moving;
+}
+
 // Page globals the interiors physics code expects (its own page defines these in its panel); the combat page points
 // them at the current fight. G: the generated building. REC: its change record. refresh(): redraw after a change.
 let G=null, REC=null, dirty=false;
@@ -3716,7 +3810,7 @@ function refresh(){ if(window.__combatRefresh) window.__combatRefresh(); }
 // ================================================================= physics: grenades and overturned furniture
 // The simulation only decides where things land. The outcome goes into the change record as a pose per piece,
 // plus the cells the prop now blocks and the cover it gives, so reloads and the movement grid never re-run physics.
-let TOOL='use', SIM=false, DYN=null, curFG=null;
+let TOOL='use', SIM=false, DYN=null, curFG=null, selBox=null;
 function floorPoint(e){
   const r=canvas.getBoundingClientRect(); ndc.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1); ray.setFromCamera(ndc,camera);
   const y=curFG.position.y+FY, d=ray.ray.direction, o=ray.ray.origin; if(Math.abs(d.y)<1e-4) return null; const t=(y-o.y)/d.y; if(t<0) return null;
@@ -3757,8 +3851,13 @@ function grenade(p,opt){
   const near=(x,z,m)=>Math.hypot(x-p.x,z-p.z)<R+m;
   for(const e of O.edges.values()){ if(e.type==='open'||e.type==='none') continue; { const dm=REC.walls[lv+':'+e.key]; if(dm&&dm.s>=3) continue; } const o=e.key[0], [a,b]=e.key.slice(1).split(',').map(Number);
     const mx=o==='v'?M.u0+a:M.u0+a+.5, mz=o==='v'?M.v0+b+.5:M.v0+b; if(!near(mx,mz,6)) continue;
-    const lo=e.type==='window'?e.win.sill:0, hi=e.type==='door'||e.type==='gdoor'?(REC.doors[lv+':'+e.key]==='broken'||e.door.open?0:2.1):WH; if(hi<=lo) continue;
-    const bd=new CANNON.Body({mass:0}); bd.addShape(new CANNON.Box(o==='v'?new CANNON.Vec3(.1,(hi-lo)/2,.55):new CANNON.Vec3(.55,(hi-lo)/2,.1))); bd.position.set(mx,FY+(lo+hi)/2,mz); world.addBody(bd); }
+    const dm0=REC.walls[lv+':'+e.key], spans=[];
+    if(e.type==='window'){ spans.push([0,e.win.sill],[e.win.head,WH]); if(e.win.state!=='broken'&&!REC.windows[lv+':'+e.key]) spans.push([e.win.sill,e.win.head]); }
+    else if(e.type==='door'||e.type==='gdoor'){ spans.push([e.type==='gdoor'?2.3:2.1,WH]); const ds=REC.doors[lv+':'+e.key]; if(!(ds==='broken'||ds==='open'||(!ds&&(e.door.open||e.door.state==='broken')))) spans.push([0,2.1]); }
+    else spans.push([0,WH]);
+    if(dm0&&dm0.s===2) spans.length=0, spans.push([0,.6],[1.6,WH]); // a hole leaves a gap at chest height
+    const th=Math.max(.1,(e.th||.06));
+    for(const [lo,hi] of spans){ if(hi-lo<.05) continue; const bd=new CANNON.Body({mass:0}); bd.addShape(new CANNON.Box(o==='v'?new CANNON.Vec3(th,(hi-lo)/2,.55):new CANNON.Vec3(.55,(hi-lo)/2,th))); bd.position.set(mx,FY+(lo+hi)/2,mz); world.addBody(bd); } }
   for(const it of Fn.items){ if(hits.includes(it)) continue; const [x,z]=centre(it); if(!near(x,z,6)) continue;
     let mi=1e9,ma=-1e9,ni=1e9,na=-1e9; for(const c of it.cells){ const i=c%M.W,j=(c/M.W)|0; mi=Math.min(mi,M.u0+i); ma=Math.max(ma,M.u0+i+1); ni=Math.min(ni,M.v0+j); na=Math.max(na,M.v0+j+1); }
     const h=Math.min(it.spec.h,2.2); const bd=new CANNON.Body({mass:0}); bd.addShape(new CANNON.Box(new CANNON.Vec3((ma-mi)/2-.05,h/2,(na-ni)/2-.05))); bd.position.set((mi+ma)/2,FY+h/2,(ni+na)/2); world.addBody(bd); }
@@ -3797,7 +3896,12 @@ function grenade(p,opt){
     const per={};
     for(const b of bodies){ const key=lv+':'+b.it.id, D=delta(b), Lf=D.clone().multiply(b.Lp);
       const mv=per[key]=per[key]||{m:Object.assign({},(REC.moved[key]||{}).m||{}),boxes:[]}; mv.m[b.pc]=Lf.elements.map(x=>+x.toFixed(4));
-      b.bd.computeAABB(); const ab=b.bd.aabb; if(ab.lowerBound.y<FY-.02){ const up=FY-ab.lowerBound.y; Lf.premultiply(new THREE.Matrix4().makeTranslation(0,up,0)); mv.m[b.pc]=Lf.elements.map(x=>+x.toFixed(4)); ab.lowerBound.y+=up; ab.upperBound.y+=up; } mv.boxes.push([ab.lowerBound.x,ab.lowerBound.y,ab.lowerBound.z,ab.upperBound.x,ab.upperBound.y,ab.upperBound.z]); }
+      b.bd.computeAABB(); const ab=b.bd.aabb;
+      { const M2=G.M, cxx=(ab.lowerBound.x+ab.upperBound.x)/2, czz=(ab.lowerBound.z+ab.upperBound.z)/2, i=Math.floor(cxx-M2.u0), j=Math.floor(czz-M2.v0);
+        if(i<0||j<0||i>=M2.W||j>=M2.H||!M2.mask[j*M2.W+i]){ const rid=G.P.roomOf[(b.it.cells0||b.it.cells)[0]], rm=G.P.rooms.find(r=>r.id===rid); let best=null, bd2=1e9;
+          for(const c of rm.cells){ const x=M2.u0+c%M2.W+.5, z=M2.v0+((c/M2.W)|0)+.5, d=Math.hypot(x-cxx,z-czz); if(d<bd2){ bd2=d; best=[x-cxx,z-czz]; } }
+          if(best){ Lf.premultiply(new THREE.Matrix4().makeTranslation(best[0],0,best[1])); mv.m[b.pc]=Lf.elements.map(x=>+x.toFixed(4)); for(const B of [ab.lowerBound,ab.upperBound]){ B.x+=best[0]; B.z+=best[1]; } } } }
+      if(ab.lowerBound.y<FY-.02){ const up=FY-ab.lowerBound.y; Lf.premultiply(new THREE.Matrix4().makeTranslation(0,up,0)); mv.m[b.pc]=Lf.elements.map(x=>+x.toFixed(4)); ab.lowerBound.y+=up; ab.upperBound.y+=up; } mv.boxes.push([ab.lowerBound.x,ab.lowerBound.y,ab.lowerBound.z,ab.upperBound.x,ab.upperBound.y,ab.upperBound.z]); }
     for(const key in per){ const it=G.Fn.items[+key.split(':')[1]]; REC.moved[key]=settle(it,per[key].boxes,{m:per[key].m,by:'grenade'}); }
     DYN=null; SIM=false; refresh(false); if(said) hudHover.textContent=said;
   };
@@ -3866,6 +3970,77 @@ function charge(h){
   const o=e.key[0], sg=(h.face===1?aSide(e):-aSide(e))*.35, p={x:o==='v'?h.x+sg:h.x,z:o==='v'?h.z:h.z+sg};
   grenade(p,{R:2.4,charge:true});
   hudHover.textContent=s>=3?m.n+' breached':m.n+' holed: it needs another charge';
+}
+
+// ---------------------------------------------------------------- moving props by hand
+// Squad members can drag a prop (or one thrown piece of it) clear. Click it, then click the floor where it goes,
+// or click it again to shove it to the nearest clear spot in the room that blocks no doorway. The result goes into
+// the change record like any other move.
+let MOVE=null;
+const movable=it=>FLIP_PROPS.has(it.key)||!!REC.moved[G.level+':'+it.id];
+function pieces(it){
+  const key=G.level+':'+it.id, mv=REC.moved[key], parts=it.spec.build(lookOf(G,it,it.searched||REC.taken.includes(key))), gp={}, out={};
+  for(const pt of parts){ const pc=(pt[7]&&pt[7].piece)||'m'; (gp[pc]=gp[pc]||[]).push(pt); }
+  for(const pc in gp){ const Mx=mv&&mv.m&&mv.m[pc]?new THREE.Matrix4().fromArray(mv.m[pc]):it.L0.clone(); const Bq=new Batch(); emitTo(Bq,gp[pc],Mx); if(!Bq.p.length) continue; out[pc]={M:Mx,box:boundsOf(Bq)}; }
+  return out;
+}
+function doorwayCells(){ // the cells either side of every doorway and breach
+  const S=new Set(), M=G.M, W=M.W;
+  for(const e of G.O.edges.values()){ const dm=REC.walls[G.level+':'+e.key]; if(!(e.type==='door'||e.type==='gdoor'||(dm&&dm.s>=3))) continue;
+    S.add(e.j*W+e.i); const n=(e.j+DIRS[e.dir][1])*W+e.i+DIRS[e.dir][0]; if(M.mask[n]) S.add(n); }
+  return S;
+}
+function underBoxes(boxes,tall){ // cells under the boxes (only the parts that stand 0.45 m or more when tall)
+  const M=G.M, S=new Set(); for(const b of boxes){ if(tall&&b[4]-FY<.45) continue;
+    for(let j=Math.floor(b[2]+.05-M.v0);j<=Math.floor(b[5]-.05-M.v0);j++) for(let i=Math.floor(b[0]+.05-M.u0);i<=Math.floor(b[3]-.05-M.u0);i++) S.add(j*M.W+i); }
+  return [...S];
+}
+const blocksDoor=(it,dw)=>{ const mv=REC.moved[G.level+':'+it.id]; return (mv?mv.cells:it.cells).some(c=>dw.has(c)); };
+function tryPlace2(it,sel,st,dx,dz,avoid){
+  const M=G.M, boxes=sel.map(pc=>{ const b=st[pc].box; return [b[0]+dx,b[1],b[2]+dz,b[3]+dx,b[4],b[5]+dz]; });
+  const all=underBoxes(boxes,false); let room=null;
+  for(const c of all){ if(c<0||c>=M.W*M.H||!M.mask[c]) return null; const r=G.P.roomOf[c]; if(room===null) room=r; else if(r!==room) return null; }
+  const rm=G.P.rooms.find(r=>r.id===room); if(!rm||/stair|elev/.test(rm.kind)) return null;
+  for(const c of underBoxes(boxes,true)){ const o=G.Fn.occ[c]; if(o>=0&&o!==it.id&&!G.Fn.items[o].spec.walk) return null; if(avoid&&avoid.has(c)) return null; }
+  return {boxes,room};
+}
+function commitMove(it,sel,st,dx,dz,instant){
+  const key=G.level+':'+it.id, prev=REC.moved[key]||{}, T=new THREE.Matrix4().makeTranslation(dx,0,dz), m={}, boxes=[];
+  for(const pc in st){ const on=sel.includes(pc), Mx=on?T.clone().multiply(st[pc].M):st[pc].M; m[pc]=Mx.elements.map(x=>+x.toFixed(4)); const b=st[pc].box; boxes.push(on?[b[0]+dx,b[1],b[2]+dz,b[3]+dx,b[4],b[5]+dz]:b); }
+  const done=()=>{ const mv=settle(it,boxes,{m,by:prev.by||'moved',facing:prev.facing}); if(prev.by==='overturn'&&mv.cover==='full') mv.cover=prev.cover||'half'; REC.moved[key]=mv; DYN=null; SIM=false; refresh(false); };
+  if(instant){ done(); return; }
+  DYN={items:new Set([it.id]),meshes:[],collect(it2,parts2,L0,mv){ const g={}; for(const pt of parts2){ const pc=(pt[7]&&pt[7].piece)||'m'; (g[pc]=g[pc]||[]).push(pt); }
+    for(const pc in g){ const B2=new Batch(); emitTo(B2,g[pc],mv&&mv.m&&mv.m[pc]?new THREE.Matrix4().fromArray(mv.m[pc]):L0); const mm=B2.mesh(solidMat,true); mm.matrixAutoUpdate=false; DYN.meshes.push({pc,m:mm}); } }};
+  refresh(false); for(const x of DYN.meshes) curFG.add(x.m);
+  SIM=true; const t0=performance.now();
+  const anim=()=>{ const a=clamp((performance.now()-t0)/350,0,1), e=a*a*(3-2*a); for(const x of DYN.meshes) if(sel.includes(x.pc)){ x.m.matrix.makeTranslation(dx*e,0,dz*e); x.m.matrixWorldNeedsUpdate=true; } dirty=true; if(a<1) requestAnimationFrame(anim); else done(); };
+  requestAnimationFrame(anim);
+}
+function shove(it,pc,instant){ // to the nearest clear spot in the room, off every doorway, against a wall if it can
+  const st=pieces(it), sel=pc&&st[pc]?[pc]:Object.keys(st), dw=doorwayCells(), M=G.M;
+  const b=sel.map(k=>st[k].box).reduce((a,q)=>[Math.min(a[0],q[0]),0,Math.min(a[2],q[2]),Math.max(a[3],q[3]),0,Math.max(a[5],q[5])],[1e9,0,1e9,-1e9,0,-1e9]);
+  const cx0=(b[0]+b[3])/2, cz0=(b[2]+b[5])/2, here=Math.floor(cz0-M.v0)*M.W+Math.floor(cx0-M.u0), room=G.P.roomOf[here]>=0?G.P.roomOf[here]:G.P.roomOf[(it.cells0||it.cells)[0]];
+  const rm=G.P.rooms.find(r=>r.id===room); if(!rm) return false;
+  let best=null;
+  for(const c of rm.cells){ const x=M.u0+c%M.W+.5, z=M.v0+((c/M.W)|0)+.5, d=Math.hypot(x-cx0,z-cz0); if(d<.6||d>8) continue; if(best&&d>best.score+1) continue;
+    const fit=tryPlace2(it,sel,st,x-cx0,z-cz0,dw); if(!fit) continue;
+    let wall=0; for(let k=0;k<4;k++){ const e=G.O.edges.get(edgeKey(c%M.W,(c/M.W)|0,k)); if(e&&e.type==='wall') wall=1; }
+    const score=d-(wall?.5:0)+(/hall|corridor/.test(rm.kind)?0:0); if(!best||score<best.score) best={score,dx:x-cx0,dz:z-cz0}; }
+  if(!best) return false;
+  commitMove(it,sel,st,best.dx,best.dz,instant); return true;
+}
+function dropAt(it,pc,p){
+  const st=pieces(it), sel=pc&&st[pc]?[pc]:Object.keys(st);
+  const b=sel.map(k=>st[k].box).reduce((a,q)=>[Math.min(a[0],q[0]),0,Math.min(a[2],q[2]),Math.max(a[3],q[3]),0,Math.max(a[5],q[5])],[1e9,0,1e9,-1e9,0,-1e9]);
+  const dx=p.x-(b[0]+b[3])/2, dz=p.z-(b[2]+b[5])/2;
+  if(Math.hypot(dx,dz)>8){ hudHover.textContent='Too far to drag in one go'; return false; }
+  if(!tryPlace2(it,sel,st,dx,dz,null)){ hudHover.textContent='No clear floor there'; return false; }
+  commitMove(it,sel,st,dx,dz,false); return true;
+}
+function clearDoorways(){
+  if(SIM) return; const dw=doorwayCells(); let n=0, stuck=0;
+  for(const it of G.Fn.items){ if(!REC.moved[G.level+':'+it.id]||!blocksDoor(it,dw)) continue; if(shove(it,null,true)) n++; else stuck++; }
+  refresh(false); hudHover.textContent=n||stuck?'Cleared '+n+' prop'+(n===1?'':'s')+' off doorways'+(stuck?', '+stuck+' with nowhere to go':''):'No thrown props block a doorway';
 }
 
 // Overturning is scripted, not simulated: the same click always gives the same result. The prop tips away
@@ -4642,7 +4817,7 @@ const ghostAt=u=>{ const p=planned(u); return Object.assign({},u,{x:p[0],z:p[1]}
 const apTotal=u=>2+(u.order&&u.order.rungun?1:0);
 const moveAP=u=>{ const m=u.order&&u.order.move; if(!m) return 0; return m.cost<=(u.move||CR.V.move)?1:2; };
 function moveBudget(u){ const mv=u.move||CR.V.move, act=u.order&&u.order.act&&u.order.act.type!=='slash'?1:0, ap=Math.min(2,apTotal(u)-act); return ap>=2?2*mv:ap>=1?mv:0; }
-const ACT_LABEL={shoot:'shoot',pistol:'revolver',slash:'slash',throw:'pipe bomb',aid:'first aid',charge:'charge',flip:'overturn',close:'close door',search:'take stash',evac:'get out',ow:'overwatch',hunker:'hunker',reload:'reload'};
+const ACT_LABEL={shove:'shove clear',drag:'drag',shoot:'shoot',pistol:'revolver',slash:'slash',throw:'pipe bomb',aid:'first aid',charge:'charge',flip:'overturn',close:'close door',search:'take stash',evac:'get out',ow:'overwatch',hunker:'hunker',reload:'reload'};
 function orderText(u){ const o=u.order; if(!o||(!o.move&&!o.act&&!o.free)) return 'no orders: holds'; const parts=[];
   if(o.free) parts.push('free shot → '+o.free.target.name);
   if(o.move) parts.push((o.move.cost<=(u.move||CR.V.move)?'move ':'dash ')+o.move.cost.toFixed(0)+' m');
@@ -4769,6 +4944,7 @@ function drawBar(){ const u=S.sel;
   if(S.phase==='over'){ actsEl.innerHTML='<button type="button" class="pri" data-a="restart">Again</button><button type="button" data-a="reroll">Another layout</button>'; return; }
   if(S.prompt){ actsEl.innerHTML='<span class="hint">Contact: choose above</span>'; return; }
   if(S.phase==='exec'||S.phase==='raiders'||S.phase==='breach'){ actsEl.innerHTML=`<span class="hint" style="color:${S.phase==='raiders'?'#e2b0a8':'#f3d38a'}">${S.phase==='breach'?'Breaching…':S.phase==='raiders'?'Raiders act…':'Your squad moves…'}</span>`; return; }
+  if(S.mode==='drag'&&u){ actsEl.innerHTML=`<span class="hint">Click the floor where ${u.name} drags it (up to 8 m)</span><button type="button" data-a="back">Back</button>`; return; }
   if(S.mode==='throw'&&u){ actsEl.innerHTML=`<span class="hint">Click where ${u.name}'s pipe bomb lands (${CR.V.throwRange} m from where they will stand)</span><button type="button" data-a="back">Back</button>`; return; }
   const mine=!S.busy&&u&&u.alive&&u.team==='squad';
   if(S.phase==='explore'){ const e=mine&&(u.stack||entryAt(u)), stacked=squad().filter(v=>v.alive&&v.stack), anyLine=mine&&S.units.some(t=>t.team==='raider'&&t.alive&&t.vis);
@@ -4833,6 +5009,9 @@ function rightClick(ev,p,hit){ const u=S.sel; if(!u||!u.alive) return; if(hit&&!
   const M=S.mission;
   if(M&&M.stash&&!M.stashTaken){ const so=S.w.obs.find(x=>x.kind==='item'&&x.it===M.stashItem); if(so&&boxDist(so.box,p[0],p[1])<.4){ const spot=standBeside(u,so.box,besideBudget(u)); items.push({label:'Take the stash',sub:'',off:spot?null:'too far',fn:()=>{ moveFor(u,spot); setAct(u,{type:'search'}); afterOrder(u); }}); openMenu(ev,'Stash',items); return; } }
   const it=S.w.obs.find(x=>x.kind==='item'&&!x.destroyed&&!x.flat&&boxDist(x.box,p[0],p[1])<.15);
+  if(it&&typeof movable==='function'&&movable(it.it)){ const spot=standBeside(u,it.box,besideBudget(u));
+    items.push({label:'Shove it clear',sub:'off doorways, to a wall',off:spot?null:'too far',fn:()=>{ moveFor(u,spot); setAct(u,{type:'shove',item:it}); afterOrder(u); }},
+      {label:'Drag it to…',sub:'up to 8 m',off:spot?null:'too far',fn:()=>{ moveFor(u,spot); S.mode='drag'; S.dragItem=it; clearReach(); drawBar(); log('Click the floor where '+u.name+' drags the '+itemName(it.it.key)+'.'); }}); }
   if(it&&typeof FLIP_PROPS!=='undefined'&&FLIP_PROPS.has(it.it.key)&&!it.mv){ const spot=standBeside(u,it.box,besideBudget(u)); items.push({label:'Overturn for cover',sub:'tips away from '+u.name,off:spot?null:'too far',fn:()=>{ moveFor(u,spot); setAct(u,{type:'flip',item:it}); afterOrder(u); }}); }
   const edge=S.w.obs.find(x=>x.kind==='edge'&&SP.ptSeg(p[0],p[1],...x.seg).d<.35);
   if(edge&&/door/.test(edge.e.type)&&S.w.doorState(edge.e)==='open'){ const m=[(edge.seg[0]+edge.seg[2])/2,(edge.seg[1]+edge.seg[3])/2], spot=standBeside(u,{x0:m[0]-.5,x1:m[0]+.5,z0:m[1]-.5,z1:m[1]+.5},besideBudget(u)); items.push({label:'Close the door',sub:'blocks sight',off:spot?null:'too far',fn:()=>{ moveFor(u,spot); setAct(u,{type:'close',edge}); afterOrder(u); }}); }
@@ -4884,7 +5063,7 @@ async function overwatchCheck(m){ for(const w of S.units){ if(!w.alive||!w.ow||w
 const fpsEl=$('fps'), fpsX=$('fpsX'), fpsBar=$('fpsBar'); let FP=null;
 function fpsShot(w,m,doorway){ return new Promise(res=>{ S.fpsBusy=true; const lf=CR.lineOfFire(S.w,w,m)||{from:P(w)}; const eye=new THREE.Vector3(lf.from[0],yOf(...lf.from)+1.55,lf.from[1]);
     const o=CR.odds(S.w,w,m,{reaction:true,doorway}); FP={w,m,eye,t:0,limit:w.role==='sharpshooter'?6.5:5.5,res,mx:.5,my:.5,o,fov:w.role==='sharpshooter'?18:56,yaw:Math.atan2(m.x-eye.x,m.z-eye.z),pitch:0};
-    $('fpsWho').textContent=`${w.name} on overwatch`; $('fpsInfo').textContent=`${m.name} · the roll would be ${o.aim}%`; fpsEl.hidden=false; $('stage').classList.add('fp'); S.slow=1/7; m.paused=false; }); }
+    $('fpsWho').textContent=`${w.name} on overwatch`; $('fpsInfo').textContent=`${m.name} · the roll would be ${o.aim}%`; fpsEl.hidden=false; $('stage').classList.add('fp'); if(typeof CUT!=='undefined') CUT.u.uOn.value=0; S.slow=1/7; m.paused=false; }); }
 function fpsEnd(r){ if(!FP) return; const f=FP; FP=null; fpsEl.hidden=true; $('stage').classList.remove('fp'); S.slow=1; S.fpsBusy=false; camera.fov=FOV; camera.updateProjectionMatrix(); f.res(r); }
 function fpsFire(){ if(!FP) return; const f=FP, sway=(1-f.w.aim/100)*.05+.004, sx=Math.sin(f.t*2.3)*sway, sy=Math.sin(f.t*3.1+1)*sway*.7;
   ndc.set((f.mx*2-1)+sx*6,-(f.my*2-1)+sy*6); ray.setFromCamera(ndc,camera);
@@ -4995,6 +5174,8 @@ async function runOrder(u,i){ const o=u.order; if(!o) return; await wait(i*70); 
     case 'aid': aid(u,a.target); break;
     case 'charge': await setCharge(u,a.edge,a.at); break;
     case 'flip': await flip(u,a.item); break;
+    case 'shove': case 'drag': { const it=a.item.it; await waitSim(); const ok=a.type==='shove'?shove(it,null,false):dropAt(it,null,{x:a.point[0],z:a.point[1]}); await waitSim(); S.w.syncMoves(S.rec);
+      log(ok?`${u.name} ${a.type==='shove'?'shoves':'drags'} the ${itemName(it.key)} ${a.type==='shove'?'clear':'across'}.`:`${u.name} cannot move the ${itemName(it.key)} there.`); break; }
     case 'close': if(S.w.doorState(a.edge.e)==='open'){ S.w.setDoor(a.edge.e.key,'closed'); rebuild(); log(`${u.name} closes the door.`); } break;
     case 'search': if(!takeStash(u)) log(`${u.name} cannot reach the stash.`); break;
     case 'evac': evacuate(u); break;
@@ -5087,7 +5268,7 @@ function landing(u,p){ if(!p) return null; const d=Math.hypot(p[0]-u.x,p[1]-u.z)
   const from=[[u.x,u.z],...S.w.leans([u.x,u.z],q)]; return from.some(f=>S.w.sight(f,q,{shot:true}))?q:null; }
 let drag=null;
 canvas3.addEventListener('pointerdown',e=>{ drag={x:e.clientX,y:e.clientY,btn:e.button,pan:e.button===2||e.shiftKey,moved:0}; canvas3.setPointerCapture(e.pointerId); });
-canvas3.addEventListener('pointermove',e=>{ if(!drag){ const h=S.w&&!FP?pickUnit(e,v=>v.team==='squad'||v.vis):null; canvas3.style.cursor=h?'pointer':'';
+canvas3.addEventListener('pointermove',e=>{ if(!drag){ const fp=S.w&&pointUnder(e); if(fp&&S.w.insideAt(...fp)){ cutAt=fp; cutT=performance.now(); } const h=S.w&&!FP?pickUnit(e,v=>v.team==='squad'||v.vis):null; canvas3.style.cursor=h?'pointer':'';
     if(h&&h.team==='raider'&&h.alive&&ctxEl.hidden){ hideHover(); hoverEl.textContent=`${h.name} · ${h.hp}/${h.max} HP${h.armor?' · armour '+h.armor:''}${planning()?'\nClick or right click: what '+(S.sel?S.sel.name:'your soldier')+' can do to them':S.phase==='explore'?'\nRight click: engage':''}`; hoverEl.style.whiteSpace='pre-line'; return; }
     hover(pointUnder(e)); return; } const dx=e.clientX-drag.x, dy=e.clientY-drag.y; drag.x=e.clientX; drag.y=e.clientY; drag.moved+=Math.abs(dx)+Math.abs(dy);
   if(drag.moved<(drag.btn===2?12:6)) return; S.camGoal=null; S.camHold=performance.now()+5000; closeMenu();
@@ -5097,6 +5278,7 @@ canvas3.addEventListener('pointerup',e=>{ const click=drag&&drag.moved<(drag.btn
   const hit=pickUnit(e,v=>v.team==='squad'||v.vis);
   if(btn===2){ rightClick(e,p,hit||null); return; }
   closeMenu();
+  if(S.mode==='drag'&&S.sel&&p){ setAct(S.sel,{type:'drag',item:S.dragItem,point:p}); S.mode='move'; S.dragItem=null; afterOrder(S.sel); return; }
   if(S.mode==='throw'&&S.sel){ const q=landing(ghostAt(S.sel),p); if(q){ setAct(S.sel,{type:'throw',point:q}); S.mode='move'; afterOrder(S.sel); } else log('No clear throw there.'); return; }
   if(hit&&hit.team==='raider'&&planning()){ rightClick(e,p,hit); return; }   // a left click on a raider opens the same options
   if(!p) return;
@@ -5129,7 +5311,7 @@ function hoverThrow(p){ ghost.visible=false; route.visible=false; while(glyphs.c
   hoverEl.textContent=`Pipe bomb: ${hits.filter(h=>h.u.team==='raider').map(h=>h.u.name+' −'+h.dmg+(h.shred?' (shred)':'')).join(', ')||'nobody you can see'}${hits.some(h=>h.u.team==='squad')?' · hits your own: '+hits.filter(h=>h.u.team==='squad').map(h=>h.u.name).join(', '):''}\nIgnores cover · scatters props · can hole thin walls`; hoverEl.style.whiteSpace='pre-line'; }
 
 // ---------- per frame ----------
-let last=performance.now(), detT=0, visT=0;
+let last=performance.now(), detT=0, visT=0, cutAt=null, cutT=0;
 function resize(){ const st=$('stage'), w=st.clientWidth, h=st.clientHeight; renderer.setSize(w,h,false); camera.aspect=w/Math.max(1,h); camera.updateProjectionMatrix(); }
 new ResizeObserver(resize).observe($('stage'));
 const motionState=(u,act)=>({act,mood:u.fleeing?'panicked':u.alive&&u.hp<=u.max/2?'wounded':'calm',ground:(x,z)=>yOf(x,z)});
@@ -5172,7 +5354,10 @@ function frame(now){ requestAnimationFrame(frame); const real=Math.min(.05,(now-
   // WASD moves the camera over the ground, relative to the way it faces
   if(held.size&&!FP){ const f=(held.has('w')?1:0)-(held.has('s')?1:0), rt=(held.has('d')?1:0)-(held.has('a')?1:0), sp=view.dist*.9*real, sa=Math.sin(view.az), ca=Math.cos(view.az);
     if(f||rt){ view.target.x+=(-sa*f+ca*rt)*sp; view.target.z+=(-ca*f-sa*rt)*sp; S.camGoal=null; S.camHold=now+5000; } }
-  placeCamera(); if(shake>0){ shake=Math.max(0,shake-real); const k=shake*.35; camera.position.x+=(Math.random()-.5)*k; camera.position.y+=(Math.random()-.5)*k; } applyView(); drawBadges(); renderer.render(scene,camera); }
+  // the interiors' section cutaway: walls between the camera and the focus drop to a stub. The focus is the floor under
+  // the pointer while it moves over the building, otherwise whoever the camera is following.
+  if(typeof CUT!=='undefined'&&typeof stepCut==='function'){ const p=cutAt&&now-cutT<2500?cutAt:[view.target.x,view.target.z]; CUT.goal.set(p[0],0,p[1]); }
+  placeCamera(); if(shake>0){ shake=Math.max(0,shake-real); const k=shake*.35; camera.position.x+=(Math.random()-.5)*k; camera.position.y+=(Math.random()-.5)*k; } applyView(); if(typeof stepCut==='function') stepCut(); drawBadges(); renderer.render(scene,camera); }
 
 // ---------- header ----------
 $('bSel').onchange=()=>{ S.seed=0; setup(); }; $('hSel').onchange=()=>setup();

@@ -13,7 +13,10 @@ function read(){
   if(s0<0||r0<0||r1<0||p0<0||p1<0) throw new Error('interiors.src.html markers moved: update tools/combat/interiors-slice.js');
   const fill=t=>t.replace('/*SITES*/[]',sites).replace('/*KIT*/',kit);
   // physics: grenades scattering props and overturned furniture (the renderer's build() calls its applyMoves)
-  return { gen:fill(src.slice(s0+GEN_START.length,r0)), render:src.slice(r0,r1), phys:src.slice(p0,p1) };
+  // the section cutaway eases toward its focus in stepCut(), which sits just after resize() in the page's own loop
+  const c0=src.indexOf('function stepCut('), c1=c0<0?-1:src.indexOf('\n}\n',c0);
+  if(c0<0||c1<0) throw new Error('interiors.src.html: stepCut() not found: update tools/combat/interiors-slice.js');
+  return { gen:fill(src.slice(s0+GEN_START.length,r0)), render:src.slice(r0,r1)+'\n'+src.slice(c0,c1+3), phys:src.slice(p0,p1) };
 }
 // Node: run the generator in a sandbox and hand back what combat needs
 function loadGenerator(){

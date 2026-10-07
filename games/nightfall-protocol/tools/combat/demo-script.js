@@ -112,7 +112,7 @@ const ghostAt=u=>{ const p=planned(u); return Object.assign({},u,{x:p[0],z:p[1]}
 const apTotal=u=>2+(u.order&&u.order.rungun?1:0);
 const moveAP=u=>{ const m=u.order&&u.order.move; if(!m) return 0; return m.cost<=(u.move||CR.V.move)?1:2; };
 function moveBudget(u){ const mv=u.move||CR.V.move, act=u.order&&u.order.act&&u.order.act.type!=='slash'?1:0, ap=Math.min(2,apTotal(u)-act); return ap>=2?2*mv:ap>=1?mv:0; }
-const ACT_LABEL={shoot:'shoot',pistol:'revolver',slash:'slash',throw:'pipe bomb',aid:'first aid',charge:'charge',flip:'overturn',close:'close door',search:'take stash',evac:'get out',ow:'overwatch',hunker:'hunker',reload:'reload'};
+const ACT_LABEL={shove:'shove clear',drag:'drag',shoot:'shoot',pistol:'revolver',slash:'slash',throw:'pipe bomb',aid:'first aid',charge:'charge',flip:'overturn',close:'close door',search:'take stash',evac:'get out',ow:'overwatch',hunker:'hunker',reload:'reload'};
 function orderText(u){ const o=u.order; if(!o||(!o.move&&!o.act&&!o.free)) return 'no orders: holds'; const parts=[];
   if(o.free) parts.push('free shot → '+o.free.target.name);
   if(o.move) parts.push((o.move.cost<=(u.move||CR.V.move)?'move ':'dash ')+o.move.cost.toFixed(0)+' m');
@@ -239,6 +239,7 @@ function drawBar(){ const u=S.sel;
   if(S.phase==='over'){ actsEl.innerHTML='<button type="button" class="pri" data-a="restart">Again</button><button type="button" data-a="reroll">Another layout</button>'; return; }
   if(S.prompt){ actsEl.innerHTML='<span class="hint">Contact: choose above</span>'; return; }
   if(S.phase==='exec'||S.phase==='raiders'||S.phase==='breach'){ actsEl.innerHTML=`<span class="hint" style="color:${S.phase==='raiders'?'#e2b0a8':'#f3d38a'}">${S.phase==='breach'?'Breaching…':S.phase==='raiders'?'Raiders act…':'Your squad moves…'}</span>`; return; }
+  if(S.mode==='drag'&&u){ actsEl.innerHTML=`<span class="hint">Click the floor where ${u.name} drags it (up to 8 m)</span><button type="button" data-a="back">Back</button>`; return; }
   if(S.mode==='throw'&&u){ actsEl.innerHTML=`<span class="hint">Click where ${u.name}'s pipe bomb lands (${CR.V.throwRange} m from where they will stand)</span><button type="button" data-a="back">Back</button>`; return; }
   const mine=!S.busy&&u&&u.alive&&u.team==='squad';
   if(S.phase==='explore'){ const e=mine&&(u.stack||entryAt(u)), stacked=squad().filter(v=>v.alive&&v.stack), anyLine=mine&&S.units.some(t=>t.team==='raider'&&t.alive&&t.vis);
@@ -303,6 +304,9 @@ function rightClick(ev,p,hit){ const u=S.sel; if(!u||!u.alive) return; if(hit&&!
   const M=S.mission;
   if(M&&M.stash&&!M.stashTaken){ const so=S.w.obs.find(x=>x.kind==='item'&&x.it===M.stashItem); if(so&&boxDist(so.box,p[0],p[1])<.4){ const spot=standBeside(u,so.box,besideBudget(u)); items.push({label:'Take the stash',sub:'',off:spot?null:'too far',fn:()=>{ moveFor(u,spot); setAct(u,{type:'search'}); afterOrder(u); }}); openMenu(ev,'Stash',items); return; } }
   const it=S.w.obs.find(x=>x.kind==='item'&&!x.destroyed&&!x.flat&&boxDist(x.box,p[0],p[1])<.15);
+  if(it&&typeof movable==='function'&&movable(it.it)){ const spot=standBeside(u,it.box,besideBudget(u));
+    items.push({label:'Shove it clear',sub:'off doorways, to a wall',off:spot?null:'too far',fn:()=>{ moveFor(u,spot); setAct(u,{type:'shove',item:it}); afterOrder(u); }},
+      {label:'Drag it to…',sub:'up to 8 m',off:spot?null:'too far',fn:()=>{ moveFor(u,spot); S.mode='drag'; S.dragItem=it; clearReach(); drawBar(); log('Click the floor where '+u.name+' drags the '+itemName(it.it.key)+'.'); }}); }
   if(it&&typeof FLIP_PROPS!=='undefined'&&FLIP_PROPS.has(it.it.key)&&!it.mv){ const spot=standBeside(u,it.box,besideBudget(u)); items.push({label:'Overturn for cover',sub:'tips away from '+u.name,off:spot?null:'too far',fn:()=>{ moveFor(u,spot); setAct(u,{type:'flip',item:it}); afterOrder(u); }}); }
   const edge=S.w.obs.find(x=>x.kind==='edge'&&SP.ptSeg(p[0],p[1],...x.seg).d<.35);
   if(edge&&/door/.test(edge.e.type)&&S.w.doorState(edge.e)==='open'){ const m=[(edge.seg[0]+edge.seg[2])/2,(edge.seg[1]+edge.seg[3])/2], spot=standBeside(u,{x0:m[0]-.5,x1:m[0]+.5,z0:m[1]-.5,z1:m[1]+.5},besideBudget(u)); items.push({label:'Close the door',sub:'blocks sight',off:spot?null:'too far',fn:()=>{ moveFor(u,spot); setAct(u,{type:'close',edge}); afterOrder(u); }}); }
@@ -354,7 +358,7 @@ async function overwatchCheck(m){ for(const w of S.units){ if(!w.alive||!w.ow||w
 const fpsEl=$('fps'), fpsX=$('fpsX'), fpsBar=$('fpsBar'); let FP=null;
 function fpsShot(w,m,doorway){ return new Promise(res=>{ S.fpsBusy=true; const lf=CR.lineOfFire(S.w,w,m)||{from:P(w)}; const eye=new THREE.Vector3(lf.from[0],yOf(...lf.from)+1.55,lf.from[1]);
     const o=CR.odds(S.w,w,m,{reaction:true,doorway}); FP={w,m,eye,t:0,limit:w.role==='sharpshooter'?6.5:5.5,res,mx:.5,my:.5,o,fov:w.role==='sharpshooter'?18:56,yaw:Math.atan2(m.x-eye.x,m.z-eye.z),pitch:0};
-    $('fpsWho').textContent=`${w.name} on overwatch`; $('fpsInfo').textContent=`${m.name} · the roll would be ${o.aim}%`; fpsEl.hidden=false; $('stage').classList.add('fp'); S.slow=1/7; m.paused=false; }); }
+    $('fpsWho').textContent=`${w.name} on overwatch`; $('fpsInfo').textContent=`${m.name} · the roll would be ${o.aim}%`; fpsEl.hidden=false; $('stage').classList.add('fp'); if(typeof CUT!=='undefined') CUT.u.uOn.value=0; S.slow=1/7; m.paused=false; }); }
 function fpsEnd(r){ if(!FP) return; const f=FP; FP=null; fpsEl.hidden=true; $('stage').classList.remove('fp'); S.slow=1; S.fpsBusy=false; camera.fov=FOV; camera.updateProjectionMatrix(); f.res(r); }
 function fpsFire(){ if(!FP) return; const f=FP, sway=(1-f.w.aim/100)*.05+.004, sx=Math.sin(f.t*2.3)*sway, sy=Math.sin(f.t*3.1+1)*sway*.7;
   ndc.set((f.mx*2-1)+sx*6,-(f.my*2-1)+sy*6); ray.setFromCamera(ndc,camera);
@@ -465,6 +469,8 @@ async function runOrder(u,i){ const o=u.order; if(!o) return; await wait(i*70); 
     case 'aid': aid(u,a.target); break;
     case 'charge': await setCharge(u,a.edge,a.at); break;
     case 'flip': await flip(u,a.item); break;
+    case 'shove': case 'drag': { const it=a.item.it; await waitSim(); const ok=a.type==='shove'?shove(it,null,false):dropAt(it,null,{x:a.point[0],z:a.point[1]}); await waitSim(); S.w.syncMoves(S.rec);
+      log(ok?`${u.name} ${a.type==='shove'?'shoves':'drags'} the ${itemName(it.key)} ${a.type==='shove'?'clear':'across'}.`:`${u.name} cannot move the ${itemName(it.key)} there.`); break; }
     case 'close': if(S.w.doorState(a.edge.e)==='open'){ S.w.setDoor(a.edge.e.key,'closed'); rebuild(); log(`${u.name} closes the door.`); } break;
     case 'search': if(!takeStash(u)) log(`${u.name} cannot reach the stash.`); break;
     case 'evac': evacuate(u); break;
@@ -557,7 +563,7 @@ function landing(u,p){ if(!p) return null; const d=Math.hypot(p[0]-u.x,p[1]-u.z)
   const from=[[u.x,u.z],...S.w.leans([u.x,u.z],q)]; return from.some(f=>S.w.sight(f,q,{shot:true}))?q:null; }
 let drag=null;
 canvas3.addEventListener('pointerdown',e=>{ drag={x:e.clientX,y:e.clientY,btn:e.button,pan:e.button===2||e.shiftKey,moved:0}; canvas3.setPointerCapture(e.pointerId); });
-canvas3.addEventListener('pointermove',e=>{ if(!drag){ const h=S.w&&!FP?pickUnit(e,v=>v.team==='squad'||v.vis):null; canvas3.style.cursor=h?'pointer':'';
+canvas3.addEventListener('pointermove',e=>{ if(!drag){ const fp=S.w&&pointUnder(e); if(fp&&S.w.insideAt(...fp)){ cutAt=fp; cutT=performance.now(); } const h=S.w&&!FP?pickUnit(e,v=>v.team==='squad'||v.vis):null; canvas3.style.cursor=h?'pointer':'';
     if(h&&h.team==='raider'&&h.alive&&ctxEl.hidden){ hideHover(); hoverEl.textContent=`${h.name} · ${h.hp}/${h.max} HP${h.armor?' · armour '+h.armor:''}${planning()?'\nClick or right click: what '+(S.sel?S.sel.name:'your soldier')+' can do to them':S.phase==='explore'?'\nRight click: engage':''}`; hoverEl.style.whiteSpace='pre-line'; return; }
     hover(pointUnder(e)); return; } const dx=e.clientX-drag.x, dy=e.clientY-drag.y; drag.x=e.clientX; drag.y=e.clientY; drag.moved+=Math.abs(dx)+Math.abs(dy);
   if(drag.moved<(drag.btn===2?12:6)) return; S.camGoal=null; S.camHold=performance.now()+5000; closeMenu();
@@ -567,6 +573,7 @@ canvas3.addEventListener('pointerup',e=>{ const click=drag&&drag.moved<(drag.btn
   const hit=pickUnit(e,v=>v.team==='squad'||v.vis);
   if(btn===2){ rightClick(e,p,hit||null); return; }
   closeMenu();
+  if(S.mode==='drag'&&S.sel&&p){ setAct(S.sel,{type:'drag',item:S.dragItem,point:p}); S.mode='move'; S.dragItem=null; afterOrder(S.sel); return; }
   if(S.mode==='throw'&&S.sel){ const q=landing(ghostAt(S.sel),p); if(q){ setAct(S.sel,{type:'throw',point:q}); S.mode='move'; afterOrder(S.sel); } else log('No clear throw there.'); return; }
   if(hit&&hit.team==='raider'&&planning()){ rightClick(e,p,hit); return; }   // a left click on a raider opens the same options
   if(!p) return;
@@ -599,7 +606,7 @@ function hoverThrow(p){ ghost.visible=false; route.visible=false; while(glyphs.c
   hoverEl.textContent=`Pipe bomb: ${hits.filter(h=>h.u.team==='raider').map(h=>h.u.name+' −'+h.dmg+(h.shred?' (shred)':'')).join(', ')||'nobody you can see'}${hits.some(h=>h.u.team==='squad')?' · hits your own: '+hits.filter(h=>h.u.team==='squad').map(h=>h.u.name).join(', '):''}\nIgnores cover · scatters props · can hole thin walls`; hoverEl.style.whiteSpace='pre-line'; }
 
 // ---------- per frame ----------
-let last=performance.now(), detT=0, visT=0;
+let last=performance.now(), detT=0, visT=0, cutAt=null, cutT=0;
 function resize(){ const st=$('stage'), w=st.clientWidth, h=st.clientHeight; renderer.setSize(w,h,false); camera.aspect=w/Math.max(1,h); camera.updateProjectionMatrix(); }
 new ResizeObserver(resize).observe($('stage'));
 const motionState=(u,act)=>({act,mood:u.fleeing?'panicked':u.alive&&u.hp<=u.max/2?'wounded':'calm',ground:(x,z)=>yOf(x,z)});
@@ -642,7 +649,10 @@ function frame(now){ requestAnimationFrame(frame); const real=Math.min(.05,(now-
   // WASD moves the camera over the ground, relative to the way it faces
   if(held.size&&!FP){ const f=(held.has('w')?1:0)-(held.has('s')?1:0), rt=(held.has('d')?1:0)-(held.has('a')?1:0), sp=view.dist*.9*real, sa=Math.sin(view.az), ca=Math.cos(view.az);
     if(f||rt){ view.target.x+=(-sa*f+ca*rt)*sp; view.target.z+=(-ca*f-sa*rt)*sp; S.camGoal=null; S.camHold=now+5000; } }
-  placeCamera(); if(shake>0){ shake=Math.max(0,shake-real); const k=shake*.35; camera.position.x+=(Math.random()-.5)*k; camera.position.y+=(Math.random()-.5)*k; } applyView(); drawBadges(); renderer.render(scene,camera); }
+  // the interiors' section cutaway: walls between the camera and the focus drop to a stub. The focus is the floor under
+  // the pointer while it moves over the building, otherwise whoever the camera is following.
+  if(typeof CUT!=='undefined'&&typeof stepCut==='function'){ const p=cutAt&&now-cutT<2500?cutAt:[view.target.x,view.target.z]; CUT.goal.set(p[0],0,p[1]); }
+  placeCamera(); if(shake>0){ shake=Math.max(0,shake-real); const k=shake*.35; camera.position.x+=(Math.random()-.5)*k; camera.position.y+=(Math.random()-.5)*k; } applyView(); if(typeof stepCut==='function') stepCut(); drawBadges(); renderer.render(scene,camera); }
 
 // ---------- header ----------
 $('bSel').onchange=()=>{ S.seed=0; setup(); }; $('hSel').onchange=()=>setup();
