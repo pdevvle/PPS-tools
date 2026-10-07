@@ -36,6 +36,7 @@ h1{font:600 clamp(24px,4.4vw,34px)/1.1 var(--body);margin:0;text-wrap:balance}
 .seg.two{grid-template-columns:1fr}
 .seg button{background:var(--bg);border:1px solid var(--line);color:var(--text);font:500 14px var(--body);padding:5px 8px;cursor:pointer;text-align:left}
 .seg button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+.places{display:grid;gap:4px}.places button{background:var(--bg);border:1px solid var(--line);color:var(--text);font:500 13px var(--body);padding:5px 8px;cursor:pointer;text-align:left}.places button:hover{border-color:var(--accent)}
 .tg{display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer}
 .tg input{accent-color:var(--accent);width:16px;height:16px}
 button:focus-visible,.tg input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -70,7 +71,7 @@ dt{color:var(--muted)} dd{margin:0;text-align:right}
   <header>
     <p class="eyebrow">Nightfall · streaming prototype</p>
     <h1>New River, walking between sectors</h1>
-    <p class="lede">A 3 km block of real New River, Arizona, baked offline into 25 sectors of 600 m that share their edges exactly. The page keeps the 3 by 3 sectors around your squad loaded: the one they stand in at full detail with ink outlines, the eight around it lighter. Walk toward an edge and the next row loads while the far one is dropped. Click the ground to move; paths cross sector edges.</p>
+    <p class="lede">A 3 by 6 km corridor of real New River, Arizona, and the desert north of it along I-17, baked offline into 50 sectors of 600 m that share their edges exactly. The page keeps the 3 by 3 sectors around your squad loaded: plants are drawn in full near the camera and as lighter shapes farther out. Walk toward an edge and the next row loads while the far one is dropped. Click the ground to move; paths cross sector edges. Plants and boulders are solid.</p>
   </header>
   <div class="studio">
     <div id="stage" aria-label="3D view of the streaming sectors">
@@ -84,10 +85,11 @@ dt{color:var(--muted)} dd{margin:0;text-align:right}
         <div class="key"><span style="--k:#6f8f58">centre</span><span style="--k:#4f6a4a">loaded</span><span style="--k:#8a6a2a">building</span><span style="--k:#2b2c2f">dropped</span></div></div>
       <div class="group"><span>Live cost</span><dl id="cost"></dl></div>
       <div class="group"><span>View</span><div class="seg" id="segView"><button type="button" data-v="tactical" aria-pressed="true">Tactical</button><button type="button" data-v="street" aria-pressed="false">Street</button><button type="button" data-v="high" aria-pressed="false">High</button></div></div>
+      <div class="group"><span>Places</span><div class="places" id="places"><button type="button" data-p="-585,470,2.6,0.45,34">Dead signals at the I-17 ramps</button><button type="button" data-p="-205,395,0.8,0.6,45">I-17 interchange, stop signs</button><button type="button" data-p="-640,800,0.3,0.55,60">Freeway, median barrier</button><button type="button" data-p="-150,-160,0.6,0.6,35">Roadrunner parking lot</button><button type="button" data-p="200,-30,-1.6,0.14,26">Power lines on New River Rd</button><button type="button" data-p="-1044.9,652.4,1.2,0.45,16">Dirt road and cattle guard</button><button type="button" data-p="-1180,744,2.4,0.3,10">Burnt-out pickup</button><button type="button" data-p="600,-3000,0.6,0.6,70">Homes north of New River</button><button type="button" data-p="279,-3650,1.6,0.3,35">New River bed, braided</button><button type="button" data-p="-1270,-3935,2.2,0.3,28">Granite tors on a ridge</button></div></div>
       <div class="group"><span>Layers</span>
         <label class="tg"><input type="checkbox" id="tglSwim"> Swim gear</label>
         <label class="tg"><input type="checkbox" id="tglSeams"> Show sector edges</label></div>
-      <p class="tip">Drag to turn · right-drag to pan · wheel to zoom</p>
+      <p class="tip">Drag or Q/E to turn · right-drag or WASD to pan (Shift faster, F back to the squad) · wheel to zoom</p>
     </div>
   </div>
   <div class="sheet">

@@ -31,6 +31,7 @@ The Roadrunner store in the New River block and the houses around it are the fir
   - Rooms of 30 m² or more get a second door, so there is always another way in.
   - Corridors are wide enough to fight in.
   The values themselves belong to combat.
+- **Cutaway as a building section (proposed in the mockup).** Walls between the camera and the point being worked on are cut to a 0.9 m stub, just under half-cover height, and slope back up at the edge of the cut. The cut faces are filled in a tone per build-up, so wall thickness and material read at a glance. A faint outline keeps the full wall height visible. Outside walls facing the camera are always cut.
 - **Destructible walls (proposed in the mockup).** Every wall edge has a build-up: drywall, stucco over frame, concrete block or reinforced concrete. Thin walls give way to bullets, a sledge and grenades. Thick walls (block exteriors, shafts, walls between shops) stop rounds and need a breaching charge; a vault takes two. Damage runs cracked → holed (see and shoot through) → breached (walk through) and is kept in the change record. Combat sets the numbers.
 
 ## Decisions to make here (record them in this brief)

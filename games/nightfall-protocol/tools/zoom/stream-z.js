@@ -6,7 +6,7 @@ const miniEl=document.getElementById('mini'), costEl=document.getElementById('co
 const fail=t=>{ loadingEl.textContent=t; };
 if(!window.THREE){ fail('The 3D view needs three.js, which could not load. Check your connection and reload.'); return; }
 let renderer; try{ renderer=new THREE.WebGLRenderer({antialias:true, alpha:true}); }catch(e){ fail('This browser could not start WebGL.'); return; }
-renderer.setPixelRatio(Math.min(2,window.devicePixelRatio||1)); renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap; renderer.setClearColor(0x000000,0); stage.prepend(renderer.domElement);
+renderer.setPixelRatio(Math.min(1.5,window.devicePixelRatio||1)); renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap; renderer.setClearColor(0x000000,0); stage.prepend(renderer.domElement);
 stage.style.background='linear-gradient(180deg,#9fc6e4,#e8dcc2)';
 const scene=new THREE.Scene(); scene.fog=new THREE.Fog(0xe2d8c2,380,980);
 const cam=new THREE.PerspectiveCamera(38,1,.5,20000);
@@ -44,18 +44,24 @@ const CREASE=new THREE.LineBasicMaterial({color:0x2d241d, transparent:true, opac
 function inkOn(group){ const list=[]; group.traverse(o=>{ if(o.isMesh && !o.userData.ink && !o.userData.noInk) list.push(o); });
   for(const o of list){ const sh=o.isInstancedMesh?new THREE.InstancedMesh(o.geometry,INK,o.count):new THREE.Mesh(o.geometry,INK); if(o.isInstancedMesh) sh.instanceMatrix=o.instanceMatrix;
     sh.userData.ink=true; sh.matrixAutoUpdate=false; o.add(sh);
-    if(!o.isInstancedMesh){ let eg=creaseOf.get(o.geometry); if(!eg){ eg=new THREE.EdgesGeometry(o.geometry,28); creaseOf.set(o.geometry,eg); } const ln=new THREE.LineSegments(eg,CREASE); ln.userData.ink=true; ln.matrixAutoUpdate=false; o.add(ln); } } }
-function inkOff(group){ const kill=[]; group.traverse(o=>{ if(o.userData.ink) kill.push(o); }); for(const o of kill){ o.parent.remove(o); if(o.isLineSegments){ o.geometry.dispose(); for(const [k,v] of creaseOf) if(v===o.geometry) creaseOf.delete(k); } } }
+    if(!o.isInstancedMesh){ const own=o.userData.crease; let eg=own||creaseOf.get(o.geometry); if(!eg){ eg=new THREE.EdgesGeometry(o.geometry,28); creaseOf.set(o.geometry,eg); } const ln=new THREE.LineSegments(eg,CREASE); if(own) ln.userData.keepGeo=true; ln.userData.ink=true; ln.matrixAutoUpdate=false; o.add(ln); } } }
+function inkOff(group){ const kill=[]; group.traverse(o=>{ if(o.userData.ink) kill.push(o); }); for(const o of kill){ o.parent.remove(o); if(o.isLineSegments&&!o.userData.keepGeo){ o.geometry.dispose(); for(const [k,v] of creaseOf) if(v===o.geometry) creaseOf.delete(k); } } }
 
 // ---------- the block ----------
 const IDX=await (await fetch('block/index.json')).json();
-const SEC=IDX.sector, NB=IDX.n, HALF=IDX.half, NS=IDX.navStep, SN=SEC/NS, GN=NB*SN, GNN=GN*GN;
+const SEC=IDX.sector, NB=IDX.n, HALF=IDX.half, NS=IDX.navStep, SN=SEC/NS;
+// the baked area is a rectangle of sectors, NBX across and NBZ down, its north-west corner at (BX0,BZ0); GN cells across, GZ down
+const NBX=IDX.nx||NB, NBZ=IDX.nz||NB, BX0=IDX.x0??-HALF, BZ0=IDX.z0??-HALF, BX1=BX0+NBX*SEC, BZ1=BZ0+NBZ*SEC, GN=NBX*SN, GZ=NBZ*SN, GNN=GN*GZ;
+// on the zoom page, past the loaded sectors the ground is the realm's terrain from the campaign
+const LIVEH=(typeof Campaign!=='undefined'&&window.__region&&Campaign.state)?(x,z)=>{ const [rx,rz]=NF.blockToRegion(x,z); return Campaign.elevAt(rx,rz)-IDX.base-((x>BX0-60&&x<BX1+60&&z>BZ0-60&&z<BZ1+60)?14:0); }:null;
 for(const b of IDX.bridges){ const d=b.d; b.yAt=t=>C.bridgeY(b,t); b.tan=k=>{ const p=d[Math.max(0,k-1)], q=d[Math.min(d.length-1,k+1)], l=Math.hypot(q[0]-p[0],q[1]-p[1])||1; return [(q[0]-p[0])/l,(q[1]-p[1])/l]; }; b.nrm=k=>{ const [tx,tz]=b.tan(k); return [tz,-tx]; };
-  b.sec=[Math.floor((b.mid[0]+HALF)/SEC),Math.floor((b.mid[1]+HALF)/SEC)]; b.bb=C.bbox(d); }
+  b.sec=[Math.floor((b.mid[0]-BX0)/SEC),Math.floor((b.mid[1]-BZ0)/SEC)]; b.bb=C.bbox(d); }
+const RK=RoadKit({THREE,C,heightAt:(x,z)=>heightAt(x,z),IDX,renderer,mat,SHAPES,sectorGeo:(g,s)=>sectorGeo(g,s),kindAt:(x,z)=>{ const c=cellOf(x,z); return c<0?255:kindG[c]; }});
+const FK=FloraKit({THREE,mat,C,SEC,ink:INK,sectorGeo:(g,s)=>sectorGeo(g,s)});   // desert plants, rock and wash beds (tools/stream/flora-kit.js)
 const sectors=new Map(), key=(c,r)=>c+','+r;
-const secAt=(x,z)=>{ const c=Math.floor((x+HALF)/SEC), r=Math.floor((z+HALF)/SEC); return c>=0&&r>=0&&c<NB&&r<NB?[c,r]:null; };
-const CX=IDX.context, ctxH=(x,z)=>{ const fx=(x+CX.half)/CX.step, fz=(z+CX.half)/CX.step, i=Math.max(0,Math.min(CX.n-2,Math.floor(fx))), j=Math.max(0,Math.min(CX.n-2,Math.floor(fz))), u=fx-i, v=fz-j, h=(a,b)=>CX.h[b*CX.n+a]; return (h(i,j)*(1-u)+h(i+1,j)*u)*(1-v)+(h(i,j+1)*(1-u)+h(i+1,j+1)*u)*v; };
-function heightAt(x,z){ const q=secAt(x,z), s=q&&sectors.get(key(...q)); if(!s||!s.Hf) return ctxH(x,z);
+const secAt=(x,z)=>{ const c=Math.floor((x-BX0)/SEC), r=Math.floor((z-BZ0)/SEC); return c>=0&&r>=0&&c<NBX&&r<NBZ?[c,r]:null; };
+const CX=IDX.context, CCX=CX.cx||0, CCZ=CX.cz||0, ctxH=(x,z)=>{ const fx=(x-CCX+CX.half)/CX.step, fz=(z-CCZ+CX.half)/CX.step, i=Math.max(0,Math.min(CX.n-2,Math.floor(fx))), j=Math.max(0,Math.min(CX.n-2,Math.floor(fz))), u=fx-i, v=fz-j, h=(a,b)=>CX.h[b*CX.n+a]; return (h(i,j)*(1-u)+h(i+1,j)*u)*(1-v)+(h(i,j+1)*(1-u)+h(i+1,j+1)*u)*v; };
+function heightAt(x,z){ const q=secAt(x,z), s=q&&sectors.get(key(...q)); if(!s||!s.Hf) return LIVEH?LIVEH(x,z):ctxH(x,z);
   const n=s.hn, fx=(x-s.x0+4)/4, fz=(z-s.z0+4)/4, i=Math.max(0,Math.min(n-2,Math.floor(fx))), j=Math.max(0,Math.min(n-2,Math.floor(fz))), u=fx-i, v=fz-j, H=s.Hf, h=(a,b)=>H[b*n+a];
   return (h(i,j)*(1-u)+h(i+1,j)*u)*(1-v)+(h(i,j+1)*(1-u)+h(i+1,j+1)*u)*v; }
 const slopeAt=(x,z)=>{ const e=2, gx=(heightAt(x+e,z)-heightAt(x-e,z))/(2*e), gz=(heightAt(x,z+e)-heightAt(x,z-e))/(2*e); return Math.atan(Math.hypot(gx,gz))*180/Math.PI; };
@@ -63,19 +69,19 @@ function deckAt(x,z,pad=0){ for(const b of IDX.bridges){ if(x<b.bb[0]-b.hw-pad||
   for(let k=0;k<d.length-1;k++){ const a=d[k], c=d[k+1], dx=c[0]-a[0], dz=c[1]-a[1], l2=dx*dx+dz*dz||1, t=((x-a[0])*dx+(z-a[1])*dz)/l2; if(t<-.01||t>1.01) continue;
     if(Math.hypot(x-a[0]-dx*t,z-a[1]-dz*t)>b.hw+pad) continue; const s=b.L[k]+t*Math.sqrt(l2); return {b,s,y:b.yAt(Math.max(0,Math.min(1,s/b.len)))}; } } return null; }
 // the landscape around the block; inside the block it sits a little low so loaded sectors always cover it
-{ const n=CX.n, g=new THREE.PlaneGeometry(CX.half*2,CX.half*2,n-1,n-1); g.rotateX(-Math.PI/2); const p=g.attributes.position;
-  for(let i=0;i<p.count;i++){ const x=p.getX(i), z=p.getZ(i), inB=Math.abs(x)<HALF+60&&Math.abs(z)<HALF+60; p.setY(i,CX.h[i]-(inB?14:0)); }   // well below the real ground: its 50 m grid would otherwise poke through washes and cuts g.computeVertexNormals();
+if(!LIVEH){ const n=CX.n, g=new THREE.PlaneGeometry(CX.half*2,CX.half*2,n-1,n-1);   // the zoom page builds the realm's horizon instead (LIVE, below) g.rotateX(-Math.PI/2); const p=g.attributes.position;
+  for(let i=0;i<p.count;i++){ const x=p.getX(i)+CCX, z=p.getZ(i)+CCZ, inB=x>BX0-60&&x<BX1+60&&z>BZ0-60&&z<BZ1+60; p.setY(i,CX.h[i]-(inB?14:0)); }   // well below the real ground: its 50 m grid would otherwise poke through washes and cuts g.computeVertexNormals();
   const c=document.createElement('canvas'); c.width=c.height=1024; const x2=c.getContext('2d'); x2.fillStyle='#c9ae86'; x2.fillRect(0,0,1024,1024);
   const sh=document.createElement('canvas'); sh.width=sh.height=n; const sg=sh.getContext('2d'), img=sg.createImageData(n,n), L=[-.5,.7,-.5], ll=Math.hypot(...L), flat=L[1]/ll;
   for(let j=0;j<n;j++) for(let i=0;i<n;i++){ const h=(a,b)=>CX.h[Math.min(n-1,Math.max(0,b))*n+Math.min(n-1,Math.max(0,a))], dx=(h(i+1,j)-h(i-1,j))/(2*CX.step), dz=(h(i,j+1)-h(i,j-1))/(2*CX.step), nn=[-dx,1,-dz], nl=Math.hypot(...nn), v=((nn[0]*L[0]+nn[1]*L[1]+nn[2]*L[2])/(nl*ll)-flat)*2.2, o=(j*n+i)*4;
     if(v<0) img.data.set([70,45,25,Math.min(.6,-v)*255],o); else img.data.set([255,248,230,Math.min(.4,v)*255],o); }
   sg.putImageData(img,0,0); x2.drawImage(sh,0,0,1024,1024);
-  const me=new THREE.Mesh(g,new THREE.MeshLambertMaterial({map:new THREE.CanvasTexture(c)})); me.receiveShadow=true; scene.add(me);
+  const me=new THREE.Mesh(g,new THREE.MeshLambertMaterial({map:new THREE.CanvasTexture(c)})); me.position.set(CCX,0,CCZ); me.receiveShadow=true; scene.add(me);
   const skirt=new THREE.Mesh(new THREE.PlaneGeometry(60000,60000),new THREE.MeshLambertMaterial({color:0xc4aa82})); skirt.rotation.x=-Math.PI/2; skirt.position.y=Math.min(...CX.h)-4; scene.add(skirt); }
 
 // ---------- movement: one grid over the whole block, filled in as sectors load ----------
 const kindG=new Uint8Array(GNN).fill(255), spG=new Uint8Array(GNN);
-const cellOf=(x,z)=>{ const i=Math.floor((x+HALF)/NS), j=Math.floor((z+HALF)/NS); return i>=0&&j>=0&&i<GN&&j<GN?j*GN+i:-1; };
+const cellOf=(x,z)=>{ const i=Math.floor((x-BX0)/NS), j=Math.floor((z-BZ0)/NS); return i>=0&&j>=0&&i<GN&&j<GZ?j*GN+i:-1; };
 const deck=[], link=new Map();
 for(const [bi,b] of IDX.bridges.entries()){ const lanes=Math.max(2,Math.round((b.w-1)/2)), base=GNN+deck.length, n=b.d.length;
   for(let k=0;k<n;k++){ const [nx,nz]=b.nrm(k); for(let l=0;l<lanes;l++){ const o=(l/(lanes-1)-.5)*(b.w-1.2); deck.push({x:b.d[k][0]+nx*o,z:b.d[k][1]+nz*o,b:bi,nb:[]}); } }
@@ -83,9 +89,9 @@ for(const [bi,b] of IDX.bridges.entries()){ const lanes=Math.max(2,Math.round((b
   for(const [k,sg] of [[0,-1],[n-1,1]]){ const [tx,tz]=b.tan(k); for(let l=0;l<lanes;l++){ const dn=base+k*lanes+l, p=deck[dn-GNN], c=cellOf(p.x+tx*sg*2.2,p.z+tz*sg*2.2); if(c<0) continue; if(!link.has(c)) link.set(c,[]); link.get(c).push(dn); p.nb.push(c); } } }
 const ui={view:'tactical', swim:false, seams:false};
 const nodeSpeed=n=>{ if(n>=GNN){ const b=IDX.bridges[deck[n-GNN].b], s=sectors.get(key(...b.sec)); return s&&s.state==='built'?1:0; } const k=kindG[n]; if(k===255) return 0; if(k===NK.water) return ui.swim?SWIM:0; return spG[n]/250; };
-const nodePos=n=>{ if(n>=GNN){ const d=deck[n-GNN]; return {x:d.x,z:d.z,l:1}; } return {x:-HALF+(n%GN+.5)*NS,z:-HALF+(Math.floor(n/GN)+.5)*NS,l:0}; };
+const nodePos=n=>{ if(n>=GNN){ const d=deck[n-GNN]; return {x:d.x,z:d.z,l:1}; } return {x:BX0+(n%GN+.5)*NS,z:BZ0+(Math.floor(n/GN)+.5)*NS,l:0}; };
 function nearestDeckNode(x,z){ let best=-1,bd=1e9; deck.forEach((d,i)=>{ const dd=Math.hypot(d.x-x,d.z-z); if(dd<bd){ bd=dd; best=i; } }); return best<0?-1:GNN+best; }
-function nearestPassable(c){ const ci=c%GN, cj=Math.floor(c/GN); for(let r=1;r<40;r++){ let best=-1,bd=1e9; for(let dj=-r;dj<=r;dj++) for(let di=-r;di<=r;di++){ if(Math.max(Math.abs(di),Math.abs(dj))!==r) continue; const i=ci+di, j=cj+dj; if(i<0||j<0||i>=GN||j>=GN) continue; const id=j*GN+i; if(nodeSpeed(id)>0){ const dd=di*di+dj*dj; if(dd<bd){ bd=dd; best=id; } } } if(best>=0) return best; } return -1; }
+function nearestPassable(c){ const ci=c%GN, cj=Math.floor(c/GN); for(let r=1;r<40;r++){ let best=-1,bd=1e9; for(let dj=-r;dj<=r;dj++) for(let di=-r;di<=r;di++){ if(Math.max(Math.abs(di),Math.abs(dj))!==r) continue; const i=ci+di, j=cj+dj; if(i<0||j<0||i>=GN||j>=GZ) continue; const id=j*GN+i; if(nodeSpeed(id)>0){ const dd=di*di+dj*dj; if(dd<bd){ bd=dd; best=id; } } } if(best>=0) return best; } return -1; }
 const TOT=GNN+deck.length, gA=new Float32Array(TOT).fill(Infinity), came=new Int32Array(TOT).fill(-1), closed=new Uint8Array(TOT);
 function findPath(from,to){
   const touched=[], heap=[], goal=nodePos(to);
@@ -96,7 +102,7 @@ function findPath(from,to){
   while(heap.length && guard++<600000){ const [,n]=pop(); if(closed[n]) continue; closed[n]=1; if(n===to){ found=true; break; }
     const sa=Math.max(nodeSpeed(n),.05), pa=nodePos(n), nbrs=[];
     if(n<GNN){ const i=n%GN, j=Math.floor(n/GN);
-      for(let dj=-1;dj<=1;dj++) for(let di=-1;di<=1;di++){ if(!di&&!dj) continue; const i2=i+di, j2=j+dj; if(i2<0||j2<0||i2>=GN||j2>=GN) continue; if(di&&dj&&(nodeSpeed(j*GN+i2)<=0||nodeSpeed(j2*GN+i)<=0)) continue; nbrs.push(j2*GN+i2); }
+      for(let dj=-1;dj<=1;dj++) for(let di=-1;di<=1;di++){ if(!di&&!dj) continue; const i2=i+di, j2=j+dj; if(i2<0||j2<0||i2>=GN||j2>=GZ) continue; if(di&&dj&&(nodeSpeed(j*GN+i2)<=0||nodeSpeed(j2*GN+i)<=0)) continue; nbrs.push(j2*GN+i2); }
       const L=link.get(n); if(L) nbrs.push(...L); }
     else nbrs.push(...deck[n-GNN].nb);
     for(const m of nbrs){ if(closed[m]) continue; const sb=nodeSpeed(m); if(sb<=0) continue; const pb=nodePos(m), c=gA[n]+Math.hypot(pb.x-pa.x,pb.z-pa.z)/((sa+sb)/2);
@@ -132,11 +138,9 @@ function* buildSector(s){
   const line=(pts,w,col)=>{ g.beginPath(); pts.forEach(([x,z],i)=>i?g.lineTo(X(x),Z(z)):g.moveTo(X(x),Z(z))); g.lineWidth=Math.max(.6,w*px); g.strokeStyle=col; g.lineCap='round'; g.lineJoin='round'; g.stroke(); };
   const AREA={residential:'#d4c09c',retail:'#9a9894',commercial:'#9a9894',industrial:'#9d978d',parking:'#7d7c79',grass:'#8fa456',park:'#97ab5d',pitch:'#7f9e4a',playground:'#c9a77a',swimming_pool:'#4aa6c8',scree:'#ae9d84',sand:'#dcc7a0',water:'#4aa6c8'};
   for(const k of ['residential','scree','sand','park','grass','pitch','industrial','retail','commercial','parking','playground','swimming_pool','water']) for(const a of D.areas) if(a.kind===k) poly(a.pts,AREA[k]);
-  for(const b of D.beds){ poly(b,'#dac7a0'); }
-  for(const w of D.water){ if(w.kind==='river'&&D.beds.length){ for(let o=-34;o<=34;o+=5.5) line(w.pts.map(([x,z],i)=>[x+o+Math.sin(i*1.7+o)*3,z]),.5+Math.abs(Math.sin(o))*.6,o%11?'rgba(150,125,90,.45)':'rgba(245,232,205,.6)'); }
-    line(w.pts,w.hw*2+4,'#b9a07a'); line(w.pts,w.hw*2-1,'#dcc9a2'); line(w.pts,w.hw*.6,'#cbb48c'); }
+  FK.paintGround(g,s,X,Z,px);
   for(const l of D.lakes) for(const p of l.shore){ line(p,6,'#9c8a68'); line(p,2.5,'#7e6d52'); }
-  for(const rd of [...D.roads].sort((a,b)=>a.w-b.w)) line(rd.pts,rd.w+(rd.drive?2.4:.8),rd.paved?'#b8b1a3':'#b79f7b');
+  RK.paintGround(g,s,X,Z,px);
   g.imageSmoothingEnabled=true; g.drawImage(shadeCanvas(s.Hf,n,4),X(x0-4)-2*px,Z(z0-4)-2*px,n*4*px,n*4*px);
   const tex=new THREE.CanvasTexture(cv); tex.anisotropy=renderer.capabilities.getMaxAnisotropy();
   yield 'texture';
@@ -148,17 +152,8 @@ function* buildSector(s){
   { const pts=[]; for(const [ax,az,bx,bz] of [[x0,z0,x0+SEC,z0],[x0,z0,x0,z0+SEC]]) for(let t=0;t<SEC;t+=6){ const f=t/SEC, f2=(t+6)/SEC, p=[ax+(bx-ax)*f,az+(bz-az)*f], q=[ax+(bx-ax)*f2,az+(bz-az)*f2]; pts.push(p[0],heightAt(p[0],p[1])+.3,p[1],q[0],heightAt(q[0],q[1])+.3,q[1]); }
     const lg=new THREE.BufferGeometry(); lg.setAttribute('position',new THREE.Float32BufferAttribute(pts,3)); s.seam=new THREE.LineSegments(lg,new THREE.LineBasicMaterial({color:0xe0a526})); s.seam.visible=ui.seams; grp.add(s.seam); }
   yield 'terrain';
-  // roads
-  { const B=new Batch(), asphalt=mat('#4c4b49'), dirt=mat('#bfa47f'), walk=mat('#cfc8ba'), paint=mat('#e1b53c'), edge=mat('#e8e4da');
-    D.roads.forEach((rd,ri)=>{ const w=rd.w/2, m=!rd.drive?walk:rd.paved?asphalt:dirt, lift=.06+ri*.0004, pts=C.densify(rd.pts,5), br=rd.bridge>=0?IDX.bridges[rd.bridge]:null;
-      const Ls=[0]; for(let i=1;i<pts.length;i++) Ls.push(Ls[i-1]+Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]));
-      const yAt=(i,x,z)=>br?br.yAt(Ls[i]/Ls[Ls.length-1])+.07:heightAt(x,z)+lift;
-      const side=(i,off)=>{ const p=pts[i], q=pts[Math.min(pts.length-1,i+1)], o=pts[Math.max(0,i-1)], dx=q[0]-o[0], dz=q[1]-o[1], l=Math.hypot(dx,dz)||1, x=p[0]+dz/l*off, z=p[1]-dx/l*off; return [x,yAt(i,x,z),z]; };
-      for(let i=0;i<pts.length-1;i++){ B.quad(m,side(i,-w),side(i+1,-w),side(i+1,w),side(i,w));
-        if(m===asphalt && ['motorway','secondary','tertiary','primary','trunk'].includes(rd.cls)){ if(!rd.oneway) B.quad(paint,side(i,-.12),side(i+1,-.12),side(i+1,.12),side(i,.12)); for(const sg of [-1,1]) B.quad(edge,side(i,sg*(w-.45)),side(i+1,sg*(w-.45)),side(i+1,sg*(w-.3)),side(i,sg*(w-.3))); } }
-      if(!br) for(const [i,cut] of [[0,rd.cutStart],[pts.length-1,rd.cutEnd]]){ if(cut) continue; const c=pts[i], y=heightAt(c[0],c[1])+lift; for(let k=0;k<8;k++){ const a1=k/8*TAU, a2=(k+1)/8*TAU; B.tri(m,[c[0],y,c[1]],[c[0]+Math.cos(a1)*w,y,c[1]+Math.sin(a1)*w],[c[0]+Math.cos(a2)*w,y,c[1]+Math.sin(a2)*w]); } } });
-    for(const me of B.meshes(false)){ me.material=me.material.clone(); me.material.polygonOffset=true; me.material.polygonOffsetFactor=-2; me.material.polygonOffsetUnits=-2; me.userData.noInk=true; me.userData.ownMat=true; grp.add(me); } }
-  yield 'roads';
+  // roads: surfaces, paint, signs, signals and the roadside (tools/stream/road-kit.js)
+  yield* RK.build(s,grp);
   // buildings
   { const B=new Batch(), r=C.rng(11+s.c*13+s.r*17), glass=mat('#3b4247'), roofFlat=mat('#d8d2c8'), metal=mat('#9aa3a8');
     for(const b of D.buildings){ const pts=b.pts, A=C.area(pts), [cx,cz]=C.centroid(pts), hs=pts.map(([x,z])=>heightAt(x,z)), lo=Math.min(...hs)-.3, hiG=Math.max(...hs);
@@ -209,8 +204,9 @@ function* buildSector(s){
       for(let i=0;i<pts.length;i++){ const j=(i+1)%pts.length, a=pts[i], b=pts[j], A=outer[i], Bo=outer[j]; B.quad(coping,[a[0],P.level+.1,a[1]],[b[0],P.level+.1,b[1]],[Bo[0],P.level+.1,Bo[1]],[A[0],P.level+.1,A[1]]); B.quad(coping,[A[0],P.low-.3,A[1]],[Bo[0],P.low-.3,Bo[1]],[Bo[0],P.level+.1,Bo[1]],[A[0],P.level+.1,A[1]]); B.quad(tile,[a[0],P.level-.6,a[1]],[b[0],P.level-.6,b[1]],[b[0],P.level+.1,b[1]],[a[0],P.level+.1,a[1]]); } }
     B.meshes().forEach(me=>s.props.add(me)); if(rocks.length){ const rk=new THREE.InstancedMesh(sectorGeo(SHAPES.rock,s),mat('#9c968c'),rocks.length); rocks.forEach((m,i)=>rk.setMatrixAt(i,m)); rk.castShadow=true; s.props.add(rk); } }
   yield 'structures';
-  buildPlants(s,!!centre&&s.c===centre[0]&&s.r===centre[1]);
-  yield 'plants';
+  // crease lines for the ink worked out now, one mesh a step, so taking the centre doesn't stall on them
+  for(const o of [...s.props.children]) if(o.isMesh&&!o.isInstancedMesh&&!o.userData.noInk&&!o.userData.crease){ o.userData.crease=new THREE.EdgesGeometry(o.geometry,28); yield 'creases'; }
+  yield* FK.buildSteps(s);
   // loot pins and labels
   for(const p of [...D.pois,...(s.extraPois||[])]){ const k=KIND[p.kind]; if(!k) continue; const x=p.p[0], z=p.p[1], top=p.top!==undefined?p.top:heightAt(x,z)+6.5;
     const pin=new THREE.Mesh(SHAPES.pin,mat(k.c)); pin.position.set(x,top+3,z); pin.scale.set(1,1.5,1); pin.userData.noInk=true; grp.add(pin); const stem=new THREE.Mesh(SHAPES.stem,mat(k.c)); stem.position.set(x,top+1.5,z); stem.userData.noInk=true; grp.add(stem);
@@ -219,18 +215,11 @@ function* buildSector(s){
 }
 // plants: one instanced mesh per kind. Each sector gets geometry that shares the shape's buffers but carries
 // bounds covering the whole sector, so three.js doesn't cull the lot when the shape's own origin is off screen.
-// The centre sector shows every plant; the ring keeps trees, cacti and big shrubs, with a lighter saguaro.
 function sectorGeo(shape,s){ const g=new THREE.BufferGeometry(); for(const k in shape.attributes) g.setAttribute(k,shape.attributes[k]); g.boundingSphere=new THREE.Sphere(new THREE.Vector3(s.x0+SEC/2,heightAt(s.x0+SEC/2,s.z0+SEC/2),s.z0+SEC/2),SEC*.75); g.userData.proxy=true; return g; }
-function buildPlants(s,full){
-  for(const o of [...s.gen.children]){ s.gen.remove(o); o.geometry.dispose(); }
-  const L=[[],[],[],[],[]]; for(const p of s.data.plants){ if(!full && !(p[0]===0||p[0]===1||(p[0]===2&&p[4]>1.05)||(p[0]===3&&p[4]>1.15))) continue; L[p[0]].push(mtx(p[1],p[2],p[3],p[4],p[5],p[6],p[7],p[8],0)); }
-  const inst=(shape,m,list)=>{ if(!list.length) return; const me=new THREE.InstancedMesh(sectorGeo(shape,s),m,list.length); list.forEach((mm,i)=>me.setMatrixAt(i,mm)); me.castShadow=true; me.receiveShadow=true; s.gen.add(me); };
-  inst(full?SHAPES.saguaro:SHAPES.saguaroLo,mat('#5f7d3f'),L[0]); inst(SHAPES.trunk,mat('#8a9a52'),L[1]); inst(SHAPES.canopy,mat('#a7b85a'),L[1]); inst(SHAPES.shrub,mat('#6e7f45'),L[2]); inst(SHAPES.rock,mat('#a8937a'),L[3]); inst(SHAPES.reed,mat('#7f9248'),L[4]);
-  s.full=full; }
 const LAKE=new THREE.MeshStandardMaterial({color:0x3a8fae, roughness:.22, metalness:.1, transparent:true, opacity:.86, side:THREE.DoubleSide, polygonOffset:true, polygonOffsetFactor:-1});
 const POOL=new THREE.MeshStandardMaterial({color:0x56c3dc, roughness:.18, metalness:.05, transparent:true, opacity:.9, side:THREE.DoubleSide});
 function disposeSector(s){
-  if(s.group){ inkOff(s.group); scene.remove(s.group); s.group.traverse(o=>{ if(o.geometry && !SHARED.has(o.geometry)) o.geometry.dispose(); if(o.material){ if(o.material.map) o.material.map.dispose(); if(o.userData.ownMat||o.isLineSegments) o.material.dispose(); } if(o.isInstancedMesh) o.dispose&&o.dispose(); }); }
+  if(s.group){ inkOff(s.group); scene.remove(s.group); s.group.traverse(o=>{ if(o.geometry && !SHARED.has(o.geometry) && !FK.SHARED.has(o.geometry)) o.geometry.dispose(); if(o.userData.crease) o.userData.crease.dispose(); if(o.material){ if(o.material.map&&!o.material.userData.keep) o.material.map.dispose(); if(o.userData.ownMat||o.isLineSegments) o.material.dispose(); } if(o.isInstancedMesh) o.dispose&&o.dispose(); }); }
   for(const l of s.labels||[]) l.el.remove();
   if(s.data&&s.state==='built') CB.onDropped(s);
   if(s.data){ const ns=s.data.nav.n; for(let j=0;j<ns;j++) kindG.fill(255,(s.r*ns+j)*GN+s.c*ns,(s.r*ns+j)*GN+s.c*ns+ns); }
@@ -241,19 +230,19 @@ const stats={lastBuild:0,maxStep:0,lastFetch:0,loads:0,drops:0,frame:16,steps:[]
 const jobs=[]; let centre=null;
 function want(c,r){ return centre && Math.max(Math.abs(c-centre[0]),Math.abs(r-centre[1]))<=1; }
 function ensureWindow(){
-  for(let dr=-1;dr<=1;dr++) for(let dc=-1;dc<=1;dc++){ const c=centre[0]+dc, r=centre[1]+dr; if(c<0||r<0||c>=NB||r>=NB) continue; const k=key(c,r); if(sectors.has(k)) continue;
-    const s={c,r,x0:-HALF+c*SEC,z0:-HALF+r*SEC,state:'fetching',buildMs:0}; sectors.set(k,s); const t0=performance.now();
+  for(let dr=-1;dr<=1;dr++) for(let dc=-1;dc<=1;dc++){ const c=centre[0]+dc, r=centre[1]+dr; if(c<0||r<0||c>=NBX||r>=NBZ) continue; const k=key(c,r); if(sectors.has(k)) continue;
+    const s={c,r,x0:BX0+c*SEC,z0:BZ0+r*SEC,state:'fetching',buildMs:0}; sectors.set(k,s); const t0=performance.now();
     fetchSector(c,r).then(d=>{ stats.lastFetch=performance.now()-t0; if(s.state!=='fetching') return; s.data=d; s.state='queued'; jobs.push({s,it:buildSector(s)}); jobs.sort((a,b)=>(a.s.c===centre[0]&&a.s.r===centre[1]?-1:0)-(b.s.c===centre[0]&&b.s.r===centre[1]?-1:0)); })
       .catch(e=>{ console.error(e); s.state='failed'; }); }
   for(const [k,s] of sectors){ if(want(s.c,s.r)) continue; const i=jobs.findIndex(j=>j.s===s); if(i>=0) jobs.splice(i,1); disposeSector(s); sectors.delete(k); stats.drops++; }
 }
 function setCentre(c,r){ const old=centre&&sectors.get(key(...centre)); centre=[c,r]; const t0=performance.now();
-  if(old&&old.state==='built'){ inkOff(old.props); inkOff(old.gen); buildPlants(old,false); }
-  const s=sectors.get(key(c,r)); if(s&&s.state==='built'){ buildPlants(s,true); inkOn(s.props); inkOn(s.gen); }
+  if(old&&old.state==='built') inkOff(old.props);
+  const s=sectors.get(key(c,r)); if(s&&s.state==='built') inkOn(s.props);
   stats.swap=performance.now()-t0; ensureWindow(); }
 function pump(budget){ const t0=performance.now();
   while(jobs.length && performance.now()-t0<budget){ const j=jobs[0]; j.s.state='building'; const ts=performance.now(), res=j.it.next(), dt=performance.now()-ts; j.s.buildMs+=dt; stats.maxStep=Math.max(stats.maxStep,dt); stats.steps.push([res.value||'labels',dt]); if(stats.steps.length>12) stats.steps.shift();
-    if(res.done){ jobs.shift(); j.s.state='built'; CB.onBuilt(j.s); stats.lastBuild=j.s.buildMs; stats.loads++; if(centre&&j.s.c===centre[0]&&j.s.r===centre[1]){ if(!j.s.full) buildPlants(j.s,true); inkOn(j.s.props); inkOn(j.s.gen); } } } }
+    if(res.done){ jobs.shift(); j.s.state='built'; CB.onBuilt(j.s); stats.lastBuild=j.s.buildMs; stats.loads++; if(centre&&j.s.c===centre[0]&&j.s.r===centre[1])inkOn(j.s.props); } } }
 
 // ---------- squad ----------
 const squad={x:0,z:0,l:0,heading:0,path:null,trail:[]}; let figs=[], target=new THREE.Vector3(), follow=true;
@@ -272,8 +261,8 @@ const camS={yaw:.6,pitch:.85,dist:70}, camT={yaw:.6};
 let W=1,H=1; function resize(){ W=stage.clientWidth; H=stage.clientHeight; renderer.setSize(W,H,false); cam.aspect=W/Math.max(1,H); cam.updateProjectionMatrix(); } new ResizeObserver(resize).observe(stage); resize();
 let drag=null; const ray=new THREE.Raycaster(), ndc=new THREE.Vector2();
 renderer.domElement.addEventListener('contextmenu',e=>e.preventDefault());
-const pickables=()=>{ const out=[]; for(const s of sectors.values()) if(s.state==='built'){ out.push(s.terrain,...s.picks); } return out; };
-const pickAt=e=>{ const r=renderer.domElement.getBoundingClientRect(); ndc.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1); ray.setFromCamera(ndc,cam); const hit=ray.intersectObjects(pickables())[0]; return hit?{p:hit.point,deck:!!hit.object.userData.deck}:null; };
+const pickables=()=>{ const out=[]; for(const s of sectors.values()) if(s.state==='built'){ out.push(s.terrain,...s.picks); } if(LIVE) out.push(...LIVE.pickables); return out; };
+const pickAt=e=>{ const r=renderer.domElement.getBoundingClientRect(); ndc.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1); ray.setFromCamera(ndc,cam); const hit=ray.intersectObjects(pickables())[0]; return hit?{horizon:!!hit.object.userData.horizon,p:hit.point,deck:!!hit.object.userData.deck}:null; };
 let hover=null; renderer.domElement.addEventListener('pointermove',e=>{ if(!drag) hover=pickAt(e); });
 const fmtE=y=>{ const m=Math.round(y+IDX.base); return `${m.toLocaleString()} m · ${Math.round(m*3.281).toLocaleString()} ft`; };
 let note='', noteT=-1e9; const say=t=>{ note=t; noteT=performance.now(); };
@@ -283,7 +272,7 @@ function updateReadout(){ let html=`<b>Squad</b> ${fmtE(figs[0]?figs[0].y||0:0)}
     if(hover.deck) html+=` · bridge deck 5.0 km/h`; else { const c=cellOf(hover.p.x,hover.p.z); if(c>=0&&kindG[c]!==255){ const k=kindG[c]; html+=` · ${IDX.navLabels[k].toLowerCase()} `+(k===NK.water?(ui.swim?`swim ${(SWIM*5).toFixed(1)} km/h`:'needs swim gear'):spG[c]>0?`${(spG[c]/50).toFixed(1)} km/h`:'impassable'); } } }
   const ch=CB.hover(hover); if(ch) html+='<br>'+ch;
   if(performance.now()-noteT<2600) html+=`<br><em>${note}</em>`; readout.innerHTML=html; }
-function orderMove(h){ if(CB.active){ CB.click(h); return; } if(CB.prompt) return; if(!figs.length){ say('No squad here: send one on the map first'); return; } let goal;
+function orderMove(h){ if(CB.active){ CB.click(h); return; } if(CB.prompt) return; if(!figs.length){ say('No squad here: send one on the map first'); return; } if(LIVE&&LIVE.longOrder(h)) return; let goal;
   if(h.deck) goal=nearestDeckNode(h.p.x,h.p.z);
   else { goal=cellOf(h.p.x,h.p.z); if(goal<0) return; if(nodeSpeed(goal)<=0){ say(kindG[goal]===NK.water?'Water: the squad needs swim gear to cross':kindG[goal]===255?'Not loaded yet':`${IDX.navLabels[kindG[goal]]}: can't go there`); goal=nearestPassable(goal); if(goal<0) return; } }
   let start=squad.l?nearestDeckNode(squad.x,squad.z):cellOf(squad.x,squad.z); if(start<GNN&&nodeSpeed(start)<=0) start=nearestPassable(start);
@@ -306,13 +295,14 @@ document.getElementById('tglSwim').addEventListener('change',e=>{ ui.swim=e.targ
 document.getElementById('tglSeams').addEventListener('change',e=>{ ui.seams=e.target.checked; for(const s of sectors.values()) if(s.seam) s.seam.visible=ui.seams; });
 
 // ---------- panels ----------
-const cells=[]; for(let r=0;r<NB;r++) for(let c=0;c<NB;c++){ const i=document.createElement('i'); i.title=`Sector ${c+1},${r+1}`; miniEl.appendChild(i); cells.push(i); } const dot=document.createElement('b'); miniEl.appendChild(dot);
+miniEl.style.gridTemplateColumns=`repeat(${NBX},1fr)`; miniEl.style.aspectRatio=`${NBX}/${NBZ}`;
+const cells=[]; for(let r=0;r<NBZ;r++) for(let c=0;c<NBX;c++){ const i=document.createElement('i'); i.title=`Sector ${c+1},${r+1}: go there`; i.addEventListener('click',()=>jumpTo(c,r)); miniEl.appendChild(i); cells.push(i); } const dot=document.createElement('b'); miniEl.appendChild(dot);
 const tot=IDX.sectors.reduce((a,s)=>a+s.bytes,0);
-blockEl.innerHTML=`<div><dt>Size</dt><dd>${NB} × ${NB} sectors, ${(NB*SEC/1000).toFixed(1)} km square</dd></div><div><dt>Sector files</dt><dd>${(tot/1e6).toFixed(1)} MB of JSON, about ${Math.round(IDX.sectors.reduce((a,s)=>a+s.gz,0)/IDX.sectors.length/1000)} KB each compressed</dd></div>
+blockEl.innerHTML=`<div><dt>Size</dt><dd>${NBX} × ${NBZ} sectors, ${(NBX*SEC/1000).toFixed(1)} by ${(NBZ*SEC/1000).toFixed(1)} km</dd></div><div><dt>Sector files</dt><dd>${(tot/1e6).toFixed(1)} MB of JSON, about ${Math.round(IDX.sectors.reduce((a,s)=>a+s.gz,0)/IDX.sectors.length/1000)} KB each compressed</dd></div>
   <div><dt>Buildings</dt><dd>${IDX.sectors.reduce((a,s)=>a+s.b,0)}</dd></div><div><dt>Plants</dt><dd>${IDX.sectors.reduce((a,s)=>a+s.plants,0).toLocaleString()}</dd></div><div><dt>Bridges</dt><dd>${IDX.bridges.length}</dd></div>`;
 function updatePanels(){
-  for(let r=0;r<NB;r++) for(let c=0;c<NB;c++){ const s=sectors.get(key(c,r)); cells[r*NB+c].dataset.s=!s?'':s.state==='built'?(centre[0]===c&&centre[1]===r?'centre':'ring'):s.state==='building'?'building':'queued'; }
-  dot.style.left=((squad.x+HALF)/(NB*SEC)*100)+'%'; dot.style.top=((squad.z+HALF)/(NB*SEC)*100)+'%';
+  for(let r=0;r<NBZ;r++) for(let c=0;c<NBX;c++){ const s=sectors.get(key(c,r)); cells[r*NBX+c].dataset.s=!s?'':s.state==='built'?(centre[0]===c&&centre[1]===r?'centre':'ring'):s.state==='building'?'building':'queued'; }
+  dot.style.left=((squad.x-BX0)/(NBX*SEC)*100)+'%'; dot.style.top=((squad.z-BZ0)/(NBZ*SEC)*100)+'%';
   const inf=renderer.info, built=[...sectors.values()].filter(s=>s.state==='built').length, mem=performance.memory?Math.round(performance.memory.usedJSHeapSize/1e6)+' MB':'n/a';
   costEl.innerHTML=`<div><dt>Loaded</dt><dd>${built} of 9 · ${jobs.length} queued</dd></div><div><dt>Last sector build</dt><dd>${Math.round(stats.lastBuild)} ms</dd></div><div><dt>Longest single step</dt><dd>${Math.round(stats.maxStep)} ms</dd></div>
     <div><dt>Centre swap</dt><dd>${Math.round(stats.swap||0)} ms</dd></div><div><dt>Last fetch</dt><dd>${Math.round(stats.lastFetch)} ms</dd></div><div><dt>Frame</dt><dd>${stats.frame.toFixed(1)} ms</dd></div><div><dt>Draw calls</dt><dd>${inf.render.calls}</dd></div><div><dt>Triangles</dt><dd>${(inf.render.triangles/1e6).toFixed(2)} M</dd></div>
@@ -347,11 +337,11 @@ const CB=(()=>{
   const INKS={selected:0xe0a526,calm:0x1d1814,overwatch:0x2f9fc4,concealed:0x5b6fa8,wounded:0xc23b2e,raider:0x6e1a10,dead:0x77726a};
   let pod=null;   // the camp: built once its sector is loaded
   // ---------- geometry of the fight ----------
-  const BLOCKING=new Set([NK.building,NK.wall,NK.pier,NK.steep]);
+  const BLOCKING=new Set([NK.building,NK.wall,NK.pier,NK.steep,NK.car]);   // wrecked cars are full cover
   const plantCover=new Map();   // cell -> 1 for saguaros, palo verdes and boulders
-  C.onBuilt=s=>{ for(const p of s.data.plants){ if(p[0]===0||p[0]===1||(p[0]===3&&p[4]>.8)){ const c=cellOf(p[1],p[3]); if(c>=0) plantCover.set(c,1); } } };
+  C.onBuilt=s=>{ for(const p of s.data.plants){ const t=SectorCore.PLANTS[p[0]]; if(t&&t.cover&&(!t.coverMin||p[4]>t.coverMin)){ const c=cellOf(p[1],p[3]); if(c>=0) plantCover.set(c,Math.max(plantCover.get(c)||0,t.cover)); } } };   // cover from the plant table
   C.onDropped=s=>{ for(const p of s.data.plants){ const c=cellOf(p[1],p[3]); plantCover.delete(c); } };
-  const cx=c=>-HALF+(c%GN+.5)*NS, cz=c=>-HALF+(Math.floor(c/GN)+.5)*NS;
+  const cx=c=>BX0+(c%GN+.5)*NS, cz=c=>BZ0+(Math.floor(c/GN)+.5)*NS;
   const coverVal=c=>c<0||kindG[c]===255?0:BLOCKING.has(kindG[c])?2:plantCover.get(c)||0;
   function coverFrom(c,sx,sz){ const x=cx(c), z=cz(c), dx=sx-x, dz=sz-z, i=c%GN, j=Math.floor(c/GN), out=[];
     const di=Math.abs(dx)>1.2?Math.sign(dx):0, dj=Math.abs(dz)>1.2?Math.sign(dz):0;
@@ -508,23 +498,180 @@ const CB=(()=>{
 
 // ---------- frame loop ----------
 const PACE=2.6, GAIT=PACE/1.39;   // the squad moves faster than real walking pace (1.39 m/s); motion shows a walk played faster
+// ---------- time: exploring runs in real time; pause, 1× and 4× as on the map ----------
+const TM={speed:1, sec:0, base:7.5*60, snap:false};   // game seconds since arriving; base is the clock in game minutes
+{ const css=document.createElement('style'); css.textContent=`.tclock{position:absolute;right:10px;top:10px;display:flex;gap:4px;align-items:center;z-index:3;background:rgba(24,24,26,.82);border:1px solid #38393d;border-radius:4px;padding:4px 6px}
+  .tclock b{font:500 13px var(--mono,monospace);color:#e2e0dc;margin-right:4px;white-space:nowrap}.tclock button{background:#2d2f33;border:1px solid #38393d;color:#e2e0dc;font:600 12px var(--body,sans-serif);padding:3px 8px;cursor:pointer;border-radius:3px}
+  .tclock button[aria-pressed="true"]{border-color:#e0a526;color:#e0a526}.mini i{cursor:pointer}.mini i:hover{outline:1px solid #e0a526;outline-offset:-1px}`; document.head.appendChild(css); }
+const clockBox=document.createElement('div'); clockBox.className='tclock'; clockBox.innerHTML='<b id="tclk"></b><button type="button" data-ts="0" aria-pressed="false" title="Pause">❚❚</button><button type="button" data-ts="1" aria-pressed="true">1×</button><button type="button" data-ts="4" aria-pressed="false">4×</button>'; stage.appendChild(clockBox);
+const clkEl=clockBox.querySelector('#tclk');
+function setSpeed(k){ TM.speed=k; clockBox.querySelectorAll('[data-ts]').forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.ts===k))); }
+clockBox.addEventListener('click',e=>{ const b=e.target.closest('[data-ts]'); if(b) setSpeed(+b.dataset.ts); });
+window.addEventListener('keydown',e=>{ if((e.target.closest&&e.target.closest('input,textarea,button,select'))||NF.mode!=='tactical') return; if(e.code==='Space'){ e.preventDefault(); setSpeed(TM.speed?0:1); } });
+// camera keys: W A S D move the view over the ground, Q and E turn it, Shift moves faster, F goes back to the squad
+const held=new Set(), CAMKEYS=new Set(['KeyW','KeyA','KeyS','KeyD','KeyQ','KeyE']);
+window.addEventListener('keydown',e=>{ if((e.target.closest&&e.target.closest('input,textarea,select'))||e.ctrlKey||e.metaKey||e.altKey||NF.mode!=='tactical') return; if(CAMKEYS.has(e.code)){ e.preventDefault(); held.add(e.code); } else if(e.key==='Shift') held.add(e.code); else if(e.code==='KeyF') follow=true; });
+window.addEventListener('keyup',e=>held.delete(e.code)); window.addEventListener('blur',()=>held.clear());
+function camKeys(rdt,fast){ if(!held.size) return; const h=k=>held.has(k)?1:0, f=h('KeyW')-h('KeyS'), r=h('KeyD')-h('KeyA'), t=h('KeyQ')-h('KeyE');
+  if(t){ camT.yaw+=t*rdt*1.7; camS.yaw+=t*rdt*1.7; }
+  if(f||r){ const k=Math.max(14,camS.dist*1.1)*(fast?3:1)*rdt/Math.hypot(f,r), s=Math.sin(camS.yaw), c=Math.cos(camS.yaw); follow=false;
+    target.x=Math.max(BX0-(LIVE?9000:300),Math.min(BX1+(LIVE?9000:300),target.x+(c*r-s*f)*k)); target.z=Math.max(BZ0-(LIVE?9000:300),Math.min(BZ1+(LIVE?9000:300),target.z-(s*r+c*f)*k)); } }
+let clkShown='';
+function drawClock(){ const m=TM.base+TM.sec/60, d=Math.floor(m/1440)+1, h=Math.floor((m%1440)/60), mm=Math.floor(m%60), ss=Math.floor((m*60)%60), t=`Day ${d} ${String(h).padStart(2,'0')}:${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`; if(t!==clkShown){ clkShown=t; clkEl.textContent=t; } }
+// jump to a sector from the overview: the squad is set down at its middle, then on the nearest walkable cell once it has loaded
+function jumpTo(c,r){ const x=BX0+(c+.5)*SEC, z=BZ0+(r+.5)*SEC;
+  if(figs.length){ Object.assign(squad,{x,z,l:0,path:null,trail:[{x,z,l:0}]}); figs.forEach((f,i)=>{ f.x=x; f.z=z+i*.01; f.y=undefined; }); follow=true; TM.snap=true; }
+  else { follow=false; }
+  target.set(x,heightAt(x,z),z); }
+function snapSquad(){ const s=sectors.get(key(...centre)); if(!s||s.state!=='built') return; TM.snap=false; const c=cellOf(squad.x,squad.z); if(c>=0&&nodeSpeed(c)>0) return; const n=nearestPassable(c); if(n<0) return;
+  const p=nodePos(n); Object.assign(squad,{x:p.x,z:p.z,trail:[{x:p.x,z:p.z,l:0}]}); figs.forEach((f,i)=>{ f.x=p.x; f.z=p.z+i*.01; f.y=undefined; }); }
 let last=performance.now(), boost=1, panelT=0; const tmp=new THREE.Vector3();
 const speedHere=(x,z,l)=>{ if(l) return 1; const c=cellOf(x,z); return c<0?.7:Math.max(.15,nodeSpeed(c)||.3); };
+// ---------- the strategy map over the ground (briefs/strategy-over-tactical.md) ----------
+// On the zoom page the campaign keeps running while a squad is down here: one clock for both layers, the realm as the
+// horizon, a map lens draped on the ground, raiders and other squads where the campaign has them, heat, water and light
+// from the campaign, orders that reach past the loaded ground, and the campaign's sites. The standalone streaming page
+// has no campaign, and none of this runs there.
+const LIVE=(()=>{ if(typeof Campaign==='undefined'||!window.__region||!Campaign.state) return null;
+  const C=Campaign, RG=window.__region, toR=(x,z)=>NF.blockToRegion(x,z), toB=(x,z)=>NF.regionToBlock(x,z), L={live:false,pace:1,idx:-1,pickables:[]};
+  const sqC=()=>L.idx>=0?C.state.squads[L.idx]:null;
+  // ---- task 1: the realm is the horizon ----
+  function horizon(ext,step,sink,name){ const [x0,z0,x1,z1]=ext, W=x1-x0, Hh=z1-z0, nx=Math.round(W/step)+1, nz=Math.round(Hh/step)+1, g=new THREE.PlaneGeometry(W,Hh,nx-1,nz-1); g.rotateX(-Math.PI/2);
+    const p=g.attributes.position; for(let i=0;i<p.count;i++){ const x=p.getX(i)+x0+W/2, z=p.getZ(i)+z0+Hh/2, [rx,rz]=toR(x,z); let y=C.elevAt(rx,rz)-IDX.base; for(const [a,b,c,d,by] of sink) if(x>a&&x<c&&z>b&&z<d){ y-=by; break; } p.setY(i,y); }
+    g.computeVertexNormals();
+    const c0=toR(x0,z0), c1=toR(x1,z1), tex=new THREE.CanvasTexture(RG.groundTexture([Math.min(c0[0],c1[0]),Math.min(c0[1],c1[1]),Math.max(c0[0],c1[0]),Math.max(c0[1],c1[1])],2048)); tex.anisotropy=renderer.capabilities.getMaxAnisotropy();
+    const me=new THREE.Mesh(g,new THREE.MeshLambertMaterial({map:tex})); me.position.set(x0+W/2,0,z0+Hh/2); me.userData.horizon=name; me.userData.noInk=true; scene.add(me); L.pickables.push(me); return me; }
+  const near=[BX0-10000,BZ0-10000,BX1+10000,BZ1+10000], r0=toB(-REGION.half[0],-REGION.half[1]), r1=toB(REGION.half[0],REGION.half[1]);
+  L.near=horizon(near,100,[[BX0-60,BZ0-60,BX1+60,BZ1+60,14]],'near');   // inside the corridor it sits low so loaded ground always covers it
+  L.far=horizon([r0[0],r0[1],r1[0],r1[1]],800,[[near[0]+400,near[1]+400,near[2]-400,near[3]-400,40]],'far');
+  // ---- task 2: the map lens: grid, knowledge, home, selection and routes, draped on the horizon and on every loaded sector ----
+  L.lensOn=false; let lensOp=-1, lensT=0;
+  const lensMat=()=>{ const m=new THREE.MeshBasicMaterial({transparent:true,depthWrite:false,opacity:0,polygonOffset:true,polygonOffsetFactor:-6,polygonOffsetUnits:-6}); return m; };
+  function paintLens(canvas,ext){ const g=canvas.getContext('2d'), [x0,z0,x1,z1]=ext, W=canvas.width, Hc=canvas.height; g.clearRect(0,0,W,Hc);
+    const c0=toR(x0,z0), c1=toR(x1,z1); RG.paintKnowledge(g,(rx,rz)=>{ const [bx,bz]=toB(rx,rz); return [(bx-x0)/(x1-x0)*W,(bz-z0)/(z1-z0)*Hc]; },[Math.min(c0[0],c1[0]),Math.min(c0[1],c1[1]),Math.max(c0[0],c1[0]),Math.max(c0[1],c1[1])]);
+    // the sector grid, bold enough to read from the ground, with each sector's map name in its corner
+    const RS=REGION.sector, RH=REGION.half, cA=Math.floor((Math.min(c0[0],c1[0])+RH[0])/RS), cB=Math.floor((Math.max(c0[0],c1[0])+RH[0])/RS), rA=Math.floor((Math.min(c0[1],c1[1])+RH[1])/RS), rB=Math.floor((Math.max(c0[1],c1[1])+RH[1])/RS);
+    const P=(rx,rz)=>{ const [bx,bz]=toB(rx,rz); return [(bx-x0)/(x1-x0)*W,(bz-z0)/(z1-z0)*Hc]; }, cell=Math.abs(P(RS,0)[0]-P(0,0)[0]);
+    g.strokeStyle='rgba(224,165,38,.75)'; g.lineWidth=Math.max(1.5,cell/120); g.beginPath();
+    for(let c=cA;c<=cB+1;c++){ const a=P(-RH[0]+c*RS,-RH[1]+rA*RS), b=P(-RH[0]+c*RS,-RH[1]+(rB+1)*RS); g.moveTo(...a); g.lineTo(...b); }
+    for(let r=rA;r<=rB+1;r++){ const a=P(-RH[0]+cA*RS,-RH[1]+r*RS), b=P(-RH[0]+(cB+1)*RS,-RH[1]+r*RS); g.moveTo(...a); g.lineTo(...b); } g.stroke();
+    if(cell>60){ g.fillStyle='rgba(224,165,38,.95)'; g.font=`600 ${Math.round(cell/14)}px "IBM Plex Mono",monospace`; const name=c=>{ let s='',n=c+1; while(n>0){ const m=(n-1)%26; s=String.fromCharCode(65+m)+s; n=Math.floor((n-1)/26); } return s; };
+      for(let c=cA;c<=cB;c++) for(let r=rA;r<=rB;r++){ const [px,py]=P(-RH[0]+c*RS,-RH[1]+r*RS); g.fillText(`${name(c)}-${r+1}`,px+cell*.03,py+cell*.09); } } }
+  { const c=document.createElement('canvas'); c.width=2048; c.height=Math.round(2048*(near[3]-near[1])/(near[2]-near[0])); const m=lensMat(); m.map=new THREE.CanvasTexture(c); const o=new THREE.Mesh(L.near.geometry,m); o.position.copy(L.near.position); o.renderOrder=3; o.visible=false; o.userData.noInk=true; scene.add(o); L.nearLens={mesh:o,canvas:c,ext:near}; }
+  function sectorLens(s){ if(s.lens||!s.terrain) return; const c=document.createElement('canvas'); c.width=c.height=512; const m=lensMat(); m.map=new THREE.CanvasTexture(c); const o=new THREE.Mesh(s.terrain.geometry,m);
+    o.position.copy(s.terrain.position); o.position.y+=.05; o.renderOrder=3; o.userData.noInk=true; o.userData.ownMat=true; s.group.add(o); s.lens={mesh:o,canvas:c,ext:[s.x0,s.z0,s.x0+SEC,s.z0+SEC]}; s.lensAt=-1; }
+  function lensFrame(rdt){ const want=L.lensOn?1:Math.max(0,Math.min(1,(camS.dist-380)/400)); lensT+=rdt;
+    const all=[L.nearLens]; for(const s of sectors.values()) if(s.state==='built'){ sectorLens(s); all.push(s.lens); }
+    const stale=lensT>3||L.knowDirty; if(stale){ lensT=0; L.knowDirty=false; }
+    for(const l of all){ if(!l) continue; l.mesh.visible=want>.01; l.mesh.material.opacity=want*.9; if(want>.01&&(stale||l.drawn===undefined)){ paintLens(l.canvas,l.ext); l.mesh.material.map.needsUpdate=true; l.drawn=true; } } }
+  // ---- task 5: light from the campaign's sun ----
+  const SKYD=[new THREE.Color('#9fc6e4'),new THREE.Color('#e8dcc2')], SKYN=[new THREE.Color('#1b2236'),new THREE.Color('#3a3a48')];
+  function light(min){ const s=C.sunAt(min), day=s.elev, n=1-Math.min(1,s.daylight*1.5), az=s.arc*Math.PI;
+    sun.intensity=.3+day*.55; hemi.intensity=.26+day*.12+(1-n)*.06; sun.color.setHSL(.08,.6,.55+day*.35); hemi.color.setHSL(.08+(1-s.daylight)*.5,.35,.62+day*.25);
+    const top=SKYD[0].clone().lerp(SKYN[0],n), bot=SKYD[1].clone().lerp(SKYN[1],n); stage.style.background=`linear-gradient(180deg,#${top.getHexString()},#${bot.getHexString()})`; scene.fog.color.copy(bot);
+    L.sunOff=new THREE.Vector3(Math.cos(az)*360,60+day*340,-120+Math.sin(az)*80); }
+  L.sunOff=new THREE.Vector3(180,320,140);
+  // ---- task 4: the campaign's raiders and other squads, as figures on the loaded ground ----
+  const actors=new Map(), labels=new Map(), RAID=0x6e1a10; L.actors=actors;
+  function crowd(key,n,seed,ink,armed){ let a=actors.get(key); if(a&&a.figs.length===n) return a; if(a) dropActor(key);
+    a={figs:Array.from({length:n},(_,i)=>{ const fem=(seed+i)%3===1, f=FigureKit.figure(fem,FigureKit.genFace(seed*13+i*7,fem)); f.j=Object.assign({},FigureKit.POSES.stand); f.root.traverse(o=>{ if(o.isMesh) o.castShadow=true; });
+      f.ink=FigureKit.inkUp(f.root,{persp:true,width:.0016,color:ink}); if(armed&&Motion.arm) f.gun=Motion.arm(f,'rifle',{ink:{persp:true,width:.0016}}); scene.add(f.root); f.y=undefined; return f; })}; actors.set(key,a); return a; }
+  function dropActor(key){ const a=actors.get(key); if(!a) return; for(const f of a.figs) scene.remove(f.root); actors.delete(key); }
+  const loadedAt=(x,z)=>{ const q=secAt(x,z), s=q&&sectors.get(key(...q)); return !!(s&&s.state==='built'); };
+  function label(key,text,x,z){ let el=labels.get(key); if(!el){ el=document.createElement('div'); el.className='lbl'; labelsEl.appendChild(el); labels.set(key,el); } if(el.dataset.t!==text){ el.dataset.t=text; el.innerHTML=text; } el.dataset.x=x; el.dataset.z=z; el.dataset.on='1'; }
+  function actorsFrame(dt){ const st=C.state, m=st.minutes, me=sqC(), want=new Set(), wantL=new Set();
+    for(const b of st.bands){ const [bx,bz]=toB(b.x,b.z), d=me?Math.hypot(b.x-me.x,b.z-me.z):1e9, sees=me&&(d<C.squadSight(me,m)||d<40);
+      if(sees){ b.seen={t:m,x:b.x,z:b.z}; }
+      if(sees&&loadedAt(bx,bz)){ const k='band'+b.id; want.add(k); const a=crowd(k,Math.min(5,b.size),b.id*31+7,RAID,true); a.tx=bx; a.tz=bz; }
+      else if(b.seen&&m-b.seen.t<720){ const [sx,sz]=toB(b.seen.x,b.seen.z); if(sx>BX0&&sx<BX1&&sz>BZ0&&sz<BZ1){ const k='seen'+b.id; wantL.add(k); label(k,`<i style="background:#6e1a10"></i><b>Raiders · ${b.size}</b><span>${sees?'in sight':`seen ${Math.max(1,Math.round((m-b.seen.t)/60))} h ago`}</span>`,sx,sz); } } }
+    st.squads.forEach((s,i)=>{ if(i===L.idx||!s.people) return; const [x,z]=toB(s.x,s.z); if(!loadedAt(x,z)) return; const k='sq'+i; want.add(k); const a=crowd(k,Math.min(6,s.people),900+i*17,0x1d1814,false); a.tx=x; a.tz=z;
+      wantL.add(k); label(k,`<i style="background:${s.c}"></i><b>${s.name}</b><span>${s.people} people</span>`,x,z); });
+    for(const k of [...actors.keys()]) if(!want.has(k)) dropActor(k);
+    for(const [k,el] of labels) if(!wantL.has(k)){ el.remove(); labels.delete(k); }
+    for(const a of actors.values()){ // stand in a loose group on walkable cells round where the campaign has them; walk there when they move
+      let c=cellOf(a.tx,a.tz); if(c>=0&&nodeSpeed(c)<=0) c=nearestPassable(c); const p=c>=0?nodePos(c):{x:a.tx,z:a.tz};
+      a.figs.forEach((f,i)=>{ const ang=i*2.4, r=i?1.6+i*.5:0, gx=p.x+Math.cos(ang)*r, gz=p.z+Math.sin(ang)*r; if(!f.placed){ f.placed=true; f.x=gx; f.z=gz; }
+        const dx=gx-f.x, dz=gz-f.z, dd=Math.hypot(dx,dz), stepM=Math.min(dd,1.4*dt*(dd>30?20:1)); if(dd>.1){ f.x+=dx/dd*stepM; f.z+=dz/dd*stepM; let an=Math.atan2(dx,dz)-f.root.rotation.y; an=Math.atan2(Math.sin(an),Math.cos(an)); f.root.rotation.y+=an*Math.min(1,dt*6); }
+        const y=yOf(f.x,f.z,0); f.y=f.y===undefined?y:f.y+(y-f.y)*Math.min(1,dt*10); f.root.position.set(f.x,f.y,f.z); Motion.update(f,{act:'idle',ground:(x,z)=>yOf(x,z,0),compress:GAIT},dt); }); } }
+  function labelsFrame(){ for(const el of labels.values()){ const x=+el.dataset.x, z=+el.dataset.z; tmp.set(x,heightAt(x,z)+4,z); const p=tmp.project(cam), show=p.z<1&&Math.abs(p.x)<1.05&&Math.abs(p.y)<1.05&&Math.hypot(x-target.x,z-target.z)<camS.dist*4+200;
+      el.style.display=show?'':'none'; if(show) el.style.transform=`translate(${(p.x+1)/2*W}px,${(1-p.y)/2*H}px) translate(-50%,-100%)`; } }
+  // ---- task 8: the campaign's sites inside the loaded ground, with what is left; search one from close by ----
+  const SITES=[]; REGION.sites.forEach((s,i)=>{ const [x,z]=toB(s.p[0],s.p[1]); if(x>BX0&&x<BX1&&z>BZ0&&z<BZ1) SITES.push({i,x,z,s}); });
+  const siteEls=new Map(), LOOTC={food:'#e0a33a',medicine:'#d9534f',tools:'#5b8fd1',fuel:'#a66bd1',gear:'#3fae7f',water:'#3fb6d9',shelter:'#8f8f8f',goods:'#b9a27a'};
+  function sitesFrame(){ const me=sqC();
+    for(const t of SITES){ const near=loadedAt(t.x,t.z)&&Math.hypot(t.x-target.x,t.z-target.z)<(ui.view==='high'?900:220); let el=siteEls.get(t.i);
+      if(!near){ if(el) el.style.display='none'; continue; }
+      if(!el){ el=document.createElement('div'); el.className='lbl site'; labelsEl.appendChild(el); siteEls.set(t.i,el); el.addEventListener('click',ev=>{ if(ev.target.closest('[data-search]')) search(t); }); }
+      const left=C.leftOf(t.i), state=C.state.sites[t.i]?(left<.05?'searched out':`${Math.round(left*100)}% left`):'untouched', close=me&&Math.hypot(squad.x-t.x,squad.z-t.z)<45&&left>=.05;
+      const html=`<i style="background:${LOOTC[t.s.loot]||'#999'}"></i><b>${C.siteName(t.s)}</b><span>${state}</span>${close?` <button type="button" data-search="1">Search ${C.scavHours(t.i,me.people).toFixed(1)} h</button>`:''}`;
+      if(el.dataset.h!==html){ el.dataset.h=html; el.innerHTML=html; el.style.pointerEvents=close?'auto':'none'; }
+      tmp.set(t.x,heightAt(t.x,t.z)+5,t.z); const p=tmp.project(cam), show=p.z<1&&Math.abs(p.x)<1.05&&Math.abs(p.y)<1.05; el.style.display=show?'':'none'; if(show) el.style.transform=`translate(${(p.x+1)/2*W}px,${(1-p.y)/2*H}px) translate(-50%,-100%)`; } }
+  function search(t){ const res=C.searchNow(L.idx,t.i); if(!res){ say('Not now'); return; } const got=Object.entries(res.took).map(([k,n])=>`${n} ${C.UNIT[k].name}`).join(', ');
+    pass(res.hours*60); say(`Searched ${C.siteName(t.s)} in ${res.hours.toFixed(1)} h: ${got||'nothing worth carrying'}`); RG.changed(); }
+  // let game time pass at once (a search, lying low): the clock and the world move on
+  function pass(minutes){ TM.sec+=minutes*60; const out=RG.tick(minutes,{except:L.idx}); after(out); }
+  // ---- task 3: one clock, one campaign ----
+  const banner=document.createElement('div'); banner.className='cb-banner'; banner.hidden=true; stage.appendChild(banner);
+  banner.addEventListener('click',e=>{ const b=e.target.closest('[data-a]'); if(!b||!C.state.enc) return; const me=sqC(), was=me&&me.people; C.resolve(b.dataset.a);
+    if(me){ me.trip=null; if(me.task&&me.task.kind==='hide'){ const until=me.task.until; me.task=null; pass(Math.max(0,until-C.state.minutes)); } if(me.people<was) trimSquad(me.people); }
+    if(b.dataset.a==='avoid'){ const e2=C.state.enc; if(!e2){ const bb=C.state.bands[0]; awayFrom(bb); } }
+    drawEnc(); RG.changed(); });
+  function trimSquad(n){ while(figs.length>Math.max(0,n)){ const f=figs.pop(); scene.remove(f.root); } if(squadInfo) squadInfo.people=n; }
+  function awayFrom(){ // walk 120 m away from the nearest raiders on the ground
+    let best=null,bd=1e12; for(const b of C.state.bands){ const [x,z]=toB(b.x,b.z), d=Math.hypot(x-squad.x,z-squad.z); if(d<bd){ bd=d; best=[x,z]; } } if(!best) return;
+    const dx=squad.x-best[0], dz=squad.z-best[1], l=Math.hypot(dx,dz)||1; orderMove({p:new THREE.Vector3(squad.x+dx/l*120,0,squad.z+dz/l*120)}); }
+  function drawEnc(){ const e=C.state.enc; banner.hidden=!e; if(!e){ if(L.encHeld){ L.encHeld=false; setSpeed(1); } return; } if(!L.encHeld){ L.encHeld=true; setSpeed(0); }
+    const first=e.firstSight==='squad'?'They have not seen you yet.':e.firstSight==='both'?'Both sides saw each other at once.':'They saw you first.';
+    banner.innerHTML=`<b>Raiders near ${e.where.place}</b>${e.squad.name} (${e.squad.people}) against ${e.enemy.count} raiders, ${e.distance} m off. ${first}<br>
+      <button type="button" class="pri" data-a="auto">Fight it out (quick)</button>${e.forced?'':'<button type="button" data-a="avoid">Pull back</button><button type="button" data-a="hide">Lie low</button>'}`; }
+  function after(out){ if(!out) return; if(out.revealed||out.found) L.knowDirty=true; if(out.encounter) drawEnc(); }
+  let acc=0, accT=0, hudT=0;
+  L.frame=(dt,rdt,moving)=>{ if(!ready) return; const me=sqC();
+    if(me){ const [rx,rz]=toR(squad.x,squad.z); me.x=rx; me.z=rz; me.trip=null;
+      // ---- task 5: heat and water ----
+      const min=C.state.minutes, heat=C.heatOf(C.tempAt(min,rx,rz)); if(!C.atHome(me)){ me.water=Math.max(0,me.water-C.waterRate(moving,heat)*me.people*dt/3600); if(me.water<=0&&!me.thirsty){ me.thirsty=true; C.note(`${me.name} is out of water and slowing down.`); say(`${me.name} is out of water`); } }
+      const c=cellOf(squad.x,squad.z), k=c>=0?kindG[c]:255, road=k===NK.asphalt||k===NK.dirt||k===NK.path||k===NK.lot; L.pace=C.paceAt(min,!road,heat,me.thirsty); }
+    if(!CB.active&&!C.state.enc&&dt>0){ acc+=dt/60; accT+=rdt; if(accT>.25){ accT=0; const out=RG.tick(acc,{except:L.idx}); acc=0; L.live=true; after(out); } }
+    if((hudT+=rdt)>.5){ hudT=0; light(C.state.minutes); const sq=me, t=sq?C.tempAt(C.state.minutes,...toR(squad.x,squad.z)):C.tempAt(C.state.minutes,...toR(target.x,target.z));
+      hudEl.textContent=`${Math.round(t)} °C${sq?` · water ${sq.water.toFixed(1)} L${sq.thirsty?' · thirsty':''}`:''}`; hudEl.classList.toggle('hot',C.heatOf(t)>=C.REST_HEAT); }
+    actorsFrame(dt); labelsFrame(); sitesFrame(); lensFrame(rdt);
+    // ---- task 7: a long order walks to the edge of the loaded ground, then the map takes it on ----
+    if(L.farOrder&&!squad.path){ const o=L.farOrder; L.farOrder=null; NF.afterExit=()=>RG.send(L.idx,o.x,o.z); NF.exitTactical(); } };
+  const hudEl=document.createElement('span'); hudEl.className='sky'; clockBox.insertBefore(hudEl,clockBox.children[1]);
+  { const css=document.createElement('style'); css.textContent='.tclock .sky{font:12px var(--mono,monospace);color:#d8d4cc;margin-right:6px;white-space:nowrap}.tclock .sky.hot{color:#f0a05a}.lbl.site button{background:#e0a526;border:0;color:#211b10;font:600 11px var(--body,sans-serif);padding:2px 6px;border-radius:3px;cursor:pointer;margin-left:4px}'; document.head.appendChild(css); }
+  // ---- task 7: an order past the loaded ground (or the corridor) ----
+  let routeLine=null;
+  L.longOrder=h=>{ const c=cellOf(h.p.x,h.p.z); if(!h.horizon&&c>=0&&kindG[c]!==255) return false; if(!figs.length||L.idx<0){ say('No squad here to send'); return true; }
+    const me=sqC(); if(C.state.enc){ say('Answer the raiders first'); return true; } const [tx,tz]=toR(h.p.x,h.p.z), [sx,sz]=toR(squad.x,squad.z), rt=C.route(sx,sz,tx,tz);
+    if(routeLine){ scene.remove(routeLine); routeLine.geometry.dispose(); routeLine=null; }
+    const pts=[]; for(let i=0;i<rt.pts.length-1;i++){ const a=toB(...rt.pts[i]), b=toB(...rt.pts[i+1]), n=Math.max(1,Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])/6)); for(let k=0;k<n;k++){ const x=a[0]+(b[0]-a[0])*k/n, z=a[1]+(b[1]-a[1])*k/n; pts.push(new THREE.Vector3(x,heightAt(x,z)+1.2,z)); } }
+    const g=new THREE.BufferGeometry().setFromPoints(pts); routeLine=new THREE.Line(g,new THREE.LineDashedMaterial({color:me.c,dashSize:6,gapSize:4,depthTest:false})); routeLine.computeLineDistances(); routeLine.renderOrder=6; scene.add(routeLine);
+    // walk the part of the route that lies on loaded ground, then hand the rest to the map
+    let edge=null; for(const p of pts){ const q=cellOf(p.x,p.z); if(q<0||kindG[q]===255) break; if(nodeSpeed(q)>0) edge=p; }
+    say(`${rt.km.toFixed(1)} km to go, about ${rt.hours.toFixed(1)} h: walking to the edge of the ground, then on by the map`);
+    L.farOrder={x:tx,z:tz}; if(edge&&Math.hypot(edge.x-squad.x,edge.z-squad.z)>4) orderMove({p:edge}); else { L.farOrder=null; NF.afterExit=()=>RG.send(L.idx,tx,tz); NF.exitTactical(); } return true; };
+  L.enter=(sq)=>{ L.idx=sq&&sq.index!==undefined?sq.index:-1; L.live=false; L.farOrder=null; acc=0; L.knowDirty=true; if(routeLine){ scene.remove(routeLine); routeLine=null; } light(C.state.minutes); drawEnc();
+    for(const k of [...actors.keys()]) dropActor(k); };
+  L.drawEnc=drawEnc;
+  return L; })();
+window.__live=LIVE;   // for tests and the console
+document.getElementById('tglLens')?.addEventListener('change',e=>{ if(LIVE) LIVE.lensOn=e.target.checked; });
 function trailAt(back){ const T=squad.trail; let acc=Math.hypot(squad.x-T[T.length-1].x,squad.z-T[T.length-1].z); if(acc>=back) return null;
   for(let i=T.length-1;i>0;i--){ const a=T[i], b=T[i-1], l=Math.hypot(a.x-b.x,a.z-b.z); if(acc+l>=back){ const t=(back-acc)/(l||1); return {x:a.x+(b.x-a.x)*t,z:a.z+(b.z-a.z)*t,l:t<.5?a.l:b.l}; } acc+=l; } return T[0]; }
 function loop(now){
-  requestAnimationFrame(loop); const raw=now-last; last=now; stats.frame+=(raw-stats.frame)*.05; const dt=Math.min(.05,raw/1000)*boost;
+  requestAnimationFrame(loop); const raw=now-last; last=now; stats.frame+=(raw-stats.frame)*.05; const rdt=Math.min(.05,raw/1000), dt=rdt*boost*TM.speed; TM.sec+=dt; drawClock();   // the camera keeps real time so it still moves while paused
   if(NF.mode!=='tactical') return;
   pump(8);
   if(!ready){ const s=centre&&sectors.get(key(...centre)); if(s&&s.state==='built'&&[...sectors.values()].every(q=>q.state==='built'||q.state==='failed')){ ready=true; if(pending!==undefined){ placeSquad(pending); pending=undefined; } loadingEl.hidden=true; } else { renderer.render(scene,cam); return; } }
   let moving=false;
-  if(squad.path&&!CB.active&&!CB.prompt){ const wp=squad.path[squad.wp], dx=wp.x-squad.x, dz=wp.z-squad.z, d=Math.hypot(dx,dz), m=speedHere(squad.x,squad.z,squad.l), step=PACE*m*dt;
+  if(squad.path&&!CB.active&&!CB.prompt){ const wp=squad.path[squad.wp], dx=wp.x-squad.x, dz=wp.z-squad.z, d=Math.hypot(dx,dz), m=speedHere(squad.x,squad.z,squad.l), step=PACE*m*dt*(LIVE?LIVE.pace:1);
     if(wp.l&&!squad.l&&d<1.5) squad.l=1; if(!wp.l&&squad.l&&d<1.5) squad.l=0;
     if(d<=step){ squad.x=wp.x; squad.z=wp.z; squad.l=wp.l; if(++squad.wp>=squad.path.length) squad.path=null; } else { squad.x+=dx/d*step; squad.z+=dz/d*step; }
     if(d>.01) squad.heading=Math.atan2(dx,dz); moving=true;
     const T=squad.trail, lt=T[T.length-1]; if(Math.hypot(lt.x-squad.x,lt.z-squad.z)>.4){ T.push({x:squad.x,z:squad.z,l:squad.l}); if(T.length>300) T.shift(); } }
   // the window follows the squad, or the camera when no squad is here
   const q=figs.length&&follow?secAt(squad.x,squad.z):secAt(target.x,target.z); if(q&&(q[0]!==centre[0]||q[1]!==centre[1])) setCentre(...q);
+  if(TM.snap) snapSquad();
   if(!CB.active) figs.forEach((f,i)=>{
     if(i===0){ f.x=squad.x; f.z=squad.z; f.l=squad.l; if(moving){ let a=squad.heading-f.root.rotation.y; a=Math.atan2(Math.sin(a),Math.cos(a)); f.root.rotation.y+=a*Math.min(1,dt*10); } }
     else { const tp=trailAt(i*1.9); if(tp){ const ddx=tp.x-f.x, ddz=tp.z-f.z, dd=Math.hypot(ddx,ddz); if(dd>.12){ const sp=Math.min(dd,PACE*1.15*speedHere(f.x,f.z,f.l)*dt+Math.max(0,dd-1)*dt*2); f.x+=ddx/dd*sp; f.z+=ddz/dd*sp; let a=Math.atan2(ddx,ddz)-f.root.rotation.y; a=Math.atan2(Math.sin(a),Math.cos(a)); f.root.rotation.y+=a*Math.min(1,dt*8); } f.l=tp.l; } }
@@ -532,24 +679,30 @@ function loop(now){
     // gait, idles and swimming come from the shared motion module; feet find the ground or the bridge deck they are on
     Motion.update(f,{act:swim?'swim':'idle',ground:(x,z)=>yOf(x,z,f.l),compress:GAIT},dt); });
   CB.frame(dt,now);
+  if(LIVE) LIVE.frame(dt,rdt,moving);
   if(marker.visible){ const a=(now-markerT)/900; marker.material.opacity=Math.max(0,.8-a*.6); marker.scale.setScalar(1+a*.4); if(a>1.4) marker.visible=false; }
   // camera
   const sy=figs.length?figs[0].y||0:heightAt(target.x,target.z);
-  if(follow){ target.x+=(squad.x-target.x)*Math.min(1,dt*3); target.z+=(squad.z-target.z)*Math.min(1,dt*3); target.y+=(sy+(ui.view==='street'?1.4:0)-target.y)*Math.min(1,dt*4); }
-  const V=VIEWS[ui.view], kk=1-Math.exp(-dt*6); camS.dist+=(V.dist-camS.dist)*kk; camS.pitch+=(V.pitch-camS.pitch)*kk; const ay=camT.yaw-camS.yaw; camS.yaw+=Math.atan2(Math.sin(ay),Math.cos(ay))*kk;
+  camKeys(rdt,held.has('ShiftLeft')||held.has('ShiftRight'));
+  if(!follow) target.y+=(heightAt(target.x,target.z)-target.y)*Math.min(1,rdt*6);
+  if(follow){ target.x+=(squad.x-target.x)*Math.min(1,rdt*3); target.z+=(squad.z-target.z)*Math.min(1,rdt*3); target.y+=(sy+(ui.view==='street'?1.4:0)-target.y)*Math.min(1,rdt*4); }
+  const V=VIEWS[ui.view], kk=1-Math.exp(-rdt*6); camS.dist+=(V.dist-camS.dist)*kk; camS.pitch+=(V.pitch-camS.pitch)*kk; const ay=camT.yaw-camS.yaw; camS.yaw+=Math.atan2(Math.sin(ay),Math.cos(ay))*kk;
   cam.position.set(target.x+Math.sin(camS.yaw)*Math.cos(camS.pitch)*camS.dist, target.y+Math.sin(camS.pitch)*camS.dist, target.z+Math.cos(camS.yaw)*Math.cos(camS.pitch)*camS.dist);
   const gy=heightAt(cam.position.x,cam.position.z)+1.2; if(cam.position.y<gy) cam.position.y=gy; cam.lookAt(target);
-  sun.position.set(target.x+.45*400,target.y+.8*400,target.z+.35*400); sun.target.position.copy(target); const R=ui.view==='high'?420:110;
+  { const o=LIVE?LIVE.sunOff:{x:180,y:320,z:140}; sun.position.set(target.x+o.x,target.y+o.y,target.z+o.z); } sun.target.position.copy(target); const R=ui.view==='high'?420:110;
   Object.assign(sun.shadow.camera,{left:-R,right:R,top:R,bottom:-R,near:10,far:1400}); sun.shadow.camera.updateProjectionMatrix();
-  scene.fog.near=ui.view==='high'?700:380; scene.fog.far=ui.view==='high'?1600:980;
+  if(LIVE){ scene.fog.far=Math.max(1400,camS.dist*16); scene.fog.near=scene.fog.far*.3; } else { scene.fog.near=ui.view==='high'?700:380; scene.fog.far=ui.view==='high'?1600:980; }
+  FK.frame(sectors.values(),target.x,target.z,camS.dist);
   updateReadout(); renderer.render(scene,cam);
-  for(const s of sectors.values()) for(const l of s.labels||[]){ l.pin.rotation.y=now/900; tmp.set(l.x,l.top+5.2,l.z); const p=tmp.project(cam), show=p.z<1&&Math.hypot(l.x-target.x,l.z-target.z)<(ui.view==='high'?900:180)&&Math.abs(p.x)<1.05&&Math.abs(p.y)<1.05; l.el.style.display=show?'':'none'; if(show) l.el.style.transform=`translate(${(p.x+1)/2*W}px,${(1-p.y)/2*H}px) translate(-50%,-100%)`; }
+  for(const s of sectors.values()) for(const l of s.labels||[]){ if(LIVE){ l.el.style.display='none'; l.pin.visible=false; continue; } l.pin.rotation.y=now/900; tmp.set(l.x,l.top+5.2,l.z); const p=tmp.project(cam), show=p.z<1&&Math.hypot(l.x-target.x,l.z-target.z)<(ui.view==='high'?900:180)&&Math.abs(p.x)<1.05&&Math.abs(p.y)<1.05; l.el.style.display=show?'':'none'; if(show) l.el.style.transform=`translate(${(p.x+1)/2*W}px,${(1-p.y)/2*H}px) translate(-50%,-100%)`; }
   whereEl.textContent=`New River · sector ${centre[0]+1},${centre[1]+1}`;
   if((panelT+=raw)>400){ panelT=0; updatePanels(); }
 }
-NF.tacEnter=(x,z,sq)=>{ target.set(x,heightAt(x,z),z); follow=!!sq; VIEWS.tactical.dist=sq?55:120; VIEWS.tactical.pitch=.85; VIEWS.high.dist=420; ui.view='tactical'; document.querySelectorAll('#segView button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.v==='tactical')));
-  camS.dist=700; camS.pitch=1.1; const c=secAt(x,z)||[2,2]; ready=false; pending=sq; loadingEl.hidden=false; resize(); setCentre(...c); };
-NF.tacState=()=>({x:target.x,z:target.z,squad:squadInfo?{x:squad.x,z:squad.z,index:squadInfo.index,people:figs.length}:null}); NF.tacBusy=()=>CB.active;
-window.__stream={CB,scene,squad,sectors,stats,orderMove:(x,z,deck)=>orderMove({p:new THREE.Vector3(x,heightAt(x,z),z),deck}),boost:k=>{ boost=k; },heightAt,ui,look:(x,z,yaw,pitch,dist)=>{ follow=false; target.set(x,heightAt(x,z),z); camT.yaw=yaw; VIEWS[ui.view].pitch=pitch; VIEWS[ui.view].dist=dist; },follow:()=>{ follow=true; },renderer,teleport:(x,z)=>{ Object.assign(squad,{x,z,l:0,path:null,trail:[{x,z,l:0}]}); figs.forEach((f,i)=>{ f.x=x; f.z=z+i*.01; f.y=undefined; }); target.set(x,heightAt(x,z),z); follow=true; },lowfi:()=>{ renderer.shadowMap.enabled=false; renderer.setPixelRatio(1); resize(); }};
+NF.tacEnter=(x,z,sq)=>{ TM.sec=0; TM.base=window.Campaign&&Campaign.state?Campaign.state.minutes:TM.base; setSpeed(1); target.set(x,heightAt(x,z),z); follow=!!sq; VIEWS.tactical.dist=sq?55:120; VIEWS.tactical.pitch=.85; VIEWS.high.dist=420; ui.view='tactical'; document.querySelectorAll('#segView button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.v==='tactical')));
+  const mp=NF.mapPose; NF.mapPose=null; camS.dist=800; camS.pitch=mp?Math.max(.3,Math.min(1.35,mp.pitch)):1.1; if(mp){ camS.yaw=camT.yaw=mp.yaw; }   // start from the map's view, then ease in
+  if(LIVE) LIVE.enter(sq); const c=secAt(x,z)||[2,2]; ready=false; pending=sq; loadingEl.hidden=false; resize(); setCentre(...c); };
+NF.tacSeconds=()=>LIVE&&LIVE.live?0:TM.sec;   // game seconds spent here, for the map clock to catch up
+NF.tacState=()=>({pose:{yaw:camS.yaw,pitch:camS.pitch,dist:camS.dist},x:target.x,z:target.z,squad:squadInfo?{x:squad.x,z:squad.z,index:squadInfo.index,people:figs.length}:null}); NF.tacBusy=()=>CB.active;
+window.__stream={CB,target,camT,camS,scene,squad,sectors,stats,orderMove:(x,z,deck)=>orderMove({p:new THREE.Vector3(x,heightAt(x,z),z),deck}),boost:k=>{ boost=k; },heightAt,ui,look:(x,z,yaw,pitch,dist)=>{ follow=false; target.set(x,heightAt(x,z),z); camT.yaw=yaw; VIEWS[ui.view].pitch=pitch; VIEWS[ui.view].dist=dist; },follow:()=>{ follow=true; },renderer,teleport:(x,z)=>{ Object.assign(squad,{x,z,l:0,path:null,trail:[{x,z,l:0}]}); figs.forEach((f,i)=>{ f.x=x; f.z=z+i*.01; f.y=undefined; }); target.set(x,heightAt(x,z),z); follow=true; },lowfi:()=>{ renderer.shadowMap.enabled=false; renderer.setPixelRatio(1); resize(); }};
 requestAnimationFrame(loop);
 })();

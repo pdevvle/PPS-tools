@@ -56,3 +56,18 @@ Rebuild after editing: `python3 tools/interiors/build.py`.
 
 
 Rendering: the scene draws at about twice the screen's pixels (multisampled where WebGL 2 allows) and is filtered down ("Smoothing" toggles it). Floor and wall patterns are carried by colour at half a metre or more, with no hairline grout or plank gaps. Ink outlines only pieces with some body; seams where two boxes abut are dropped, and faces sit a hair behind their ink so lines don't flicker.
+
+Cutaway: walls are cut in the shader (`cutMat`, `CUT`), not swapped for low copies.
+- **The zone:** above the cut height nothing is drawn. The cut height is a 0.9 m stub inside a zone that runs from the point under the cursor toward the camera. At the zone's edge it rises above the wall tops, so walls slope down into it.
+- **Outside walls** facing the camera are cut along their whole length, and "Low walls" cuts every wall.
+- **The section look:**
+  - the inside of a cut wall draws as one flat tone per build-up (`CAPCOL`: drywall light, frame brown, block and concrete near black), like the poché of a section drawing;
+  - a heavy ink line runs along the cut;
+  - above the cut, the wall ink becomes a pale blueprint outline of the full wall: top edges strong, uprights faint. Inside the cut only level lines stay (no seams or jambs).
+- **Modes:** "Cutaway" cuts around the cursor (a tap moves it on touch screens), and "Blueprint" cuts every wall.
+- **Plan symbols** (material kind `plan`, drawn only where walls are cut right down):
+  - doors as the leaf drawn open with its swing arc, and garage doors as a dashed line where they roll up, all in two-tone ribbons that read on light and dark floors;
+  - windows as a raised glazing bar on the cut with a dark rim: blue when glazed, grey when broken, brown when boarded.
+- **Motion:** the focus and the lowering ease in. Picking uses the same cut (`cutTop`), so you click what you see.
+
+Moving props: "Move prop" picks up a table, desk or shelf, or any piece a blast has thrown (each thrown chair is its own piece). Click the floor to set it down: it must be clear floor in one room, within 8 m. Click the prop again to shove it to the nearest clear spot in its room that blocks no doorway, against a wall if possible. "Clear doorways" does that for every thrown prop standing in a doorway or breach, and the plan outlines such props in red. Thrown pieces that would land outside the footprint come back to the nearest floor of their room. Window colliders now cover the wall under the sill, so props no longer slide out beneath windows.
