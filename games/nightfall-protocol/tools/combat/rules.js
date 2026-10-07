@@ -5,7 +5,7 @@
 (function(root,factory){ const m=factory(); if(typeof module==='object'&&module.exports) module.exports=m; else root.CombatRules=m; })(this,function(){
 const V={aim:{squad:72,raider:60},halfCover:20,fullCover:40,hunker:20,reaction:15,free:10,steady:15,
   crit:10,critFlanked:40,move:12,sight:16,cone:Math.PI*.36,around:5,spot:30,overwatch:28,minutesPerTurn:5,
-  throwRange:12,blastRadius:3,throughWall:20,blastDmg:3,bleed:3,aidHeal:3,runGunCooldown:3,doorway:1.3};
+  throwRange:12,blastRadius:3,throughWall:20,height:10,blastDmg:3,bleed:3,aidHeal:3,runGunCooldown:3,doorway:1.3};
 
 // Range profiles: how aim changes with distance. Short weapons want to be close, long ones want room.
 const PROFILES={
@@ -52,7 +52,10 @@ const P=u=>[u.x,u.z];
 const dist=(a,b)=>Math.hypot(a.x-b.x,a.z-b.z);
 
 // can a see b, with both allowed to lean out of cover; returns the two points that worked
-function lineOfFire(w,a,b,opt){ const shot=!opt||opt.shot!==false, pa=P(a), pb=P(b);
+// levels: someone on the roof (lv 1) is judged by the space's levelLine (tools/combat/roof.js), not by plan sight
+const across=(a,b)=>(a.lv||0)!==(b.lv||0)||(a.lv||0)>0;
+function lineOfFire(w,a,b,opt){ if(across(a,b)) return w.levelLine?w.levelLine(a,b,opt||{}):null;
+  const shot=!opt||opt.shot!==false, pa=P(a), pb=P(b);
   const as=[pa,...w.leans(pa,pb)], bs=[pb,...w.leans(pb,pa)];
   for(const x of as) for(const y of bs) if(w.sight(x,y,{shot})) return {from:x,to:y,walls:0};
   // a round can punch through drywall, stucco and doors at someone the squad knows is there (opt.pierce)
@@ -61,13 +64,14 @@ function lineOfFire(w,a,b,opt){ const shot=!opt||opt.shot!==false, pa=P(a), pb=P
 
 // Hit and crit chance for one shot, with the reasons, so the page can show where the number comes from.
 // opt: reaction (overwatch), doorway (a watched doorway: no reaction penalty), free (first strike), steady, mod.
-function odds(w,a,b,o={}){ const W=o.weapon||a.weapon||WEAPONS.carbine, melee=!!W.melee, d=dist(a,b), cv=b.unaware||melee?0:w.coverFrom(P(b),P(a)), why=[];
+function odds(w,a,b,o={}){ const W=o.weapon||a.weapon||WEAPONS.carbine, melee=!!W.melee, d=dist(a,b), cv=b.unaware||melee?0:across(a,b)&&w.levelCover?w.levelCover(b,a):w.coverFrom(P(b),P(a)), why=[];
   const base=a.aim!=null?a.aim:V.aim[a.team]; why.push(['Aim',base]);
   if(melee){ why.push(['Melee',10]); if(b.def) why.push(['Defence',-b.def]); let aim=0; for(const [,v] of why) aim+=v; aim=Math.max(5,Math.min(95,aim));
     return {aim,crit:Math.min(100,(cv===0?V.critFlanked:V.crit)+(W.crit||0)),cover:0,flanked:true,d,why,melee:true}; }
   if(cv===2) why.push(['Full cover',-V.fullCover]); else if(cv===1) why.push(['Half cover',-V.halfCover]);
   if(b.hunker&&cv) why.push(['Hunkered',-V.hunker]);
   const rm=Math.round(PROFILES[W.profile].mod(d)); if(rm) why.push([`${d.toFixed(0)} m, ${PROFILES[W.profile].label} range`,rm]);
+  if((a.lv||0)>(b.lv||0)) why.push(['Height',V.height]);
   if(o.reaction&&!o.doorway) why.push(['Overwatch',-V.reaction]);
   if(o.free) why.push(['First strike',V.free]);
   if(o.steady) why.push(['Steady aim',V.steady]);
@@ -87,8 +91,8 @@ function hurt(u,dmg){ u.hp=Math.max(0,u.hp-dmg); if(u.hp>0) return 'hit'; u.aliv
   if(u.team==='squad'){ u.down=true; u.bleed=V.bleed; return 'down'; } u.dead=true; return 'dead'; }
 
 // An explosion: everyone within the radius whom the blast can reach (walls stop it) takes damage, cover ignored.
-function blastHits(w,c,units,r){ r=r||V.blastRadius; const out=[];
-  for(const u of units){ if(!u.alive&&!u.down) continue; const d=Math.hypot(u.x-c[0],u.z-c[1]); if(d>r) continue; if(!w.sight(c,P(u),{shot:true})) continue; out.push({u,dmg:V.blastDmg+(d<1?1:0),shred:(u.armor||0)>0}); }
+function blastHits(w,c,units,r,lv){ r=r||V.blastRadius; const out=[];
+  for(const u of units){ if(!u.alive&&!u.down) continue; if((u.lv||0)!==(lv||0)) continue; const d=Math.hypot(u.x-c[0],u.z-c[1]); if(d>r) continue; if(!w.sight(c,P(u),{shot:true})) continue; out.push({u,dmg:V.blastDmg+(d<1?1:0),shred:(u.armor||0)>0}); }
   return out; }
 
 // an unaware raider's eyes: a cone ahead and a little all round, stopped by walls
@@ -120,7 +124,7 @@ function decide(w,u,units,r,opt={}){ const foes=units.filter(f=>f.alive&&f.team!
     if(best){ const far=w.field(P(u),400,others(units,u)), route=w.pathTo(far,[best.out[0]+(best.out[0]-best.in[0])*4,best.out[1]+(best.out[1]-best.in[1])*4])||w.pathTo(far,best.out);
       if(route){ let pick=null; for(const q of route.points){ const c=w.costTo(F,[q.x,q.z]); if(c&&!c.over) pick=[q.x,q.z]; } if(pick&&Math.hypot(pick[0]-u.x,pick[1]-u.z)>.3) return {type:'move',to:pick,path:w.pathTo(F,pick),flee:true}; } } }
   if(u.weapon&&u.weapon.melee){   // a blade: reach someone and strike; otherwise close in from cover to cover
-    let best=null; for(const f of foes){ const spot=meleeSpot(w,F,u,f,units); if(!spot) continue; const s=-spot.cost+(f.hp<=3?6:0)-(f.hunker?3:0); if(!best||s>best.s) best={s,f,spot}; }
+    let best=null; for(const f of foes){ if((f.lv||0)!==(u.lv||0)) continue; const spot=meleeSpot(w,F,u,f,units); if(!spot) continue; const s=-spot.cost+(f.hp<=3?6:0)-(f.hunker?3:0); if(!best||s>best.s) best={s,f,spot}; }
     if(best) return {type:'melee',target:best.f,to:best.spot.p,path:best.spot.path,odds:odds(w,u,best.f)}; }
   if(u.weapon&&u.ammo<=0) return {type:'reload'};
   let best=null; for(const f of foes){ if(!lineOfFire(w,u,f)) continue; const o=odds(w,u,f); if(!best||o.aim>best.odds.aim) best={target:f,odds:o}; }

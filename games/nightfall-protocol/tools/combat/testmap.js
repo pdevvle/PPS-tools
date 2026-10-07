@@ -97,11 +97,13 @@ const POSTS=[
   ['raider',26,2,'N','sentry'],      // at the north window, looking out
   ['raider',27,13,'W','camp'],       // the kitchen, across the counters
 ];
+// ladders to the roof, on outside walls: [i, j, side]. A Breacher on the roof can blow a hole to look (and drop) in.
+const LADDERS=[[1,5,'W'],[12,22,'S'],[32,17,'E']];
 const LABELS=[
   [3.5,5,'Drywall: rounds pass, one charge breaches'],[9.5,5,'Stucco: rounds pass (harder)'],[15.5,5,'Block: stops rounds'],[21.5,5,'Reinforced concrete: two charges'],
   [28.5,7,'Windows: 0.9 · 1.8 high · broken · boarded'],[16.5,10.9,'Long lane: 32 m'],[10.5,12.4,'Archway · open door (5) · closed door (16)'],
   [10.5,18,'Cover gallery: full · half · flippable'],[20.6,14.5,'Counters'],[26.5,20,'Stockroom: drywall to the gallery'],
-  [10,23.4,'Front door'],[4,23.4,'Sill 0.6'],[6.5,23.4,'Broken'],[14,23.4,'Sill 1.2'],[16.5,23.4,'Boarded'],[19.5,23.4,'Sill 1.8: too high'],[-.4,16,'Sill 1.0'],
+  [10,23.4,'Front door'],[4,23.4,'Sill 0.6'],[6.5,23.4,'Broken'],[14,23.4,'Sill 1.2'],[16.5,23.4,'Boarded'],[19.5,23.4,'Sill 1.8: too high'],[-.4,16,'Sill 1.0'],[-.6,5.5,'Ladder'],[12.5,23.9,'Ladder'],[33.6,17.5,'Ladder'],
 ];
 
 function build(env){
@@ -170,10 +172,10 @@ function build(env){
   const wallH=3.4;
   const G={site,typeKey:'hardware',seedStr,history:'den',M,sense,A:NI*NJ,floors:[{k:0,units,P,O,Fn,D:Dc,L:Lf,style,fseed:seedStr}],levels:1,cores:[],
     stucco:'#d8c7a3',roofCol:'#6e6a64',L:Lf,ms:0,mess:.25,gone:.3,wallH,FH:wallH+.45,label:'Combat test range',noise:noise2(seedStr+'|noise'),
-    test:{posts,labels:LABELS.map(([x,z,text])=>({p:[M.u0+x,M.v0+z],text}))}};
+    test:{posts,ladders:LADDERS.map(([i,j,side])=>[i,j,D[side]]),labels:LABELS.map(([x,z,text])=>({p:[M.u0+x,M.v0+z],text}))}};
   setLevel(G,0);
   return G;
 }
-return {build,PLAN,OPENINGS,ITEMS,POSTS};
+return {build,PLAN,OPENINGS,ITEMS,POSTS,LADDERS};
 })();
 if(typeof module!=='undefined') module.exports=CombatTestMap;

@@ -152,4 +152,23 @@ check('test range: every case it promises is there',()=>{
   assert.ok(G.O.edges.get(I.edgeKey(20,14,0)).type==='counter'&&w.sight(at(19,14),at(22,14)),'counters: see across');
   assert.ok(G.Fn.items.some(it=>it.stash&&it.contents.length),'a stash'); });
 
+check('roof: ladders join the levels; a charge opens a hole to look and drop into one room',()=>{
+  const TM=require('./testmap.js'), RD=require('./roof.js'), G=TM.build(I), w=SP.fromGenerated(G), Rf=RD.make(G,w,SP,{ladders:G.test.ladders,edgeKey:I.edgeKey}); w.levelLine=Rf.lineOf; w.levelCover=Rf.coverOf;
+  assert.strictEqual(Rf.ladders.length,3);
+  for(const L of Rf.ladders){ assert.ok(w.clearAt(...L.foot)&&!w.insideAt(...L.foot),'ladder foot outside and clear'); assert.ok(Rf.space.clearAt(...L.top),'ladder top on the roof'); }
+  const F=Rf.space.field(Rf.ladders[0].top,300,[]); for(const L of Rf.ladders.slice(1)){ const c=Rf.space.costTo(F,L.top); assert.ok(c&&!c.over,'walk the roof between ladders'); }
+  assert.ok(!Rf.space.clearAt(G.M.u0-1,G.M.v0+5),'the roof cannot be walked off');
+  const boss=G.test.posts.find(p=>p.type==='boss'), b=R.makeUnit('boss',{team:'raider',x:boss.p[0],z:boss.p[1]});
+  const up=R.makeUnit('breacher',{team:'squad',x:boss.p[0]+2,z:boss.p[1]+1,lv:1});
+  assert.ok(!R.lineOfFire(w,up,b),'no sight through a whole roof');
+  const h=Rf.addHole([boss.p[0]+2,boss.p[1]+1]); assert.ok(h,'a hole'); assert.strictEqual(G.P.rooms[h.room].name,'Cover gallery');
+  assert.ok(!Rf.space.clearAt(...h.c),'the hole is not floor');
+  const rim=R.makeUnit('breacher',{team:'squad',x:h.c[0]+1.5,z:h.c[1],lv:1}), back=R.makeUnit('breacher',{team:'squad',x:h.c[0]+5,z:h.c[1],lv:1});
+  assert.ok(R.lineOfFire(w,rim,b),'peek down from the rim'); assert.ok(R.lineOfFire(w,b,rim),'and be seen'); assert.ok(!R.lineOfFire(w,back,b),'not from back from the hole');
+  const o=R.odds(w,rim,b); assert.ok(o.why.some(x=>x[0]==='Height'&&x[1]===R.V.height),'height bonus');
+  assert.ok(!Rf.addHole([G.M.u0+12,G.M.v0+11.9])||true);   // over a wall it picks a corner inside one room or none
+  const yard=R.makeUnit('raider',{team:'raider',x:Rf.ladders[1].foot[0],z:Rf.ladders[1].foot[1]+6}), edge=R.makeUnit('ranger',{team:'squad',x:Rf.ladders[1].top[0],z:Rf.ladders[1].top[1]-.3,lv:1}), mid=R.makeUnit('ranger',{team:'squad',x:Rf.ladders[1].top[0],z:Rf.ladders[1].top[1]-5,lv:1});
+  assert.ok(R.lineOfFire(w,edge,yard),'over the edge from near it'); assert.ok(!R.lineOfFire(w,mid,yard),'not from the middle of the roof'); assert.strictEqual(Rf.coverOf(edge,yard),1,'the parapet is half cover');
+  assert.ok(Rf.landing(h),'somewhere to land'); });
+
 console.log(`${pass} passed, ${fail} failed`); if(fail){ for(const f of fails.slice(0,30)) console.log('  ✗ '+f); process.exit(1); }

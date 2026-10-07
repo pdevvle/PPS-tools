@@ -58,9 +58,17 @@ Fighting inside procedurally generated buildings (task 7 in `briefs/combat-tasks
   - front double door, side door into the lane, back door; inside, open and closed doors, a 3 m archway, and counters (half cover you can see and climb across);
   - a cover gallery with full, half and flippable pieces in rows, and the stash safe;
   - a drywall wall between the stockroom and the gallery to breach, and a low and a high yard wall outside;
-  - every enemy type: boss, brute, two enforcers, five raiders (one a sentry at a window).
+  - every enemy type: boss, brute, two enforcers, five raiders (one a sentry at a window);
+  - three ladders to the roof (west, south front, east), for peeking in through a blown hole.
 
   `test-space.js` checks that the range still has all of these.
+- `roof.js` makes the roof a second level. Units carry `lv` (0 ground, 1 roof); the rules ask the space's `levelLine` and `levelCover` whenever someone is on the roof, and roof.js answers:
+  - **roof and outside ground**: you see over the edge only from within 2 m of it; the parapet is half cover;
+  - **roof and inside**: only through a hole, from its rim (within 1.1 m), down to anyone within 6.5 m of the hole; full cover counts as half when shot from above;
+  - **roof and roof**: the roof's own space (the footprint, its outer walls as a parapet, holes blocked), which also routes movement up there;
+  - shooting down gets +10 (**Height**); melee and blasts stay on their own level.
+
+  **Ladders** on outside walls (the test range has three) join the levels with the motion module's ladder and descend clips. On the roof a **Breacher's charge** opens a 2 × 2 m hole into one room (never over a wall): debris hits whoever is under it. Then **peek** from the rim to see and shoot in, throw a pipe bomb down, or **drop through** with the drop clip. Exploring, a roof charge starts the fight with the squad's free shots. The roof deck shows while anyone of the squad is up there.
 - `demo-script.js` and `demo.src.html` are the playable page.
   - **Pacing**: exploring is real time. A fight runs in rounds: you give every soldier orders, then press Go and the whole squad carries them out at once; then the raiders all act at once. Shots resolve as each soldier gets there, so two soldiers sent onto the same raider can find the second shot has nothing left to hit (the log says so and the summary counts wasted shots). Each raider badge shows how many shots are planned on them and their HP, and turns pink when more than one is.
   - **Orders**: left click moves the selected soldier, inside the blue outline (move, then act) or the gold one (dash, no action). Right click a raider for that soldier's attacks with odds from where they will stand (free shot, shoot, shooting through a thin wall, revolver, slash, pipe bomb). Right click a thing for what can be done to it (stash, overturn furniture, close a door, set a breaching charge on a wall, get out), the soldier for their own actions (overwatch, hunker, reload, run and gun, first aid), and the ground to move then overwatch or hunker. There is no separate action menu.
