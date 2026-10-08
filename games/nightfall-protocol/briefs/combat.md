@@ -18,6 +18,7 @@ Turn the combat demonstration into the game's combat layer: real-time exploratio
 - Combat happens on the same real ground; no separate battle map.
 - **Free placement, no grid in the rules** (decided after the first interior demo). Units move to any point within reach, drawn as a smooth outline. A click near cover snaps in behind it. Reach is in effective metres (12 per action) over a hidden 0.5 m cost field that only pathfinding sees. Cover is directional: it counts only if it lies across the shot line within 1.1 m of the target. The outdoor demo still uses the 2 m grid until it moves onto the same space.
 - Whoever sees first gets the initiative; the squad's first strike is a free shot each.
+- **Closeness to the squad** (interior demo, after XCOM): faces in the interface, soldiers who speak at the moments that matter, and a camera that goes over the shooter's shoulder. Not an XCOM clone: rounds stay simultaneous and the ground stays real.
 - **Planned rounds, played at once** (interior demo): the squad's orders are queued, then everyone moves and acts simultaneously, then the raiders do the same. Doubled-up attacks on one target can be wasted. What the player sees is what the squad sees.
 - Cover is derived from what is really there (walls, buildings, piers, steep ground full; saguaros, palo verdes, boulders half). Terrain speed shapes reach.
 - Character state shows in the ink stroke colour (see foundation).

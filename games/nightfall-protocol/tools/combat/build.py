@@ -19,12 +19,19 @@ for key, val in [('/*FIGUREKIT*/', rd(TOOLS, 'stream', 'figure-kit.js')), ('/*MO
                  ('/*DEMO*/', rd(HERE, 'demo-script.js'))]:
     assert key in page, key
     page = page.replace(key, val)
-frag = page
-full = ('<!doctype html>\n<html lang="en"><head><meta charset="utf-8">'
-        '<meta name="viewport" content="width=device-width,initial-scale=1">\n' + frag + '\n</html>\n')
-out = os.path.join(HERE, '..', '..', 'mockups', 'combat-interior.html')
-open(out, 'w').write(full)
-print('wrote', os.path.normpath(out), len(full), 'bytes')
-if len(sys.argv) > 1:
-    open(sys.argv[1], 'w').write(frag)
-    print('wrote', sys.argv[1], len(frag), 'bytes')
+wrap = lambda f: ('<!doctype html>\n<html lang="en"><head><meta charset="utf-8">'
+                  '<meta name="viewport" content="width=device-width,initial-scale=1">\n' + f + '\n</html>\n')
+# the playable page, and a debug copy: no fog, raiders' sight always drawn, lines of fire, and a panel of switches
+frag = page.replace('<!--DEBUGFLAG-->', '').replace('<!--DEBUGPANEL-->', '')
+dbg = (page.replace('<title>Nightfall Interior Combat</title>', '<title>Nightfall Combat Debug</title>')
+           .replace('<!--DEBUGFLAG-->', '<script>window.COMBAT_DEBUG=true;</script>')
+           .replace('<!--DEBUGPANEL-->', '<script>\n' + rd(HERE, 'debug.js') + '\n</script>'))
+assert 'COMBAT_DEBUG' in dbg and 'Combat Debug' in dbg
+for name, f in [('combat-interior.html', frag), ('combat-interior-debug.html', dbg)]:
+    out = os.path.join(HERE, '..', '..', 'mockups', name)
+    open(out, 'w').write(wrap(f))
+    print('wrote', os.path.normpath(out), len(wrap(f)), 'bytes')
+# Artifact fragments (start with <title>): argv[1] the page, argv[2] the debug copy
+for path, f in zip(sys.argv[1:3], [frag, dbg]):
+    open(path, 'w').write(f)
+    print('wrote', path, len(f), 'bytes')
