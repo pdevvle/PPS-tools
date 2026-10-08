@@ -47,6 +47,13 @@ button.pri{background:var(--gold);color:#211b10;border-color:var(--gold)}
 .fps-bar{display:block;height:4px;background:#3a3b3f;margin-top:4px}.fps-bar s{display:block;height:100%;background:var(--gold)}
 .fps-help{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);margin:0;background:var(--panel);padding:4px 10px;border-radius:4px;font:12px var(--mono);color:var(--muted)}
 .banner button{background:#2d2f33;border:1px solid var(--line);color:var(--text);font:600 13px var(--body);padding:5px 10px;margin:6px 3px 0;cursor:pointer;border-radius:3px}.banner button.pri{background:var(--gold);color:#211b10;border-color:var(--gold)}
+/* decluttered: one header row with a View menu, a small bottom bar, a short log, pips over the soldiers */
+.menu{position:relative}.menu summary{list-style:none;cursor:pointer;background:#2d2f33;border:1px solid var(--line);padding:5px 9px;border-radius:3px;font:600 13px var(--body)}.menu summary::-webkit-details-marker{display:none}
+.menu[open] summary{border-color:var(--gold);color:#f3d38a}.menu-body{position:absolute;right:0;top:calc(100% + 4px);z-index:10;display:flex;flex-direction:column;gap:4px;width:250px;background:rgba(24,24,26,.97);border:1px solid var(--line);border-radius:5px;padding:6px;box-shadow:0 6px 18px rgba(0,0,0,.45)}
+.menu-body button{text-align:left}.menu-body p{margin:4px 2px 0;font:11px/1.45 var(--mono);color:var(--muted)}
+.log{max-height:4.6em;opacity:.78;transition:max-height .2s,opacity .2s}.log:hover{max-height:40%;opacity:1}
+.acts{padding:4px}.acts:empty{display:none}.acts button{padding:5px 12px}
+.badge.pips{border:0;background:rgba(24,24,26,.55);padding:2px 3px;line-height:0}.badge.pips i{display:inline-block;width:5px;height:6px;margin:0 1px;background:#3fae7f;border-radius:1px}.badge.pips i.lost{background:#55575c}.badge.pips.hurt i{background:#e0a526}.badge.pips em{font:600 10px var(--mono);font-style:normal;color:#e2b0a8;line-height:1;margin-left:3px}.badge.pips.sel{outline:1px solid var(--gold)}
 /* the squad up close: faces on the bar, a card for the selected soldier, what they say, the shot camera */
 .unit .face{width:34px;height:34px;border-radius:3px;float:left;margin:0 6px 0 0;background:#34302b;object-fit:cover}.unit.dead .face{filter:grayscale(1) brightness(.6)}.unit.down .face{filter:sepia(.6) saturate(2) hue-rotate(-25deg)}
 .hud .card{display:flex;gap:8px;margin-top:6px;padding-top:6px;border-top:1px solid var(--line)}.hud .card img{width:62px;height:62px;border-radius:4px;background:#34302b}
@@ -65,14 +72,17 @@ button.pri{background:var(--gold);color:#211b10;border-color:var(--gold)}
   <h1>Nightfall <span>interior combat</span></h1>
   <label>Building <select id="bSel"></select></label>
   <label>Inside <select id="hSel"><option value="den">Raider den</option><option value="holdout">Holdout (hostile)</option></select></label>
-  <button type="button" id="rerollBtn" title="Same building, another procedural layout">Reroll layout</button>
   <button type="button" id="restartBtn">Restart</button>
-  <button type="button" id="camBtn" aria-pressed="true" title="When someone fires, the camera goes over their shoulder; hovering an attack previews it">Action cam</button>
-  <button type="button" id="labelsBtn" aria-pressed="true" title="On the test range: what each part of the building tests">Labels</button>
-  <button type="button" id="sightBtn" aria-pressed="true" title="Show what is seen: the raiders' eyes while you are concealed, your selected soldier's sight in a fight">Sight</button>
-  <button type="button" id="wallsBtn" title="Cutaway: walls facing the camera drop to knee height">Walls: cutaway</button>
-  <button type="button" id="fpsBtn" aria-pressed="false" title="When one of your soldiers takes an overwatch shot, aim it yourself in first person">Aim overwatch</button>
-  <button type="button" id="rosterBtn" title="Start a fresh squad: ranks and the memorial are kept in this browser">New squad</button>
+  <details class="menu" id="viewMenu"><summary>View ▾</summary><div class="menu-body">
+    <button type="button" id="camBtn" aria-pressed="true" title="When someone fires, the camera goes over their shoulder; hovering an attack previews it">Action cam</button>
+    <button type="button" id="sightBtn" aria-pressed="true" title="While concealed: the raiders' eyes">Raiders' sight</button>
+    <button type="button" id="labelsBtn" aria-pressed="false" title="On the test range: what each part of the building tests">Test range labels</button>
+    <button type="button" id="wallsBtn" title="Cutaway: walls facing the camera drop to knee height">Walls: cutaway</button>
+    <button type="button" id="fpsBtn" aria-pressed="false" title="When one of your soldiers takes an overwatch shot, aim it yourself in first person">Aim overwatch yourself</button>
+    <button type="button" id="rerollBtn" title="Same building, another procedural layout">Reroll layout</button>
+    <button type="button" id="rosterBtn" title="Start a fresh squad: ranks and the memorial are kept in this browser">New squad</button>
+    <p>Click a soldier to select them (Tab: next). Left click: move. Right click a raider, a thing or the soldier: what to do. Space: Go. WASD, Q/E: camera.</p>
+  </div></details>
 </header>
 <div id="stage">
   <canvas id="view"></canvas>
@@ -83,7 +93,7 @@ button.pri{background:var(--gold);color:#211b10;border-color:var(--gold)}
   <div class="badges" id="badges" aria-hidden="true"></div>
   <div class="fps" id="fps" hidden><div class="fps-vig"></div><div class="fps-x" id="fpsX"><i></i><i></i><i></i><i></i><b></b></div><div class="fps-top"><b id="fpsWho"></b><span id="fpsInfo"></span><i class="fps-bar"><s id="fpsBar"></s></i></div><p class="fps-help">Overwatch: aim with the mouse, click to fire · Esc lets the roll decide</p></div>
   <div class="ctx" id="ctx" hidden role="menu"></div>
-  <div class="bar" id="bar"><div class="units" id="units"></div><div class="acts" id="acts"></div></div>
+  <div class="bar" id="bar"><div class="acts" id="acts"></div></div>
 </div>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
