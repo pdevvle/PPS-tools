@@ -27,11 +27,15 @@ dbg = (page.replace('<title>Nightfall Interior Combat</title>', '<title>Nightfal
            .replace('<!--DEBUGFLAG-->', '<script>window.COMBAT_DEBUG=true;</script>')
            .replace('<!--DEBUGPANEL-->', '<script>\n' + rd(HERE, 'debug.js') + '\n</script>'))
 assert 'COMBAT_DEBUG' in dbg and 'Combat Debug' in dbg
-for name, f in [('combat-interior.html', frag), ('combat-interior-debug.html', dbg)]:
+# a mockup that starts in third person: move and shoot freely, the fight in real time
+free = (frag.replace('<title>Nightfall Interior Combat</title>', '<title>Nightfall Combat Free</title>')
+            .replace('<script>\n// ---------- interior combat demonstration', '<script>window.COMBAT_TP=true;</script>\n<script>\n// ---------- interior combat demonstration', 1))
+assert 'COMBAT_TP' in free
+for name, f in [('combat-interior.html', frag), ('combat-interior-debug.html', dbg), ('combat-interior-free.html', free)]:
     out = os.path.join(HERE, '..', '..', 'mockups', name)
     open(out, 'w').write(wrap(f))
     print('wrote', os.path.normpath(out), len(wrap(f)), 'bytes')
-# Artifact fragments (start with <title>): argv[1] the page, argv[2] the debug copy
-for path, f in zip(sys.argv[1:3], [frag, dbg]):
+# Artifact fragments (start with <title>): argv[1] the page, argv[2] the debug copy, argv[3] the free mockup
+for path, f in zip(sys.argv[1:4], [frag, dbg, free]):
     open(path, 'w').write(f)
     print('wrote', path, len(f), 'bytes')

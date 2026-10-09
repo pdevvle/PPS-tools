@@ -54,6 +54,12 @@ button.pri{background:var(--gold);color:#211b10;border-color:var(--gold)}
 .log{max-height:4.6em;opacity:.78;transition:max-height .2s,opacity .2s}.log:hover{max-height:40%;opacity:1}
 .acts{padding:4px}.acts:empty{display:none}.acts button{padding:5px 12px}
 .badge.pips{border:0;background:rgba(24,24,26,.55);padding:2px 3px;line-height:0}.badge.pips i{display:inline-block;width:5px;height:6px;margin:0 1px;background:#3fae7f;border-radius:1px}.badge.pips i.lost{background:#55575c}.badge.pips.hurt i{background:#e0a526}.badge.pips em{font:600 10px var(--mono);font-style:normal;color:#e2b0a8;line-height:1;margin-left:3px}.badge.pips.sel{outline:1px solid var(--gold)}
+/* third person, free: crosshair and the key line */
+.tp-x{position:absolute;width:30px;height:30px;transform:translate(-50%,-50%);pointer-events:none;z-index:3}.tp-x i{position:absolute;background:#f3d38a;box-shadow:0 0 2px #000}
+.tp-x i:nth-child(1){left:14px;top:0;width:2px;height:9px}.tp-x i:nth-child(2){left:14px;bottom:0;width:2px;height:9px}.tp-x i:nth-child(3){top:14px;left:0;height:2px;width:9px}.tp-x i:nth-child(4){top:14px;right:0;height:2px;width:9px}
+.tp-x b{position:absolute;left:13px;top:13px;width:4px;height:4px;border-radius:50%;background:#ff5a3a}.tp-x.steady{transform:translate(-50%,-50%) scale(.7)}
+.tp-tip{position:absolute;left:50%;bottom:54px;transform:translateX(-50%);z-index:3;max-width:min(760px,92%);text-align:center;font:12px/1.5 var(--mono);color:#cfcac0;pointer-events:none;text-shadow:0 1px 2px #000}
+.tp-tip b{display:inline-block;background:#f3d38a;color:#211b10;padding:0 5px;border-radius:2px;margin-right:4px}.tp-tip span{opacity:.75}
 /* the squad up close: faces on the bar, a card for the selected soldier, what they say, the shot camera */
 .unit .face{width:34px;height:34px;border-radius:3px;float:left;margin:0 6px 0 0;background:#34302b;object-fit:cover}.unit.dead .face{filter:grayscale(1) brightness(.6)}.unit.down .face{filter:sepia(.6) saturate(2) hue-rotate(-25deg)}
 .hud .card{display:flex;gap:8px;margin-top:6px;padding-top:6px;border-top:1px solid var(--line)}.hud .card img{width:62px;height:62px;border-radius:4px;background:#34302b}
@@ -74,6 +80,7 @@ button.pri{background:var(--gold);color:#211b10;border-color:var(--gold)}
   <label>Inside <select id="hSel"><option value="den">Raider den</option><option value="holdout">Holdout (hostile)</option></select></label>
   <button type="button" id="restartBtn">Restart</button>
   <details class="menu" id="viewMenu"><summary>View ▾</summary><div class="menu-body">
+    <button type="button" id="tpBtn" aria-pressed="false" title="Over the shoulder of the selected soldier: move with WASD and shoot with the mouse, in real time">Third person, free [V]</button>
     <button type="button" id="camBtn" aria-pressed="true" title="When someone fires, the camera goes over their shoulder; hovering an attack previews it">Action cam</button>
     <button type="button" id="sightBtn" aria-pressed="true" title="While concealed: the raiders' eyes">Raiders' sight</button>
     <button type="button" id="labelsBtn" aria-pressed="false" title="On the test range: what each part of the building tests">Test range labels</button>
