@@ -60,6 +60,7 @@ button.pri{background:var(--gold);color:#211b10;border-color:var(--gold)}
 .tp-x b{position:absolute;left:13px;top:13px;width:4px;height:4px;border-radius:50%;background:#ff5a3a}.tp-x.steady{transform:translate(-50%,-50%) scale(.7)}
 .tp-tip{position:absolute;left:50%;bottom:54px;transform:translateX(-50%);z-index:3;max-width:min(760px,92%);text-align:center;font:12px/1.5 var(--mono);color:#cfcac0;pointer-events:none;text-shadow:0 1px 2px #000}
 .tp-tip b{display:inline-block;background:#f3d38a;color:#211b10;padding:0 5px;border-radius:2px;margin-right:4px}.tp-tip span{opacity:.75}
+.seg{display:flex}.seg button{border-radius:0;margin-left:-1px}.seg button:first-child{border-radius:3px 0 0 3px}.seg button:last-child{border-radius:0 3px 3px 0}.seg[hidden]{display:none}
 /* the squad up close: faces on the bar, a card for the selected soldier, what they say, the shot camera */
 .unit .face{width:34px;height:34px;border-radius:3px;float:left;margin:0 6px 0 0;background:#34302b;object-fit:cover}.unit.dead .face{filter:grayscale(1) brightness(.6)}.unit.down .face{filter:sepia(.6) saturate(2) hue-rotate(-25deg)}
 .hud .card{display:flex;gap:8px;margin-top:6px;padding-top:6px;border-top:1px solid var(--line)}.hud .card img{width:62px;height:62px;border-radius:4px;background:#34302b}
@@ -79,6 +80,7 @@ button.pri{background:var(--gold);color:#211b10;border-color:var(--gold)}
   <label>Building <select id="bSel"></select></label>
   <label>Inside <select id="hSel"><option value="den">Raider den</option><option value="holdout">Holdout (hostile)</option></select></label>
   <button type="button" id="restartBtn">Restart</button>
+  <div class="seg" id="viewSeg" hidden role="group" aria-label="Camera"><button type="button" data-v="tp" title="Over the shoulder of the selected soldier">Shoulder</button><button type="button" data-v="iso" aria-pressed="true">Isometric</button><button type="button" data-v="top">Top</button></div>
   <details class="menu" id="viewMenu"><summary>View ▾</summary><div class="menu-body">
     <button type="button" id="tpBtn" aria-pressed="false" title="Over the shoulder of the selected soldier: move with WASD and shoot with the mouse, in real time">Third person, free [V]</button>
     <button type="button" id="camBtn" aria-pressed="true" title="When someone fires, the camera goes over their shoulder; hovering an attack previews it">Action cam</button>

@@ -31,11 +31,15 @@ assert 'COMBAT_DEBUG' in dbg and 'Combat Debug' in dbg
 free = (frag.replace('<title>Nightfall Interior Combat</title>', '<title>Nightfall Combat Free</title>')
             .replace('<script>\n// ---------- interior combat demonstration', '<script>window.COMBAT_TP=true;</script>\n<script>\n// ---------- interior combat demonstration', 1))
 assert 'COMBAT_TP' in free
-for name, f in [('combat-interior.html', frag), ('combat-interior-debug.html', dbg), ('combat-interior-free.html', free)]:
+# a mockup in strict rounds: moves at once, actions together, three cameras, rooms closed until seen
+strict = (frag.replace('<title>Nightfall Interior Combat</title>', '<title>Nightfall Combat Rounds</title>')
+              .replace('<script>\n// ---------- interior combat demonstration', '<script>window.COMBAT_STRICT=true;</script>\n<script>\n// ---------- interior combat demonstration', 1))
+assert 'COMBAT_STRICT' in strict
+for name, f in [('combat-interior.html', frag), ('combat-interior-debug.html', dbg), ('combat-interior-free.html', free), ('combat-interior-rounds.html', strict)]:
     out = os.path.join(HERE, '..', '..', 'mockups', name)
     open(out, 'w').write(wrap(f))
     print('wrote', os.path.normpath(out), len(wrap(f)), 'bytes')
-# Artifact fragments (start with <title>): argv[1] the page, argv[2] the debug copy, argv[3] the free mockup
-for path, f in zip(sys.argv[1:4], [frag, dbg, free]):
+# Artifact fragments (start with <title>): argv[1] the page, argv[2] the debug copy, argv[3] the free mockup, argv[4] strict rounds
+for path, f in zip(sys.argv[1:5], [frag, dbg, free, strict]):
     open(path, 'w').write(f)
     print('wrote', path, len(f), 'bytes')

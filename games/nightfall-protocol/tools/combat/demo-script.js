@@ -24,6 +24,10 @@ scene.add(new THREE.AmbientLight(0xffffff,.18));
 
 // debug build only: what the panel switches. reveal: no fog; cones: raiders' sight always; lines: lines of fire from
 // the selected soldier; passive: raiders do nothing; god: the squad takes no damage; blind: raiders never spot anyone
+// strict rounds (the strict mockup sets window.COMBAT_STRICT): moving is per soldier and immediate, within the round's
+// allowance, and what they then see is the intel; actions are queued and the squad carries them out together on Go.
+// Three cameras: over the shoulder, isometric and top-down. Rooms no one has seen into stay closed.
+const STRICT=!!window.COMBAT_STRICT;
 const DBG=window.COMBAT_DEBUG?{reveal:true,cones:true,lines:true,passive:false,god:false,blind:false}:null;
 // ---------- state ----------
 const S={tp:!!window.COMBAT_TP,tpYaw:0,tpPitch:.18,tpDist:3.2,tpFollow:true,actionCam:true,cam:null,camPreview:null,labels:false,timeScale:1,slow:1,w:null,G:null,rec:null,units:[],sel:null,phase:'explore',busy:false,mode:'move',round:1,minutes:14*60,seed:0,F:null,camGoal:null,camHold:0,sight:true,free:false,fps:false,destroyed:new Set(),stats:null,mission:null,declined:new Set(),prompt:false};
@@ -81,7 +85,7 @@ function ring(c,r){ const segs=[], n=48; for(let k=0;k<n;k++){ const a=k/n*Math.
 // the selected soldier's reach this round, given what is already ordered (an action keeps one action back)
 function drawReach(){ clearReach(); const u=S.sel; S.F=null; if(!u||!u.alive||u.team!=='squad'||S.busy||S.prompt) return;
   if(S.phase==='explore'){ S.F=wS().field(P(u),80,others(u)); return; }
-  if(S.phase!=='plan') return; const mv=u.move||CR.V.move, b=moveBudget(u), W=wS(); S.F=W.field(P(u),Math.max(b,2*mv),others(u)); if(!b) return;
+  if(S.phase!=='plan') return; const mv0=u.move||CR.V.move, mv=STRICT?Math.max(0,u.mvLeft):mv0, b=STRICT?mv+(canDash(u)?mv0:0):moveBudget(u), W=wS(); S.F=W.field(P(u),Math.max(b,2*mv,.5),others(u)); if(!b) return;
   for(let n=0;n<S.F.cost.length&&false;n++){ const c=S.F.cost[n]; if(!(c<=b)||fill.count>=20000) continue; tmpM.makeTranslation(W.nodeX(n),yOf(W.nodeX(n),W.nodeZ(n))+.03,W.nodeZ(n)); fill.setMatrixAt(fill.count,tmpM); fill.setColorAt(fill.count,col.setHex(c<=mv?0x3f8fd1:0xe0a526)); fill.count++; }
   fill.instanceMatrix.needsUpdate=true; fill.instanceColor.needsUpdate=true;
   if(b>mv) ribbons.add(ribbonMesh(contour(S.F,b),ribbonM.far)); ribbons.add(ribbonMesh(contour(S.F,Math.min(b,mv)),ribbonM.near)); }
@@ -93,7 +97,7 @@ function fan(x,z,a0,a1,maxD,mat,lv){ lv=lv||0; const W=lv&&S.roof?S.roof.space:S
   for(let k=0;k<=n;k++){ const a=a0+(a1-a0)*k/n, d=W.castRay([x,z],a,maxD), p=[x+Math.sin(a)*d,z+Math.cos(a)*d]; if(prev) pos.push(x,y,z, prev[0],y,prev[1], p[0],y,p[1]); prev=p; }
   const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3)); const m=new THREE.Mesh(g,mat); m.renderOrder=3; return m; }
 function drawSight(){ while(fans.children.length){ fans.children.pop().geometry.dispose(); } if(!S.sight||!S.w) return;
-  if(S.phase==='explore'||(DBG&&DBG.cones)){ for(const r of S.units) if(r.team==='raider'&&r.alive&&(r.unaware||DBG&&DBG.cones)&&r.vis){ fans.add(fan(r.x,r.z,r.face-CR.V.cone,r.face+CR.V.cone,CR.V.sight,fanM.raider,0)); fans.add(fan(r.x,r.z,0,Math.PI*2,CR.V.around,fanM.raider,0)); } }
+  if(S.phase==='explore'||(STRICT&&S.phase==='plan')||(DBG&&DBG.cones)){ for(const r of S.units) if(r.team==='raider'&&r.alive&&(r.unaware||DBG&&DBG.cones)&&r.vis){ fans.add(fan(r.x,r.z,r.face-CR.V.cone,r.face+CR.V.cone,CR.V.sight,fanM.raider,0)); fans.add(fan(r.x,r.z,0,Math.PI*2,CR.V.around,fanM.raider,0)); } }
   if(DBG&&S.phase==='plan'&&S.sel&&S.sel.alive&&S.sel.team==='squad'){ const p=planned(S.sel); fans.add(fan(p[0],p[1],0,Math.PI*2,CR.V.spot,fanM.own,S.sel.lv)); } }
 // hover and planning marks: a ring where the soldier would stand, the route there, a marker toward each known foe
 const ringG=new THREE.RingGeometry(.3,.4,28); ringG.rotateX(-Math.PI/2);
@@ -103,7 +107,7 @@ const glyphs=new THREE.Group(); scene.add(glyphs);
 const glyphG=new THREE.BoxGeometry(1,1,1), glyphM={2:new THREE.MeshBasicMaterial({color:0xe0a526}),1:new THREE.MeshBasicMaterial({color:0xe0a526,transparent:true,opacity:.6}),0:new THREE.MeshBasicMaterial({color:0xc23b2e})};
 const orderViz=new THREE.Group(); scene.add(orderViz);
 const entryMarks=new THREE.Group(); scene.add(entryMarks);
-function drawEntries(){ while(entryMarks.children.length) entryMarks.children.pop(); if(S.phase!=='explore') return;
+function drawEntries(){ while(entryMarks.children.length) entryMarks.children.pop(); if(S.phase!=='explore'&&!(STRICT&&S.phase==='plan')) return;
   for(const e of S.w.entries()){ const ok=usable(e,S.sel), blocked=!S.w.props(e.o).cross; if(!ok&&!blocked) continue;
     const m=new THREE.Mesh(ringG,new THREE.MeshBasicMaterial({color:blocked?(ok?0xff7a4a:0x6c6a66):e.kind==='window'?0x9fd3e6:0xe0a526,transparent:true,opacity:blocked&&!ok?.45:.75,depthWrite:false})); m.scale.setScalar(.8); m.position.set(e.out[0],.05,e.out[1]); m.renderOrder=6; entryMarks.add(m); } }
 const arc=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineDashedMaterial({color:0xff7a4a,dashSize:.25,gapSize:.15})); arc.visible=false; scene.add(arc);
@@ -137,17 +141,18 @@ const ghostAt=u=>{ const p=planned(u); return Object.assign({},u,{x:p[0],z:p[1]}
 const apTotal=u=>2+(u.order&&u.order.rungun?1:0);
 const moveAP=u=>{ const m=u.order&&u.order.move; if(!m) return 0; return m.cost<=(u.move||CR.V.move)?1:2; };
 function moveBudget(u){ const mv=u.move||CR.V.move, act=u.order&&u.order.act&&u.order.act.type!=='slash'?1:0, ap=Math.min(2,apTotal(u)-act); return ap>=2?2*mv:ap>=1?mv:0; }
-const ACT_LABEL={climb:'climb',drop:'drop in',roofcharge:'roof charge',shove:'shove clear',drag:'drag',shoot:'shoot',pistol:'revolver',slash:'slash',throw:'pipe bomb',aid:'first aid',charge:'charge',flip:'overturn',close:'close door',search:'take stash',evac:'get out',ow:'overwatch',hunker:'hunker',reload:'reload'};
+const ACT_LABEL={breach:'breach',climb:'climb',drop:'drop in',roofcharge:'roof charge',shove:'shove clear',drag:'drag',shoot:'shoot',pistol:'revolver',slash:'slash',throw:'pipe bomb',aid:'first aid',charge:'charge',flip:'overturn',close:'close door',search:'take stash',evac:'get out',ow:'overwatch',hunker:'hunker',reload:'reload'};
 function orderText(u){ const o=u.order; if(!o||(!o.move&&!o.act&&!o.free)) return 'no orders: holds'; const parts=[];
   if(o.free) parts.push('free shot → '+o.free.target.name);
   if(o.move) parts.push((o.move.cost<=(u.move||CR.V.move)?'move ':'dash ')+o.move.cost.toFixed(0)+' m');
   if(o.act){ const a=o.act; parts.push(ACT_LABEL[a.type]+(a.target&&a.target!==u?' → '+a.target.name+(a.odds?' '+a.odds.aim+'%':''):'')); }
   if(o.rungun) parts.push('run & gun'); return parts.join(' · '); }
-function setMove(u,p,cost,path){ const o=orderOf(u), mv=u.move||CR.V.move;
+function setMove(u,p,cost,path){ if(STRICT){ strictMove(u,p,cost,path); return; } const o=orderOf(u), mv=u.move||CR.V.move;
   if(o.act&&o.act.type==='slash') o.act=null;
   if(cost>mv&&o.act&&apTotal(u)<3){ log(`${u.name}: a dash leaves no time for the ${ACT_LABEL[o.act.type]}.`); o.act=null; }
   o.move={p,cost,path}; if(o.act&&o.act.target&&o.act.weapon) o.act.odds=previewOdds(u,o.act.target,o.act.weapon); }
-function setAct(u,act){ const o=orderOf(u); if(act.type!=='slash'&&moveAP(u)>=2&&apTotal(u)<3){ o.move=null; log(`${u.name} will not dash, to keep an action for the ${ACT_LABEL[act.type]}.`); }
+function setAct(u,act){ if(STRICT){ if(u.dashed){ log(`${u.name} dashed: no action left this round.`); return; } if(act.type==='climb'||act.type==='drop'){ strictTraverse(u,act); return; } }
+  const o=orderOf(u); if(act.type!=='slash'&&moveAP(u)>=2&&apTotal(u)<3){ o.move=null; log(`${u.name} will not dash, to keep an action for the ${ACT_LABEL[act.type]}.`); }
   if(act.type==='slash') o.move=null; o.act=act; }
 function previewOdds(u,t,W){ const g=ghostAt(u); const lf=CR.lineOfFire(S.w,g,t,{pierce:true}); if(!lf) return null; return CR.odds(S.w,g,t,{weapon:W||u.weapon,walls:lf.walls,steady:u.role==='sharpshooter'&&!(u.order&&u.order.move)&&(W||u.weapon)===u.weapon}); }
 // draw every soldier's orders: where they will stand, how they get there, and what they will do
@@ -163,7 +168,7 @@ function drawOrders(){ while(orderViz.children.length){ const m=orderViz.childre
     if(o.act&&o.act.point) line(o.act.point,0xff7a4a,o.act.type==='roofcharge'?1:0); }); }
 
 // ---------- vision: what the squad sees is all you see ----------
-function seenBySquad(r){ for(const u of squad()) if(u.alive&&!u.evac&&CR.dist(u,r)<=CR.V.spot&&CR.lineOfFire(S.w,u,r,{shot:false})) return true; return false; }
+function seenBySquad(r){ for(const u of squad()) if(u.alive&&!u.evac&&CR.dist(u,r)<=CR.V.spot&&CR.lineOfFire(S.w,u,r,{shot:false})&&(!STRICT||vantage(u,P(r)))) return true; return false; }
 function updateVision(dt){ for(const r of S.units){ if(r.team!=='raider') continue; if(r.revealT>0) r.revealT-=dt;
     let v; if(DBG&&DBG.reveal) v=!r.fled; else if(r.alive) v=seenBySquad(r)||r.revealT>0; else v=!!(r.vis||r.seenDead);
     if(!r.alive&&v) r.seenDead=true; if(v&&r.alive){ r.seen=true; r.last=[r.x,r.z]; }
@@ -187,7 +192,8 @@ function drawBadges(){ const out=[], u=S.sel, M=S.mission, put=(x,y,z,cls,txt)=>
     if(txt) put(t.x,yU(t)+2.15,t.z,cls,txt); }
   if(S.phase!=='over'&&!S.cam) for(const v of squad()){ if(v.evac||v.dead||!v.fig.root.visible) continue; const hurt=v.hp<v.max;
     put(v.x,yU(v)+2.05,v.z,'pips'+(hurt?' hurt':'')+(S.sel===v?' sel':''),'<i></i>'.repeat(v.hp)+'<i class="lost"></i>'.repeat(Math.max(0,v.max-v.hp))+(v.down?`<em>${v.stable?'stable':'bleeding '+v.bleed}</em>`:'')); }
-  if(M&&M.stash&&!M.stashTaken&&S.phase!=='over') put(M.stash[0],yOf(M.stash[0],M.stash[1],0)+1.4,M.stash[1],'loot','Stash');
+  const stashSeen=!STRICT||!S.intel||(M&&M.stash&&S.intel.rooms.has(S.G.P.roomOf[Math.floor(M.stash[1]-S.G.M.v0)*S.G.M.W+Math.floor(M.stash[0]-S.G.M.u0)]));
+  if(M&&M.stash&&!M.stashTaken&&S.phase!=='over'&&stashSeen) put(M.stash[0],yOf(M.stash[0],M.stash[1],0)+1.4,M.stash[1],'loot','Stash');
   if(M&&M.stashTaken&&S.phase!=='over') put(M.evac[0],.6,M.evac[1],'evac','Way out');
   if(S.G.test&&S.labels) for(const L of S.G.test.labels) put(L.p[0],.3,L.p[1],'zone',L.text);
   badgesEl.innerHTML=out.join(''); }
@@ -285,6 +291,7 @@ function setup(){
   updateVision(0); inkAll(); select(S.sel); drawHud(); drawEntries(); drawEvac();
   log(g.test?'Test range: every wall build-up, window sill, door, counter and kind of cover, and every enemy type. Labels: View ▸ Test range labels.':`${g.label}, ${hist==='den'?'raider den':'holdout'}. Generated in ${g.ms|0} ms.`);
   flash('Concealed','Click a soldier, then click to walk. Right click a door or window ring to stack, then Breach.',true);
+  if(STRICT) strictStart();
 }
 const dist2=(it,u)=>{ const c=it.cells[0], M=S.G.M; return Math.hypot(M.u0+(c%M.W)+.5-u.x,M.v0+((c/M.W)|0)+.5-u.z); };
 function setPatrol(u){ const w=S.w, M=S.G.M, F=w.field(P(u),300,[]), stops=[];
@@ -297,7 +304,7 @@ window.__combatRefresh=()=>{ rebuild(); if(S.w){ const a=S.w.syncMoves(S.rec), b
 
 // ---------- selection and the bar ----------
 const others=except=>{ const lv=(except&&except.lv)||0, same=u=>(u.lv||0)===lv; return S.units.filter(u=>u.alive&&u!==except&&same(u)).map(P).concat(S.units.filter(u=>u.down&&!u.dead&&same(u)).map(P)); };
-function select(u){ if(!u||!u.alive||u.evac) return; S.sel=u; DL=u.lv||0; S.mode='move'; closeMenu(); arc.visible=false; inkAll(); S.camGoal={x:u.x,z:u.z}; drawReach(); drawSight(); drawOrders(); drawBar(); drawHud(); if(S.phase==='explore') drawEntries(); }
+function select(u){ if(!u||!u.alive||u.evac) return; if(STRICT&&u!==S.sel&&S.view==='tp') S.svYaw=u.face; S.sel=u; DL=u.lv||0; S.mode='move'; closeMenu(); arc.visible=false; inkAll(); S.camGoal={x:u.x,z:u.z}; drawReach(); drawSight(); drawOrders(); drawBar(); drawHud(); if(S.phase==='explore') drawEntries(); }
 const squad=()=>S.units.filter(u=>u.team==='squad');
 const standing=()=>squad().filter(u=>u.alive&&!u.evac);
 function usable(e,u){ if(!S.w.clearAt(e.out[0],e.out[1])) return false; if(e.kind==='window'&&(e.e.win.sill==null?.9:e.e.win.sill)>1.3) return false; if(S.w.props(e.o).cross&&e.kind!=='garage') return true; return !!(u&&u.role==='breacher'&&u.kit.charge>0&&(e.kind!=='garage')); }
@@ -328,7 +335,7 @@ function drawHud(){ const left=S.units.filter(u=>u.team==='raider'&&u.alive&&u.v
     (S.sel&&S.sel.team==='squad'?soldierCard(S.sel):''); }
 // the selected soldier, up close: their face, name and record, what they carry and how they are
 function soldierCard(u){ const m=u.member||{}, st=u.dead?'dead':u.down?(u.stable?'down, stable':`bleeding: ${u.bleed} turns`):u.hp<=u.max/2?'wounded':'';
-  return `<div class="card"><img src="${portrait(u)}" alt=""><div><b>${u.name}${u.nick?' “'+u.nick+'”':''}</b><span>${rankName(m.xp||0)} ${roleOf(u).label}${u.lv?' · on the roof':''}</span><span>${m.missions||0} missions · ${(m.kills||0)+(u.kills||0)} kills</span>`+
+  return `<div class="card"><img src="${portrait(u)}" alt=""><div><b>${u.name}${u.nick?' “'+u.nick+'”':''}</b><span>${rankName(m.xp||0)} ${roleOf(u).label}${u.lv?' · on the roof':''}</span>${STRICT&&S.phase==='plan'&&!u.down?`<span>Move ${Math.max(0,u.mvLeft).toFixed(0)} m left${u.dashed?' · dashed: no action':canDash(u)?` · dash +${u.move||CR.V.move} m costs the action`:''}</span>`:''}<span>${m.missions||0} missions · ${(m.kills||0)+(u.kills||0)} kills</span>`+
     `<span class="hp">${'<i></i>'.repeat(u.hp)}${'<i class="lost"></i>'.repeat(Math.max(0,u.max-u.hp))}</span>${st?`<span class="st">${st}</span>`:''}</div></div><div class="sub" title="${roleOf(u).skill}">${u.weapon.name} ${u.ammo}/${u.weapon.ammo}${u.second?' + '+u.second.name:''}</div>`; }
 function whyHtml(o,W){ return '<div class="why">'+o.why.map(([k,v],i)=>`<span>${k}</span><span class="${i===0?'':v<0?'neg':'pos'}">${i===0?v:(v>0?'+':'')+v}</span>`).join('')+`<b>Hit</b><b>${o.aim}%</b><span>Crit</span><span>${o.crit}%</span><span>Damage</span><span>${W.dmg[0]}–${W.dmg[1]}</span></div>`; }
 
@@ -349,7 +356,7 @@ function standBeside(u,box,maxCost){ const F=S.F; if(!F) return null; let best=n
     if(boxDist(box,q[0],q[1])>.95) continue; const c=Math.hypot(q[0]-u.x,q[1]-u.z)<.3?{cost:0}:wOf(u).costTo(F,q); if(!c||c.over||c.cost>maxCost) continue; if(!best||c.cost<best.cost) best={p:q,cost:c.cost}; }
   if(best&&best.cost>0){ best.path=wOf(u).pathTo(F,best.p); if(!best.path) return null; } return best; }
 function moveFor(u,spot){ if(spot&&spot.cost>0) setMove(u,spot.p,spot.cost,spot.path); else if(spot) orderOf(u).move=null; }
-const besideBudget=u=>(u.move||CR.V.move)*(apTotal(u)-1);
+const besideBudget=u=>STRICT?Math.max(0,u.mvLeft||0):(u.move||CR.V.move)*(apTotal(u)-1);
 function rightClick(ev,p,hit){ const u=S.sel; if(!u||!u.alive) return; if(hit&&!p) p=[hit.x,hit.z]; if(!p) return;
   const near=(x,z,r)=>Math.hypot(x-p[0],z-p[1])<r;
   if(hit===undefined) hit=S.units.find(v=>v.team==='raider'&&v.alive&&v.vis&&near(v.x,v.z,.75))||S.units.find(v=>v.team==='squad'&&(v.alive||v.down&&!v.dead)&&!v.evac&&near(...planned(v),.6));
@@ -395,6 +402,9 @@ function rightClick(ev,p,hit){ const u=S.sel; if(!u||!u.alive) return; if(hit&&!
     items.push({label:'Hold: clear orders',sub:'',fn:()=>{ u.order=null; afterOrder(u); }}); openMenu(ev,u.name,items); return; }
   if(ally&&u.role==='medic'){ const ap=planned(ally), box={x0:ap[0]-.3,x1:ap[0]+.3,z0:ap[1]-.3,z1:ap[1]+.3}, spot=standBeside(u,box,besideBudget(u));
     items.push({label:ally.down?(ally.stable?'Get them up':'Stabilise'):'First aid',sub:ally.down?'':'+'+CR.V.aidHeal+' HP',off:u.kit.aid<=0?'none left':!spot?'too far':null,fn:()=>{ moveFor(u,spot); setAct(u,{type:'aid',target:ally}); afterOrder(u); }}); openMenu(ev,ally.name,items); return; }
+  if(STRICT&&!u.lv){ const ent=S.w.entries().find(x=>near(x.out[0],x.out[1],1.1)&&usable(x,u));
+    if(ent){ const c=Math.hypot(ent.out[0]-u.x,ent.out[1]-u.z)<.45?{cost:0}:S.F&&S.w.costTo(S.F,ent.out), ok=c&&!c.over&&c.cost<=u.mvLeft;
+      items.push({label:`Breach the ${ent.kind==='window'?'window':'door'}`,sub:!S.w.props(ent.o).cross?'charge':'action',off:!ok?'too far':(!S.w.props(ent.o).cross&&u.role!=='breacher')?'needs the breacher':null,fn:()=>{ if(c.cost>0) strictMove(u,ent.out,c.cost,S.w.pathTo(S.F,ent.out)); setAct(u,{type:'breach',entry:ent}); afterOrder(u); }}); } }
   // things: the stash, furniture to tip over, a door to shut, a wall to blow
   const M=S.mission;
   if(M&&M.stash&&!M.stashTaken){ const so=S.w.obs.find(x=>x.kind==='item'&&x.it===M.stashItem); if(so&&boxDist(so.box,p[0],p[1])<.4){ const spot=standBeside(u,so.box,besideBudget(u)); items.push({label:'Take the stash',sub:'',off:spot?null:'too far',fn:()=>{ moveFor(u,spot); setAct(u,{type:'search'}); afterOrder(u); }}); openMenu(ev,'Stash',items); return; } }
@@ -580,16 +590,18 @@ function startFight(first,why,breachers){ S.round=1; S.prompt=false; S.slow=1; b
   if(first==='squad'){ const who=breachers||squad().filter(u=>u.alive); for(const u of who) if(u.alive) u.free=true; S.free=true;
     beginPlan(); flash(breachers?'Breach':'First strike',`${breachers?'Breachers':'Everyone'}: a free shot on Go. Click a raider.`,true); }
   else { flash('Spotted','They saw you first and scramble for cover.',false); for(const r of S.units) if(r.team==='raider'){ r.unaware=false; r.revealT=2; } inkAll(); raiderPhase(true); } }
-function beginPlan(){ S.phase='plan'; S.busy=false; S.mode='move'; for(const u of standing()){ u.order=null; u.ow=false; u.hunker=false; }
+function beginPlan(){ S.phase='plan'; S.busy=false; S.mode='move'; for(const u of standing()){ u.order=null; u.ow=false; u.hunker=false; if(STRICT){ u.mvLeft=u.move||CR.V.move; u.dashed=false; } }
+  if(STRICT){ revealRooms(); drawEntries(); }
   inkAll(); select(standing()[0]); drawOrders(); drawHud(); drawBar(); }
 // Go: every soldier carries out their orders at the same moment
 async function execute(){ if(!planning()) return; closeMenu(); S.phase='exec'; S.busy=true; S.mode='move'; clearReach(); hideHover(); drawOrders(); drawSight(); drawBar(); drawHud();
-  const sq=standing();
+  const sq=standing(), noise0=S.stats.shots+S.stats.bombs;
   { const talk=sq.filter(u=>u.order&&(u.order.act||u.order.move)).sort(()=>Math.random()-.5).slice(0,2); talk.forEach((u,i)=>wait(i*450).then(()=>bark(u,u.order&&u.order.act?u.order.act.type:'move'))); }
   const frees=sq.filter(u=>u.order&&u.order.free); if(frees.length){ await Promise.all(frees.map((u,i)=>wait(i*110).then(()=>fireAt(u,u.order.free.target,u.weapon,{free:true,mod:u.entryMod||0,modLabel:'Through a window'})))); }
   if(S.free){ S.free=false; for(const u of S.units){ u.free=false; u.entryMod=0; if(u.team==='raider') u.unaware=false; } }
   await Promise.all(sq.map((u,i)=>runOrder(u,i)));
   for(const u of sq){ u.order=null; if(u.cooldown&&!u.usedRungun) u.cooldown--; u.usedRungun=false; }
+  if(STRICT){ if(S.stats.shots+S.stats.bombs>noise0) for(const r of S.units) if(r.team==='raider'&&r.alive&&r.unaware&&standing().some(v=>CR.dist(v,r)<30)) alertFrom(r); revealRooms(); }
   S.minutes+=CR.V.minutesPerTurn*squad().filter(u=>u.alive||u.down&&!u.dead).length;
   if(dirtyBuild) rebuild(); if(checkEnd()) return; raiderPhase(false); }
 async function runOrder(u,i){ const o=u.order; if(!o) return; await wait(i*70); if(!u.alive) return;
@@ -612,6 +624,7 @@ async function runOrder(u,i){ const o=u.order; if(!o) return; await wait(i*70); 
     case 'close': if(S.w.doorState(a.edge.e)==='open'){ S.w.setDoor(a.edge.e.key,'closed'); rebuild(); log(`${u.name} closes the door.`); } break;
     case 'search': if(!takeStash(u)) log(`${u.name} cannot reach the stash.`); break;
     case 'evac': evacuate(u); break;
+    case 'breach': await strictBreach(u,a.entry); break;
     case 'climb': await climb(u,a.ladder,a.dir); break;
     case 'drop': await dropDown(u,a.hole); break;
     case 'roofcharge': await roofCharge(u,a.point); break;
@@ -630,7 +643,8 @@ async function raiderPhase(scramble){ S.phase='raiders'; S.busy=true; clearReach
   for(const b of CR.morale(S.units,S.rng)){ if(b.vis){ log(`${b.name} breaks and runs.`); pop(b,'RUNS','info'); bark(b,'rFlee'); } ink(b); }
   const rs=S.units.filter(u=>u.team==='raider'&&u.alive), field=S.units.filter(u=>!u.evac);
   for(const r of rs){ r.hunker=false; r.ow=false; }
-  const plans=rs.map(r=>DBG&&DBG.passive?[]:CR.planAI(S.w,r,field,S.rng,{scramble}));
+  if(STRICT){ for(const v of standing()) strictAlert(v); for(const r of rs) if(r.unaware) r.face+=(S.rng()-.5)*1.4; }
+  const plans=rs.map(r=>(DBG&&DBG.passive)||(STRICT&&r.unaware)?[]:CR.planAI(S.w,r,field,S.rng,{scramble}));
   await Promise.all(rs.map((r,i)=>runAI(r,plans[i],i)));
   if(checkEnd()) return;
   S.minutes+=CR.V.minutesPerTurn*rs.length; S.round++;
@@ -684,10 +698,11 @@ addEventListener('keydown',e=>{ if(e.target.tagName==='SELECT') return; const k=
   if(!FP&&/^[wasd]$/i.test(k)&&!e.ctrlKey&&!e.metaKey){ held.add(k.toLowerCase()); return; }
   if(FP){ if(k==='Escape') fpsEnd(null); if(k===' '){ e.preventDefault(); fpsFire(); } return; }
   if(k==='Shift'){ held.add('shift'); return; }
-  if((k==='v'||k==='V')&&!e.ctrlKey&&!e.metaKey){ setTP(!S.tp); return; }
+  if((k==='v'||k==='V')&&!e.ctrlKey&&!e.metaKey){ if(STRICT) setView({tp:'iso',iso:'top',top:'tp'}[S.view]); else setTP(!S.tp); return; }
   if(S.tp&&tpKey(e)) return;
   if(k==='Escape'){ if(!ctxEl.hidden){ closeMenu(); return; } act('back'); return; }
-  if(k==='q'||k==='Q') view.az-=Math.PI/2; else if(k==='e'||k==='E') view.az+=Math.PI/2;
+  if(STRICT&&S.view==='tp'&&(k==='q'||k==='Q'||k==='e'||k==='E')) S.svYaw+=(k==='q'||k==='Q')?.5:-.5;
+  else if(k==='q'||k==='Q') view.az-=Math.PI/2; else if(k==='e'||k==='E') view.az+=Math.PI/2;
   if(S.busy||S.prompt) return; const u=S.sel;
   if(k===' '&&S.phase==='plan'){ e.preventDefault(); execute(); return; }
   if(k==='b'||k==='B') act('breach');
@@ -713,7 +728,8 @@ canvas3.addEventListener('pointermove',e=>{ if(!drag){ const fp=S.w&&pointUnder(
     if(h&&h.team==='raider'&&h.alive&&ctxEl.hidden){ hideHover(); hoverEl.textContent=`${h.name} · ${h.hp}/${h.max} HP${h.armor?' · armour '+h.armor:''}${planning()?'\nClick or right click: what '+(S.sel?S.sel.name:'your soldier')+' can do to them':S.phase==='explore'?'\nRight click: engage':''}`; hoverEl.style.whiteSpace='pre-line'; return; }
     hover(pointUnder(e)); return; } const dx=e.clientX-drag.x, dy=e.clientY-drag.y; drag.x=e.clientX; drag.y=e.clientY; drag.moved+=Math.abs(dx)+Math.abs(dy);
   if(drag.moved<(drag.btn===2?12:6)) return; S.camGoal=null; S.camHold=performance.now()+5000; closeMenu();
-  if(drag.pan){ const s=view.dist*.0011, ca=Math.cos(view.az), sa=Math.sin(view.az); view.target.x-=(dx*ca-dy*sa)*s; view.target.z-=(-dx*sa-dy*ca)*s; }
+  if(STRICT&&S.view==='tp'){ S.svYaw-=dx*.008; S.svPitch=clamp(S.svPitch+dy*.005,-.3,.7); return; }
+  if(drag.pan||STRICT){ const s=view.dist*.0011, ca=Math.cos(view.az), sa=Math.sin(view.az); view.target.x-=(dx*ca-dy*sa)*s; view.target.z-=(-dx*sa-dy*ca)*s; }
   else { view.az-=dx*.008; view.el=clamp(view.el+dy*.006,.32,1.2); } });
 canvas3.addEventListener('pointerup',e=>{ const click=drag&&drag.moved<(drag.btn===2?12:6), btn=drag&&drag.btn; drag=null; if(!click||S.prompt) return; const p=pointUnder(e);
   const hit=pickUnit(e,v=>v.team==='squad'||v.vis);
@@ -727,12 +743,13 @@ canvas3.addEventListener('pointerup',e=>{ const click=drag&&drag.moved<(drag.btn
   const u=hit&&hit.team==='squad'&&hit.alive&&!hit.evac?hit:S.units.find(v=>v.alive&&!v.evac&&v.team==='squad'&&S.phase==='plan'&&Math.hypot(planned(v)[0]-p[0],planned(v)[1]-p[1])<.55); if(u&&!S.busy){ if(u!==S.sel&&S.phase==='plan'&&Math.random()<.45) bark(u,'select'); select(u); return; }
   if(S.busy||!S.sel) return; const t=target(p);
   if(S.phase==='explore'){ if(t) walkTo(S.sel,t.p); return; }
+  if(S.phase==='plan'&&STRICT){ if(!t){ log('Out of reach this round.'); return; } strictMove(S.sel,t.p,t.cost,wS().pathTo(S.F,t.p)); return; }
   if(S.phase==='plan'){ if(!t){ log('Out of reach this round.'); return; } const sel=S.sel, mv=sel.move||CR.V.move;
     if(t.cost>2*mv||(t.cost>moveBudget(sel)&&!(sel.order&&sel.order.act))){ log('Out of reach this round.'); return; }
     if(standing().some(v=>v!==sel&&Math.hypot(planned(v)[0]-t.p[0],planned(v)[1]-t.p[1])<.7)){ log('Someone is already going there.'); return; }
     setMove(sel,t.p,t.cost,wS().pathTo(S.F,t.p)); afterOrder(sel); } });
 canvas3.addEventListener('contextmenu',e=>e.preventDefault());
-canvas3.addEventListener('wheel',e=>{ e.preventDefault(); view.dist=clamp(view.dist*Math.exp(e.deltaY*.0012),8,90); },{passive:false});
+canvas3.addEventListener('wheel',e=>{ e.preventDefault(); if(STRICT&&S.view==='tp'){ S.svDist=clamp(S.svDist*Math.exp(e.deltaY*.0012),1.8,7); return; } view.dist=clamp(view.dist*Math.exp(e.deltaY*.0012),8,STRICT?150:90); },{passive:false});
 function hideHover(){ ghost.visible=false; route.visible=false; hoverSpot=null; while(glyphs.children.length) glyphs.children.pop(); hoverEl.textContent=''; for(const m of ribbons.children.filter(m=>m.userData.blast)){ ribbons.remove(m); m.geometry.dispose(); } }
 function hover(p){ if(S.tp&&tpLive()) return; if(S.mode==='throw'){ hoverThrow(p); return; } hideHover(); if(!p||!S.w||S.phase==='over'||S.busy||S.prompt||!ctxEl.hidden||!(S.phase==='plan'||S.phase==='explore')) return; const w=wS(), t=target(p);
   const parts=[];
@@ -743,7 +760,7 @@ function hover(p){ if(S.tp&&tpLive()) return; if(S.mode==='throw'){ hoverThrow(p
   if(DL) parts.push('On the roof: you see down only near the edge, or through a hole');
   fs.forEach((r,i)=>{ const a=Math.atan2(r.x-t.p[0],r.z-t.p[1]), h=cv[i]===2?1:cv[i]===1?.5:.06, m=new THREE.Mesh(glyphG,glyphM[cv[i]]); m.scale.set(.32,h,.05); m.rotation.y=a; m.position.set(t.p[0]+Math.sin(a)*.62,yOf(...t.p)+h/2,t.p[1]+Math.cos(a)*.62); m.renderOrder=7; glyphs.add(m); });
   if(false) parts.push(`Cover vs ${fs.length} in sight: ${cv.filter(v=>v===2).length} full · ${cv.filter(v=>v===1).length} half · flanked by ${cv.filter(v=>v===0).length}`);
-  ghost.material.color.setHex(S.phase==='plan'&&t.cost>(S.sel.move||CR.V.move)?0xe0a526:0x4aa3ff);
+  ghost.material.color.setHex(S.phase==='plan'&&t.cost>(STRICT?S.sel.mvLeft:(S.sel.move||CR.V.move))?0xe0a526:0x4aa3ff);
   if(false) parts.push(`${t.cost.toFixed(1)} effective m · ${t.cost<=(S.sel.move||CR.V.move)?'1 action':'dash, 2 actions'}${t.snapped?' · into cover':''}`);
   else { const e=w.entries().find(x=>Math.hypot(x.out[0]-t.p[0],x.out[1]-t.p[1])<1.1); if(e) parts.push(`${e.kind==='window'?'Window':(e.role||'side')+' door'}: ${usable(e,S.sel)?'right click to stack here':'only a Breacher\'s charge gets through'}`); }
   hoverEl.textContent=parts.join('\n'); hoverEl.style.whiteSpace='pre-line'; }
@@ -778,13 +795,13 @@ function frame(now){ requestAnimationFrame(frame); const real=Math.min(.05,(now-
     let moving=now-(u.tpMoveT||0)<120;
     if(Motion.busy(f)&&u.alive){ u.x=f.root.position.x; u.z=f.root.position.z; moving=true; }   // a vault through a window: the clip moves the body
     else if(u.route&&!u.paused){ if(!u.route.length||(!u.alive&&!u.evac)){ u.route=null; const r=u.done; u.done=null; r&&r(); }
-      else { const q=u.route[0], dx=q.x-u.x, dz=q.z-u.z, d=Math.hypot(dx,dz), sp=(u.stroll?1.4:S.phase==='explore'?2.2:3.6)*dt; moving=true;
+      else { const q=u.route[0], dx=q.x-u.x, dz=q.z-u.z, d=Math.hypot(dx,dz), sp=(u.fast?9:u.stroll?1.4:S.phase==='explore'?2.2:3.6)*dt; moving=true;
         if(q.through&&!q.opened&&d<.75){ q.opened=true; opening(u,q.through);
           // a window: climb through it with the motion module's vault
           if(q.through.e&&q.through.e.type==='window'&&f.root.visible&&!Motion.reduce&&d>.3){ const mid=[(q.through.seg[0]+q.through.seg[2])/2,(q.through.seg[1]+q.through.seg[3])/2], yaw=Math.atan2(dx,dz);
             const dur=Motion.traverse(f,{type:'vault',x:mid[0]-Math.sin(yaw)*.12,z:mid[1]-Math.cos(yaw)*.12,yaw,height:Math.max(.4,S.w.FY+(q.through.e.win.sill||.9)-yOf(u.x,u.z)),depth:.25},motionState(u,'ready')); if(dur){ u.face=yaw; u.route.shift(); acting.push(u); continue; } } }
         const step=Math.min(d,sp); if(d>1e-6){ u.x+=dx/d*step; u.z+=dz/d*step; u.face=Math.atan2(dx,dz); } u.trav+=step; if(d<=sp) u.route.shift();
-        if(u.trav>=.3){ u.trav=0; if(S.phase==='exec'||S.phase==='raiders') overwatchCheck(u); } } }
+        if(u.trav>=.3){ u.trav=0; if(S.phase==='exec'||S.phase==='raiders'||u.fast) overwatchCheck(u); } } }
     if(moving||u.aiming) acting.push(u);
     if(u.team==='raider'&&u.unaware&&u.alive&&S.phase==='explore'&&!(u.route&&u.route.length)){ let a=u.look-u.face; a=Math.atan2(Math.sin(a),Math.cos(a)); u.face+=a*Math.min(1,dt*1.5); }
     if(u.reloading) u.reloading=Math.max(0,u.reloading-dt);
@@ -803,7 +820,9 @@ function frame(now){ requestAnimationFrame(frame); const real=Math.min(.05,(now-
   // the interiors' section cutaway: walls between the camera and the focus drop to a stub. The focus is the floor under
   // the pointer while it moves over the building, otherwise whoever the camera is following.
   if(typeof CUT!=='undefined'&&typeof stepCut==='function'){ const p=cutAt&&now-cutT<2500?cutAt:[view.target.x,view.target.z]; CUT.goal.set(p[0],0,p[1]); }
+  if(STRICT) strictViewPre();
   placeCamera();
+  if(STRICT&&S.view==='tp'&&S.sel&&!FP&&S.phase!=='over') svCamera(Math.max(S.tpRaw||.016,.016));
   if(S.tp&&!FP&&S.sel&&S.phase!=='over') tpCamera(Math.max(S.tpRaw||.016,.016)); else tpOff();
   const shot=S.cam||(planning()&&S.actionCam&&S.camPreview);
   const rawDt=Math.min(.5,(now-(frame.lastRaw||now))/1000); frame.lastRaw=now;   // the camera eases on wall-clock time, so it arrives on any frame rate
@@ -954,6 +973,79 @@ function tpKey(e){ const k=e.key.toLowerCase(), u=S.sel; if(!u||!tpLive()) retur
   if(k==='h'){ S.tpFollow=!S.tpFollow; log(S.tpFollow?'The squad follows.':'The squad holds.'); return true; }
   if(k==='f'){ tpUse(); return true; } if(k==='g'){ tpBomb(); return true; } if(k==='x'){ tpCharge(); return true; }
   return false; }
+// ---------- strict rounds: moves now, actions together, three cameras, rooms seen before they open ----------
+const canDash=u=>STRICT&&!u.dashed&&!(u.order&&u.order.act);
+// from outside you see the outside: a soldier out there sees into the building only through an opening (a window, a
+// doorway, a breach) within VANTAGE m of where they stand
+const VANTAGE=2.5;
+function vantage(u,q){ if(u.lv||S.w.insideAt(u.x,u.z)||!S.w.insideAt(q[0],q[1])) return true; const cr=[]; if(!S.w.sight(P(u),q,{collect:cr})) return false;
+  const ext=cr.filter(o=>o.ext||(o.e&&o.e.ext)); if(!ext.length) return true;
+  return ext.some(o=>SP.ptSeg(u.x,u.z,...o.seg).d<=VANTAGE); }
+// a move happens at once (a quick run), costs from the round's allowance, and may draw overwatch fire on the way;
+// beyond the allowance, a dash spends the soldier's action. What they see afterwards is the intel for the plan.
+function strictMove(u,p,cost,path){ if(!path||S.busy||!u.alive) return; const mv=u.move||CR.V.move; let dash=false;
+  if(cost>u.mvLeft+1e-6){ if(!canDash(u)||cost>u.mvLeft+mv+1e-6){ log('Out of reach this round.'); return; } dash=true; }
+  if(dash){ u.dashed=true; u.mvLeft=u.mvLeft+mv-cost; if(u.order) u.order.act=null; } else u.mvLeft-=cost;
+  S.busy=true; clearReach(); hideHover(); closeMenu(); u.ow=false; u.hunker=false; u.stack=null;
+  return u.movePromise=(async()=>{ u.fast=true; await walk(u,path.points); u.fast=false;
+    if(dirtyBuild) rebuild(); updateVision(0); revealRooms(); strictAlert(u); await wait(60);
+    S.busy=false; if(S.phase==='plan'&&S.sel){ select(S.sel); } drawBar(); drawHud(); })(); }
+// climbing a ladder or dropping through a hole is movement too: 4 m of the allowance
+async function strictTraverse(u,act){ const cost=4, mv=u.move||CR.V.move; await (u.movePromise||null); for(let k=0;k<100&&S.busy;k++) await wait(50);
+  if(u.mvLeft<cost&&!canDash(u)){ log(`${u.name} has no movement left to ${act.type==='climb'?'climb':'drop'}.`); return; }
+  if(u.mvLeft>=cost) u.mvLeft-=cost; else { u.dashed=true; u.mvLeft=u.mvLeft+mv-cost; }
+  S.busy=true; clearReach(); if(act.type==='climb') await climb(u,act.ladder,act.dir); else await dropDown(u,act.hole);
+  updateVision(0); revealRooms(); strictAlert(u); S.busy=false; select(u); drawBar(); drawHud(); }
+// a raider who notices: they and anyone near them stop being unaware, and the clock on reinforcements starts
+function alertFrom(r,why){ if(!r.unaware) return; r.unaware=false; r.revealT=2; bark(r,'rSpot');
+  for(const o of S.units) if(o.team==='raider'&&o.alive&&o.unaware&&CR.dist(o,r)<14) o.unaware=false;
+  const M=S.mission; if(M.reinforceIn==null) M.reinforceIn=3; if(why){ log(why); flash('Spotted',why,false); } inkAll(); drawHud(); }
+function strictAlert(u){ for(const r of S.units){ if(r.team!=='raider'||!r.alive||!r.unaware) continue; if(u.lv?seesUp(r,u):CR.sees(S.w,r,P(u))) alertFrom(r,`${r.vis?r.name:'Someone'} saw ${u.name}.`); } }
+// a breach is an action: the entry opens (a charge for a barricade), the soldier goes in, and the rooms open up
+async function strictBreach(u,e){ const chg=!S.w.props(e.o).cross; if(chg&&u.kit.charge<=0){ log(`${u.name} has no charge for the barricade.`); return; }
+  if(chg){ u.kit.charge--; shake=.35; pop(e.out,'BLAM','crit'); } const ed=e.e;
+  if(/door/.test(ed.type)){ if(S.w.doorState(ed)!=='broken') S.w.setDoor(ed.key,'broken'); } else if(ed.type==='window'&&ed.win.state!=='broken'){ S.w.setWindow(ed.key,'broken'); S.rec.windows[S.w.LV+ed.key]=1; }
+  rebuild(); u.entryMod=ed.type==='window'?-10:0; bark(u,'charge'); const mid=[(e.o.seg[0]+e.o.seg[2])/2,(e.o.seg[1]+e.o.seg[3])/2];
+  if(S.w.clearAt(...e.in)&&!S.units.some(v=>v!==u&&(v.alive||v.down)&&Math.hypot(v.x-e.in[0],v.z-e.in[1])<.7)){ u.fast=true; await walk(u,[{x:u.x,z:u.z},{x:mid[0],z:mid[1],through:e.o},{x:e.in[0],z:e.in[1]}]); u.fast=false; }
+  log(`${u.name} breaches the ${ed.type==='window'?'window':'door'}.`); revealRooms(); for(const r of S.units) if(r.team==='raider'&&r.alive&&CR.dist(r,u)<14) alertFrom(r); }
+// rooms: closed (a dark block to the wall tops) until a soldier has had a line into them: standing in it, or seeing
+// any of its floor through a doorway, a window, a breach or a hole in the roof. Then its cutaway opens for good.
+function revealRooms(){ if(!STRICT||!S.intel) return; const I=S.intel, rooms=S.G.P.rooms, roomOf=S.G.P.roomOf, M=S.G.M; let changed=false;
+  for(const rm of rooms){ if(I.rooms.has(rm.id)) continue; const step=Math.max(1,Math.floor(rm.cells.length/40)); let seen=false;
+    for(const v of standing()){ if(seen) break; const here=Math.floor(v.z-M.v0)*M.W+Math.floor(v.x-M.u0); if(!v.lv&&S.w.insideAt(v.x,v.z)&&roomOf[here]===rm.id){ seen=true; break; }
+      for(let k=0;k<rm.cells.length&&!seen;k+=step){ const c=rm.cells[k], q=[M.u0+c%M.W+.5,M.v0+((c/M.W)|0)+.5]; if(Math.hypot(q[0]-v.x,q[1]-v.z)>CR.V.spot) continue;
+        if(v.lv?(S.roof&&S.roof.view([v.x,v.z],q,false)):(S.w.sight(P(v),q)&&vantage(v,q))) seen=true; } }
+    if(seen){ I.rooms.add(rm.id); changed=true; log(`Eyes on the ${rm.name.toLowerCase()}.`); } }
+  if(changed||!fogMesh) drawFog(); }
+let fogMesh=null; const fogMat=new THREE.MeshLambertMaterial({color:0x4b463f});
+function drawFog(){ if(fogMesh){ scene.remove(fogMesh); fogMesh.geometry.dispose(); fogMesh=null; } if(!STRICT||!S.intel) return;
+  const M=S.G.M, roomOf=S.G.P.roomOf, cells=[]; for(let c=0;c<M.W*M.H;c++) if(M.mask[c]&&!S.intel.rooms.has(roomOf[c])) cells.push(c);
+  if(!cells.length) return; const H=S.w.FY+S.G.wallH+.04; fogMesh=new THREE.InstancedMesh(new THREE.BoxGeometry(1,H,1),fogMat,cells.length);
+  cells.forEach((c,k)=>{ tmpM.makeTranslation(M.u0+c%M.W+.5,H/2,M.v0+((c/M.W)|0)+.5); fogMesh.setMatrixAt(k,tmpM); }); fogMesh.frustumCulled=false; scene.add(fogMesh); }
+// the three cameras
+const svGoal=new THREE.Vector3(), svNow=new THREE.Vector3(); let svOn=false;
+function setView(v){ if(!STRICT) return; S.view=v; svOn=false;
+  if(v==='iso'){ view.el=.615; view.az=Math.round((view.az-Math.PI/4)/(Math.PI/2))*(Math.PI/2)+Math.PI/4; view.dist=clamp(view.dist,40,120); }
+  if(v==='top'){ view.el=1.53; view.az=Math.round(view.az/(Math.PI/2))*(Math.PI/2); view.dist=clamp(view.dist,40,120); }   // square to the building
+  if(v==='tp'&&S.sel){ S.svYaw=S.sel.face; S.svPitch=S.svPitch==null?.15:S.svPitch; S.svDist=S.svDist||3.4; }
+  for(const b of document.querySelectorAll('#viewSeg button')) b.setAttribute('aria-pressed',b.dataset.v===v); }
+function strictViewPre(){ const open=S.intel&&S.intel.rooms.size>0;
+  const inside=S.sel&&!S.sel.lv&&S.w.insideAt(S.sel.x,S.sel.z);   // over the shoulder outside, walls stay whole
+  view.mode=!open||(S.view==='tp'&&!inside)?'shell':S.view==='top'?'low':'cutaway';
+  if(S.view==='iso'){ view.el=.615; if(camera.fov!==20){ camera.fov=20; camera.updateProjectionMatrix(); } }
+  else if(S.view==='top'){ view.el=1.53; if(camera.fov!==28){ camera.fov=28; camera.updateProjectionMatrix(); } } }
+function svCamera(rawDt){ const u=S.sel, lv=u.lv||0, y=yOf(u.x,u.z,lv), yaw=S.svYaw||0, pt=S.svPitch||.15, d=S.svDist||3.4, fx=Math.sin(yaw), fz=Math.cos(yaw), cp=Math.cos(pt);
+  svGoal.set(u.x-fx*d*cp-fz*.55,y+1.6+d*Math.sin(pt),u.z-fz*d*cp+fx*.55);
+  if(!svOn){ svNow.copy(camera.position); svOn=true; } svNow.lerp(svGoal,1-Math.exp(-rawDt*12));
+  camera.position.copy(svNow); camera.lookAt(svNow.x+fx*cp*10,svNow.y-Math.sin(pt)*10+.5,svNow.z+fz*cp*10);
+  if(camera.fov!==50){ camera.fov=50; camera.updateProjectionMatrix(); } if(typeof CUT!=='undefined') CUT.goal.set(u.x,0,u.z); }
+function strictStart(){ S.intel={rooms:new Set()}; S.mission.reinforceIn=null; S.round=1;
+  const sq=standing(); let x=0,z=0; for(const u of sq){ x+=u.x; z+=u.z; } view.target.set(x/sq.length,0,z/sq.length); view.dist=70; S.camGoal=null;
+  setView('iso'); for(const u of squad()) u.free=false; beginPlan(); drawFog();
+  flash('Round 1','Click: move now · right click: act · Go',true);
+  log('Strict rounds: a move happens at once, within the round\'s allowance, and shows what that soldier sees. Actions wait for Go and the squad carries them out together.'); }
+if(STRICT){ const seg=$('viewSeg'); if(seg){ seg.hidden=false; seg.addEventListener('click',e=>{ const b=e.target.closest('button[data-v]'); if(b) setView(b.dataset.v); }); }
+  for(const id of ['tpBtn','wallsBtn']){ const el=$(id); if(el) el.hidden=true; } }
 // ---------- header ----------
 $('bSel').onchange=()=>{ S.seed=0; setup(); }; $('hSel').onchange=()=>setup();
 $('rerollBtn').onclick=()=>{ S.seed++; setup(); }; $('restartBtn').onclick=()=>setup();
