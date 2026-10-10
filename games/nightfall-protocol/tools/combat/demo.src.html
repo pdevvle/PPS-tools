@@ -1,0 +1,130 @@
+<title>Nightfall Interior Combat</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{color-scheme:dark;--frame:#1b1c1e;--panel:rgba(24,24,26,.9);--line:#38393d;--text:#e2e0dc;--muted:#98968f;--gold:#e0a526;--red:#c23b2e;--blue:#2f9fc4;--body:'IBM Plex Sans Condensed',system-ui,sans-serif;--mono:'IBM Plex Mono',ui-monospace,monospace}
+*{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden;background:var(--frame);color:var(--text);font:14px var(--body)}
+.app{display:flex;flex-direction:column;height:100%}
+header{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;padding:7px 12px;border-bottom:1px solid var(--line)}
+header h1{font:600 16px var(--body);margin:0 8px 0 0;letter-spacing:.02em}header h1 span{color:var(--gold)}
+header label{color:var(--muted);font-size:12px;display:flex;gap:5px;align-items:center}
+select,button{background:#2d2f33;border:1px solid var(--line);color:var(--text);font:600 13px var(--body);padding:5px 9px;border-radius:3px;cursor:pointer}
+button[aria-pressed="true"]{border-color:var(--gold);color:#f3d38a}button:disabled{opacity:.45;cursor:default}
+button.pri{background:var(--gold);color:#211b10;border-color:var(--gold)}
+#stage{position:relative;flex:1;min-height:0;overflow:hidden}#view{display:block;width:100%;height:100%;touch-action:none}
+.hud{position:absolute;left:10px;top:10px;background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:6px 9px;font:12px var(--mono);max-width:min(330px,60%);z-index:2}
+.hud b{font:600 14px var(--body);display:block}.hud .sub{color:var(--muted)}
+.hover{position:absolute;right:10px;top:10px;background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:6px 9px;font:12px var(--mono);max-width:min(300px,45%);z-index:2}
+.hover:empty{display:none}
+.log{position:absolute;left:10px;bottom:10px;width:min(300px,40%);max-height:30%;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:4px 8px;font:11px/1.45 var(--mono);color:#c9c6bf;z-index:2}
+.log p{margin:0}.log p:first-child{color:var(--text)}
+.banner{position:absolute;left:50%;top:12px;transform:translateX(-50%);background:var(--panel);border:1px solid var(--red);padding:8px 14px;border-radius:5px;text-align:center;max-width:min(520px,80%);z-index:3}
+.banner,.hud,.hover{pointer-events:none}.banner button{pointer-events:auto}
+.banner b{display:block;font:600 16px var(--body);margin-bottom:2px}.banner.ours{border-color:var(--gold)}
+.bar{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:4px;max-width:min(760px,calc(100% - 330px));z-index:3}
+.units,.acts{display:flex;gap:5px;flex-wrap:wrap;justify-content:center}.acts{background:var(--panel);border-radius:5px;padding:5px}
+.unit{background:var(--panel);border:1px solid var(--line);color:var(--text);font:12px var(--mono);padding:4px 7px;border-radius:4px;min-width:88px;text-align:left}
+.unit[aria-pressed="true"]{border-color:var(--gold)}.unit.dead{opacity:.4}.unit.foe{border-color:#6e1a10}.unit.down{border-color:var(--red)}.unit em{font-style:normal;color:var(--muted)}.unit.flee{border-color:#9b4fc4}
+.why{margin:4px 0 0;display:grid;grid-template-columns:1fr auto;gap:0 12px}.why .neg{color:#e2b0a8}.why .pos{color:#9fd3a8}.why b{border-top:1px solid var(--line);padding-top:2px}
+.unit i{display:block;height:4px;background:#3a3b3f;margin-top:3px}.unit i s{display:block;height:100%}
+.pop{position:absolute;left:0;top:0;font:700 15px var(--mono);color:#fff;text-shadow:0 1px 3px #000;pointer-events:none;transform:translate(-50%,-100%);z-index:2}
+.pop.miss{color:#d9d4c8}.pop.crit{color:#ffcf5a}.pop.info{color:#9fd3e6;font-size:13px}
+.hint{color:var(--muted);font:12px var(--mono);padding:5px}
+.ctx{position:absolute;z-index:5;min-width:190px;max-width:280px;background:rgba(24,24,26,.96);border:1px solid var(--line);border-radius:6px;padding:4px;box-shadow:0 6px 18px rgba(0,0,0,.45)}
+.ctx h3{margin:2px 6px 4px;font:600 12px var(--mono);color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
+.ctx button{display:flex;justify-content:space-between;gap:10px;width:100%;text-align:left;margin:0;border:0;background:transparent;padding:6px 8px;border-radius:4px;font:600 13px var(--body)}
+.ctx button:hover:not(:disabled),.ctx button:focus-visible{background:#2d2f33;outline:none}.ctx button span{font:12px var(--mono);color:#f3d38a}.ctx button:disabled span{color:var(--muted)}
+.ctx p{margin:2px 8px 4px;font:11px var(--mono);color:var(--muted)}
+.badge.plan{border-color:#4aa3ff;color:#cfe6ff}.badge.ghost{border-color:#6c6a66;color:#b9b6ae;background:rgba(24,24,26,.6)}.badge.over{border-color:#e2b0a8;color:#e2b0a8}
+.unit small{display:block;font:11px var(--mono);color:#9fc6ec;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px}
+.badges{position:absolute;inset:0;pointer-events:none;z-index:2}.badge{position:absolute;transform:translate(-50%,-100%);font:600 12px var(--mono);background:rgba(24,24,26,.82);border:1px solid #6e1a10;color:#f1eee8;padding:1px 5px;border-radius:3px;white-space:nowrap}
+.badge.zone{border-color:#3f6f8f;color:#cfe6ff;background:rgba(20,32,44,.78);font-weight:400;font-size:11px;transform:translate(-50%,-50%)}
+.badge.flank{border-color:var(--gold);color:#f3d38a}.badge .arm{color:#9fd3e6}.badge.evac{border-color:#3fae7f;color:#9fd3a8}.badge.loot{border-color:var(--gold);color:#f3d38a}
+#stage.fp .bar,#stage.fp .hud,#stage.fp .log,#stage.fp .banner,#stage.fp .badges,#stage.fp .hover,#stage.fp .pop{display:none}
+.fps{position:absolute;inset:0;z-index:4;cursor:none}.fps-vig{position:absolute;inset:0;background:radial-gradient(circle at 50% 50%,transparent 38%,rgba(0,0,0,.55) 75%);pointer-events:none}
+.fps-x{position:absolute;width:44px;height:44px;transform:translate(-50%,-50%);pointer-events:none}.fps-x i{position:absolute;background:#f3d38a;box-shadow:0 0 3px #000}
+.fps-x i:nth-child(1){left:21px;top:0;width:2px;height:14px}.fps-x i:nth-child(2){left:21px;bottom:0;width:2px;height:14px}.fps-x i:nth-child(3){top:21px;left:0;height:2px;width:14px}.fps-x i:nth-child(4){top:21px;right:0;height:2px;width:14px}.fps-x b{position:absolute;left:20px;top:20px;width:4px;height:4px;border-radius:50%;background:#ff5a3a}
+.fps-top{position:absolute;left:50%;top:14px;transform:translateX(-50%);background:var(--panel);border:1px solid var(--gold);border-radius:5px;padding:5px 12px;font:12px var(--mono);text-align:center;min-width:240px}.fps-top b{display:block;font:600 14px var(--body)}
+.fps-bar{display:block;height:4px;background:#3a3b3f;margin-top:4px}.fps-bar s{display:block;height:100%;background:var(--gold)}
+.fps-help{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);margin:0;background:var(--panel);padding:4px 10px;border-radius:4px;font:12px var(--mono);color:var(--muted)}
+.banner button{background:#2d2f33;border:1px solid var(--line);color:var(--text);font:600 13px var(--body);padding:5px 10px;margin:6px 3px 0;cursor:pointer;border-radius:3px}.banner button.pri{background:var(--gold);color:#211b10;border-color:var(--gold)}
+/* decluttered: one header row with a View menu, a small bottom bar, a short log, pips over the soldiers */
+.menu{position:relative}.menu summary{list-style:none;cursor:pointer;background:#2d2f33;border:1px solid var(--line);padding:5px 9px;border-radius:3px;font:600 13px var(--body)}.menu summary::-webkit-details-marker{display:none}
+.menu[open] summary{border-color:var(--gold);color:#f3d38a}.menu-body{position:absolute;right:0;top:calc(100% + 4px);z-index:10;display:flex;flex-direction:column;gap:4px;width:250px;background:rgba(24,24,26,.97);border:1px solid var(--line);border-radius:5px;padding:6px;box-shadow:0 6px 18px rgba(0,0,0,.45)}
+.menu-body button{text-align:left}.menu-body p{margin:4px 2px 0;font:11px/1.45 var(--mono);color:var(--muted)}
+.log{max-height:4.6em;opacity:.78;transition:max-height .2s,opacity .2s}.log:hover{max-height:40%;opacity:1}
+.acts{padding:4px}.acts:empty{display:none}.acts button{padding:5px 12px}
+.badge.pips{border:0;background:rgba(24,24,26,.55);padding:2px 3px;line-height:0}.badge.pips i{display:inline-block;width:5px;height:6px;margin:0 1px;background:#3fae7f;border-radius:1px}.badge.pips i.lost{background:#55575c}.badge.pips.hurt i{background:#e0a526}.badge.pips em{font:600 10px var(--mono);font-style:normal;color:#e2b0a8;line-height:1;margin-left:3px}.badge.pips.sel{outline:1px solid var(--gold)}
+/* third person, free: crosshair and the key line */
+.tp-x{position:absolute;width:30px;height:30px;transform:translate(-50%,-50%);pointer-events:none;z-index:3}.tp-x i{position:absolute;background:#f3d38a;box-shadow:0 0 2px #000}
+.tp-x i:nth-child(1){left:14px;top:0;width:2px;height:9px}.tp-x i:nth-child(2){left:14px;bottom:0;width:2px;height:9px}.tp-x i:nth-child(3){top:14px;left:0;height:2px;width:9px}.tp-x i:nth-child(4){top:14px;right:0;height:2px;width:9px}
+.tp-x b{position:absolute;left:13px;top:13px;width:4px;height:4px;border-radius:50%;background:#ff5a3a}.tp-x.steady{transform:translate(-50%,-50%) scale(.7)}
+.tp-tip{position:absolute;left:50%;bottom:54px;transform:translateX(-50%);z-index:3;max-width:min(760px,92%);text-align:center;font:12px/1.5 var(--mono);color:#cfcac0;pointer-events:none;text-shadow:0 1px 2px #000}
+.tp-tip b{display:inline-block;background:#f3d38a;color:#211b10;padding:0 5px;border-radius:2px;margin-right:4px}.tp-tip span{opacity:.75}
+.seg{display:flex}.seg button{border-radius:0;margin-left:-1px}.seg button:first-child{border-radius:3px 0 0 3px}.seg button:last-child{border-radius:0 3px 3px 0}.seg[hidden]{display:none}
+/* the squad up close: faces on the bar, a card for the selected soldier, what they say, the shot camera */
+.unit .face{width:34px;height:34px;border-radius:3px;float:left;margin:0 6px 0 0;background:#34302b;object-fit:cover}.unit.dead .face{filter:grayscale(1) brightness(.6)}.unit.down .face{filter:sepia(.6) saturate(2) hue-rotate(-25deg)}
+.hud .card{display:flex;gap:8px;margin-top:6px;padding-top:6px;border-top:1px solid var(--line)}.hud .card img{width:62px;height:62px;border-radius:4px;background:#34302b}
+.hud .card b{font:600 14px var(--body);display:block}.hud .card span{display:block;color:var(--muted)}.hud .card .hp i{display:inline-block;width:7px;height:9px;margin-right:2px;background:#3fae7f;border-radius:1px}.hud .card .hp i.lost{background:#3a3b3f}.hud .card .st{color:#e2b0a8}
+.bark{position:absolute;left:0;top:0;transform:translate(-50%,-100%);max-width:200px;background:#f1eee8;color:#1d1814;font:600 13px var(--body);padding:4px 8px;border-radius:8px;pointer-events:none;z-index:3;box-shadow:0 2px 6px rgba(0,0,0,.35)}
+.bark b{display:block;font:600 10px var(--mono);color:#7a6a52;text-transform:uppercase;letter-spacing:.05em}.bark::after{content:'';position:absolute;left:50%;bottom:-6px;margin-left:-6px;border:6px solid transparent;border-bottom:0;border-top-color:#f1eee8}
+.bark.foe{background:#f3d9d3}.bark.foe::after{border-top-color:#f3d9d3}.bark.foe b{color:#8a2a1e}
+#stage.cine .badges,#stage.cine .bar,#stage.cine .hover,#stage.cine .log{opacity:0;transition:opacity .2s}#stage.cine::after{content:'';position:absolute;inset:0;pointer-events:none;box-shadow:inset 0 70px 0 -30px rgba(0,0,0,.55),inset 0 -70px 0 -30px rgba(0,0,0,.55);z-index:2}
+/* debug copy */
+.dbg{position:absolute;right:10px;bottom:10px;max-height:calc(100% - 20px);overflow:auto;z-index:4;width:250px;background:rgba(20,32,44,.92);border:1px solid #3f6f8f;border-radius:5px;padding:7px 9px;font:12px var(--mono);color:#cfe6ff}
+.dbg b{font:600 13px var(--body);color:#9fd3e6}.dbg label{display:block;margin:3px 0;cursor:pointer}.dbg .row{display:flex;gap:5px;margin-top:5px}.dbg .row button{flex:1;font-size:12px;padding:4px}.dbg p{margin:6px 0 0;color:#8fb3c9;font-size:11px}.dbg pre{margin:6px 0 0;white-space:pre-wrap;font-size:11px;color:#e2e0dc}
+@media (max-width:760px){ .bar{left:8px;right:8px;transform:none;max-width:none;bottom:6px} .unit{min-width:0;padding:3px 6px;font-size:11px} .banner{top:auto;bottom:150px;max-width:calc(100% - 16px)} .hud{max-width:55%} .log{display:none} .hover{top:auto;bottom:120px;right:8px;max-width:60%} }
+</style>
+<div class="app">
+<header>
+  <h1>Nightfall <span>interior combat</span></h1>
+  <label>Building <select id="bSel"></select></label>
+  <label>Inside <select id="hSel"><option value="den">Raider den</option><option value="holdout">Holdout (hostile)</option></select></label>
+  <button type="button" id="restartBtn">Restart</button>
+  <div class="seg" id="viewSeg" hidden role="group" aria-label="Camera"><button type="button" data-v="tp" title="Over the shoulder of the selected soldier">Shoulder</button><button type="button" data-v="iso" aria-pressed="true">Isometric</button><button type="button" data-v="top">Top</button></div>
+  <details class="menu" id="viewMenu"><summary>View ▾</summary><div class="menu-body">
+    <button type="button" id="tpBtn" aria-pressed="false" title="Over the shoulder of the selected soldier: move with WASD and shoot with the mouse, in real time">Third person, free [V]</button>
+    <button type="button" id="camBtn" aria-pressed="true" title="When someone fires, the camera goes over their shoulder; hovering an attack previews it">Action cam</button>
+    <button type="button" id="sightBtn" aria-pressed="true" title="While concealed: the raiders' eyes">Raiders' sight</button>
+    <button type="button" id="labelsBtn" aria-pressed="false" title="On the test range: what each part of the building tests">Test range labels</button>
+    <button type="button" id="wallsBtn" title="Cutaway: walls facing the camera drop to knee height">Walls: cutaway</button>
+    <button type="button" id="fpsBtn" aria-pressed="false" title="When one of your soldiers takes an overwatch shot, aim it yourself in first person">Aim overwatch yourself</button>
+    <button type="button" id="rerollBtn" title="Same building, another procedural layout">Reroll layout</button>
+    <button type="button" id="rosterBtn" title="Start a fresh squad: ranks and the memorial are kept in this browser">New squad</button>
+    <p>Click a soldier to select them (Tab: next). Left click: move. Right click a raider, a thing or the soldier: what to do. Space: Go. WASD, Q/E: camera.</p>
+  </div></details>
+</header>
+<div id="stage">
+  <canvas id="view"></canvas>
+  <div class="hud" id="hud"></div>
+  <div class="hover" id="hover"></div>
+  <div class="log" id="log" aria-live="polite"></div>
+  <div class="banner" id="banner" hidden></div>
+  <div class="badges" id="badges" aria-hidden="true"></div>
+  <div class="fps" id="fps" hidden><div class="fps-vig"></div><div class="fps-x" id="fpsX"><i></i><i></i><i></i><i></i><b></b></div><div class="fps-top"><b id="fpsWho"></b><span id="fpsInfo"></span><i class="fps-bar"><s id="fpsBar"></s></i></div><p class="fps-help">Overwatch: aim with the mouse, click to fire · Esc lets the roll decide</p></div>
+  <div class="ctx" id="ctx" hidden role="menu"></div>
+  <div class="bar" id="bar"><div class="acts" id="acts"></div></div>
+</div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+<script>/*FIGUREKIT*/</script>
+<script>/*MOTION*/</script>
+<script>
+/*INTERIORS_GEN*/
+/*INTERIORS_RENDER*/
+// Page globals the interiors physics code expects (its own page defines these in its panel); the combat page points
+// them at the current fight. G: the generated building. REC: its change record. refresh(): redraw after a change.
+let G=null, REC=null, dirty=false;
+const hudHover={get textContent(){ return ''; }, set textContent(v){ if(window.__combatNote) window.__combatNote(v); }};
+function refresh(){ if(window.__combatRefresh) window.__combatRefresh(); }
+/*INTERIORS_PHYS*/
+</script>
+<script>/*RULES*/</script>
+<script>/*WORLD*/</script>
+<script>/*TESTMAP*/</script>
+<script>/*ROOF*/</script>
+<!--DEBUGFLAG-->
+<script>
+/*DEMO*/
+</script>
+<!--DEBUGPANEL-->

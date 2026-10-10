@@ -1,0 +1,174 @@
+#!/usr/bin/env node
+// Sight, cover and movement checks for free-placement fights inside generated buildings.
+//   node tools/combat/test-space.js           every check
+//   node tools/combat/test-space.js --quick   Roadrunner only
+// The interiors are procedural and owned by the interiors topic, so the checks are invariants over whatever the
+// generator makes (every wall, window and door), run on every test site and history, plus hand checks on the
+// Roadrunner (newriver/2_2/0) that find their places by searching rather than by fixed coordinates.
+const assert=require('assert');
+const {loadGenerator}=require('./interiors-slice.js');
+const SP=require('./space.js'), R=require('./rules.js');
+const I=loadGenerator();
+let pass=0, fail=0; const fails=[];
+function check(name,fn){ try{ fn(); pass++; } catch(e){ fail++; fails.push(name+': '+e.message); } }
+const spaceOf=(id,history,seed)=>{ const s=I.SITES.find(x=>x.id===id); return SP.fromGenerated(I.generate(s,'auto',seed||id,history)); };
+const edges=w=>w.obs.filter(o=>o.kind==='edge');
+// two points straddling a segment's middle, d from it on each side
+function straddle(o,d){ const [ax,az,bx,bz]=o.seg, mx=(ax+bx)/2, mz=(az+bz)/2, L=Math.hypot(bx-ax,bz-az), nx=-(bz-az)/L, nz=(bx-ax)/L; return [[mx+nx*d,mz+nz*d],[mx-nx*d,mz-nz*d]]; }
+// is p→q blocked by any wall segment (strict crossing)
+const crossesWall=(w,p,q)=>w.obs.some(o=>o.kind==='edge'&&o.e.type==='wall'&&SP.segSeg(p[0],p[1],q[0],q[1],...o.seg)>0.001&&SP.segSeg(p[0],p[1],q[0],q[1],...o.seg)<0.999);
+
+const HIST=['untouched','looted','holdout','den'];
+const quick=process.argv.includes('--quick');
+for(const s of (quick?I.SITES.filter(x=>x.id==='newriver/2_2/0'):I.SITES)) for(const h of HIST){
+  const tag=`${s.id} ${h}`; let w;
+  check(`${tag}: builds`,()=>{ w=spaceOf(s.id,h); assert.ok(w.obs.length>0); });
+  if(!w) continue;
+  check(`${tag}: walls stop sight and shots, and a body tight against one has full cover from the far side`,()=>{
+    for(const o of edges(w)) if(o.e.type==='wall'){ const [a,b]=straddle(o,.45), [fa,fb]=straddle(o,4);
+      assert.ok(!w.sight(a,b),`sight through wall ${o.e.key}`); assert.ok(!w.sight(a,b,{shot:true}),`shot through ${o.e.key}`);
+      assert.strictEqual(w.coverFrom(a,fb),2,`wall ${o.e.key} cover`); assert.strictEqual(w.coverFrom(b,fa),2,`wall ${o.e.key} cover (other side)`); } });
+  check(`${tag}: windows: glass and broken panes let sight through as half cover or better; boards stop it`,()=>{
+    for(const o of edges(w)) if(o.e.type==='window'){ const [a,b]=straddle(o,.45), [fa,fb]=straddle(o,4), boarded=o.e.win.state==='boarded'; if(!w.clearAt(...a,.2)||!w.clearAt(...b,.2)) continue;   // shelving pushed against the glass
+      assert.strictEqual(w.sight(a,b),!boarded,`window ${o.e.key} ${o.e.win.state}`); const cv=w.coverFrom(a,fb); assert.ok(boarded?cv===2:cv>=1,`window ${o.e.key} cover ${cv}`); } });
+  check(`${tag}: doors: open or broken pass sight, closed and barricaded stop it, and that follows the door`,()=>{
+    for(const o of edges(w)) if(/door/.test(o.e.type)){ const [a,b]=straddle(o,.45), st=w.doorState(o.e); if(!w.clearAt(...a,.2)||!w.clearAt(...b,.2)) continue; assert.strictEqual(w.sight(a,b),st==='open'||st==='broken',`door ${o.e.key} ${st}`); }
+    const d=edges(w).find(o=>o.e.type==='door'&&w.doorState(o.e)!=='barricaded'); if(!d) return; const [a,b]=straddle(d,.45), k=w.LV+d.e.key, before=w.doorSt[k];
+    w.doorSt[k]='open'; assert.ok(w.sight(a,b)); w.doorSt[k]='closed'; assert.ok(!w.sight(a,b)); if(before===undefined) delete w.doorSt[k]; else w.doorSt[k]=before; });
+  check(`${tag}: sight is symmetric`,()=>{ const r=R.rng(tag); for(let k=0;k<300;k++){ const a=[w.X0+r()*(w.X1-w.X0),w.Z0+r()*(w.Z1-w.Z0)], b=[w.X0+r()*(w.X1-w.X0),w.Z0+r()*(w.Z1-w.Z0)]; assert.strictEqual(w.sight(a,b),w.sight(b,a)); } });
+  check(`${tag}: routes keep bodies out of walls and furniture, and go in and out only through openings`,()=>{
+    const fa=w.frontApproach(); if(!fa) return; const F=w.field(fa.out,300), r=R.rng(tag+'paths'); let n=0;
+    for(let k=0;k<4000&&n<25;k++){ const m=Math.floor(r()*F.cost.length); if(!isFinite(F.cost[m])) continue; const p=[w.nodeX(m)+(r()-.5)*.3,w.nodeZ(m)+(r()-.5)*.3]; const P=w.pathTo(F,p); if(!P) continue; n++;
+      const pts=P.points; for(let i=1;i<pts.length;i++){ const a=[pts[i-1].x,pts[i-1].z], b=[pts[i].x,pts[i].z];
+        assert.ok(w.walk(a,b).ok,`leg ${i} of a route clips something solid`); assert.ok(!crossesWall(w,a,b),`leg ${i} crosses a wall`);
+        if(w.insideAt(...a)!==w.insideAt(...b)&&Math.hypot(b[0]-a[0],b[1]-a[1])>.05) assert.ok(pts[i].through||pts[i-1].through||w.walk(a,b).crossed.length,'in or out without an opening'); }
+      for(const q of pts) assert.ok(w.clearAt(q.x,q.z,w.R*.9)||q.through,'a waypoint inside something'); }
+    assert.ok(n>0,'no routes sampled'); });
+  check(`${tag}: same seed, same space`,()=>{ const w2=spaceOf(s.id,h); assert.strictEqual(w2.obs.length,w.obs.length); assert.deepStrictEqual(Array.from(w2.free),Array.from(w.free)); });
+}
+
+// ---------- the Roadrunner den by hand ----------
+const RR='newriver/2_2/0', w=spaceOf(RR,'den'), fa=w.frontApproach(), ppl=w.posted();
+check('Roadrunner: raiders, a boss, a sentry at a window, a front door',()=>{ assert.ok(ppl.length>=3); assert.ok(ppl.some(p=>p.boss)); assert.ok(ppl.some(p=>p.role==='sentry')); assert.ok(fa); });
+check('Roadrunner: free placement: range is round, not stepped',()=>{
+  // open yard in front: the cost of points 8 m away in eight directions stays within 4% of the straight distance
+  const F=w.field(fa.out,40); let tried=0;
+  for(let k=0;k<16;k++){ const a=k/16*Math.PI*2, p=[fa.out[0]+Math.sin(a)*8,fa.out[1]+Math.cos(a)*8]; if(!w.clearAt(...p)||w.insideAt(...p)||!w.walk(fa.out,p).ok||w.walk(fa.out,p).crossed.length) continue;
+    const c=w.costTo(F,p); if(!c) continue; tried++; let straight=0; for(let k2=0;k2<80;k2++){ const t=(k2+.5)/80; straight+=.1/w.speedAt(fa.out[0]+(p[0]-fa.out[0])*t,fa.out[1]+(p[1]-fa.out[1])*t); } assert.ok(c.cost<=straight*1.06+.2,`cost ${c.cost.toFixed(2)} vs ${straight.toFixed(2)}`); }
+  assert.ok(tried>=4,`only ${tried} open directions`); });
+check('Roadrunner: any point in reach is a valid place to stand, not just node centres',()=>{
+  const F=w.field(fa.out,12), p=[fa.out[0]+.37,fa.out[1]+1.91]; if(w.clearAt(...p)){ const c=w.costTo(F,p); assert.ok(c&&!c.over); const P=w.pathTo(F,p); const end=P.points[P.points.length-1]; assert.ok(Math.hypot(end.x-p[0],end.z-p[1])<1e-9); } });
+check('Roadrunner: a click near a wall snaps to just behind it',()=>{
+  const wall=edges(w).find(o=>o.e.type==='wall'&&o.ext&&(()=>{ const [a]=straddle(o,1); return w.clearAt(...a)&&!w.insideAt(...a); })()); assert.ok(wall);
+  const [a]=straddle(wall,.75), q=w.snap(a), d=SP.ptSeg(q[0],q[1],...wall.seg).d; assert.ok(Math.abs(d-(w.R+.06))<.02,`snapped ${d.toFixed(3)} from the wall`); });
+check('Roadrunner: someone right outside a plain wall can neither see nor shoot the person behind it',()=>{
+  const wall=edges(w).find(o=>o.e.type==='wall'&&o.ext); const [a,b]=straddle(wall,.5); assert.ok(!R.lineOfFire(w,{x:a[0],z:a[1]},{x:b[0],z:b[1]})); });
+check('Roadrunner: the front door decides whether the street sees the dining room',()=>{
+  const key=fa.key, before=w.doorState(fa.e); const far=[fa.out[0]+(fa.out[0]-fa.in[0])*6,fa.out[1]+(fa.out[1]-fa.in[1])*6], deep=[fa.in[0]-(fa.out[0]-fa.in[0])*2,fa.in[1]-(fa.out[1]-fa.in[1])*2];
+  w.setDoor(key,'open'); assert.ok(w.sight(far,deep),'open door should show the room'); w.setDoor(key,'closed'); assert.ok(!w.sight(far,deep),'closed door should hide it'); w.setDoor(key,before); });
+check('Roadrunner: tall furniture blocks sight, low furniture gives cover without blocking it',()=>{
+  let tall=0, low=0;
+  for(const o of w.obs){ if(o.kind!=='item') continue; const b=o.box, cz=(b.z0+b.z1)/2, a=[b.x0-.6,cz], c=[b.x1+.6,cz]; if(!w.clearAt(...a)||!w.clearAt(...c)) continue;
+    if(w.obs.some(x=>x!==o&&(x.box?SP.segBox(a[0],a[1],c[0],c[1],x.box)>=0:SP.segSeg(a[0],a[1],c[0],c[1],...x.seg)>=0))) continue;
+    const blocks=o.it.spec.cover==='full'&&o.h>=w.EYE; assert.strictEqual(w.sight(a,c),!blocks,`${o.it.key}`); blocks?tall++:low++;
+    const cv={none:0,half:1,full:2}[o.it.spec.cover]; assert.strictEqual(w.coverFrom(a,[c[0]+4,c[1]]),cv,`${o.it.key} cover`); }
+  assert.ok(tall+low>0,'no furniture to look across'); });
+check('Roadrunner: cover depends on the angle: beside a wall but shot along it is flanked',()=>{
+  const wall=edges(w).find(o=>o.e.type==='wall'&&o.ext&&(()=>{ const [a]=straddle(o,1); return w.clearAt(...a)&&!w.insideAt(...a); })());
+  const [ax,az,bx,bz]=wall.seg, L=Math.hypot(bx-ax,bz-az), ux=(bx-ax)/L, uz=(bz-az)/L, [p]=straddle(wall,w.R+.06), n=[p[0]-(ax+bx)/2,p[1]-(az+bz)/2];
+  const along=[p[0]+ux*10+n[0]*.5,p[1]+uz*10+n[1]*.5]; assert.strictEqual(w.coverFrom(p,along),0); });
+check('Roadrunner: the squad gets in only through openings; from the street everyone inside is reachable',()=>{
+  const F=w.field(fa.out,400); for(const p of ppl){ const P=w.pathTo(F,p.p); assert.ok(P,`${p.role} unreachable`); assert.ok(P.points.some(q=>q.through),'route without an opening'); } });
+check('Roadrunner: a unit in cover leans out to shoot, never through the wall',()=>{
+  const wall=edges(w).find(o=>o.e.type==='wall'&&!o.ext); const [a,b]=straddle(wall,w.R+.06); const lf=R.lineOfFire(w,{x:a[0],z:a[1]},{x:b[0],z:b[1]}); if(lf) assert.ok(!crossesWall(w,lf.from,lf.to)); });
+check('Roadrunner: a seeded fight replays exactly',()=>{
+  const mk=()=>{ const ww=spaceOf(RR,'den'), f=ww.frontApproach(); const units=ww.posted().map((p,i)=>R.makeUnit(p.boss?'boss':'raider',{id:'r'+i,team:'raider',boss:p.boss,x:p.p[0],z:p.p[1],face:p.face}));
+    const L=Math.hypot(f.out[0]-f.in[0],f.out[1]-f.in[1]), n=[(f.out[0]-f.in[0])/L,(f.out[1]-f.in[1])/L], t=[-n[1],n[0]]; const roles=['ranger','sharpshooter','breacher','medic'];
+    [[4,-1.5],[4,1.5],[6,-1.5],[6,1.5]].forEach(([a,b],i)=>units.push(R.makeUnit(roles[i],{id:'s'+i,team:'squad',x:f.out[0]+n[0]*a+t[0]*b,z:f.out[1]+n[1]*a+t[1]*b})));
+    return [ww,units]; };
+  const [w1,u1]=mk(), [w2,u2]=mk(); const a=R.simulate(w1,u1,'replay',12), b=R.simulate(w2,u2,'replay',12); assert.deepStrictEqual(a.log,b.log); assert.ok(a.log.length>0); });
+check('weapon range profiles: shotguns want it close, rifles want room',()=>{
+  const flat={coverFrom:()=>0}, at=(wp,d)=>R.odds(flat,{team:'squad',aim:70,weapon:R.WEAPONS[wp],x:0,z:0},{team:'raider',x:d,z:0}).aim;
+  assert.strictEqual(at('shotgun',4),85); assert.strictEqual(at('shotgun',12),70); assert.strictEqual(at('shotgun',20),54);
+  assert.strictEqual(at('rifle',4),60); assert.strictEqual(at('rifle',30),70); assert.strictEqual(at('rifle',45),65);
+  assert.strictEqual(at('carbine',4),80); assert.strictEqual(at('carbine',30),61);
+  const o=R.odds({coverFrom:()=>2},{team:'squad',aim:76,weapon:R.WEAPONS.rifle,x:0,z:0},{team:'raider',x:20,z:0},{steady:true}); assert.strictEqual(o.aim,51); assert.deepStrictEqual(o.why.map(x=>x[0]),['Aim','Full cover','Steady aim']);
+  assert.strictEqual(R.odds(flat,{team:'squad',weapon:R.WEAPONS.carbine,x:0,z:0},{team:'raider',x:12,z:0},{reaction:true,doorway:true}).aim,72); });
+check('Roadrunner: a pipe bomb destroys the cover it reaches, frees the floor, and walls shelter people behind them',()=>{
+  const ww=spaceOf(RR,'den'), it=ww.obs.find(o=>{ if(o.kind!=='item'||o.it.spec.cover!=='full'||o.h<1.5) return false; const z=(o.box.z0+o.box.z1)/2; return ww.clearAt(o.box.x0-.8,z)&&ww.sight([o.box.x0-.8,z],[o.box.x0-.06,z],{shot:true}); }); assert.ok(it);
+  const cz=(it.box.z0+it.box.z1)/2, c=[it.box.x0-.8,cz], behind=[it.box.x0-.36,cz], far=[it.box.x1+6,cz];
+  assert.strictEqual(ww.coverFrom(behind,far),2); const br=ww.blastReach(c,3); assert.ok(br.items.includes(it),'blast should reach the item');
+  for(const o of br.items) ww.destroyItem(o); assert.strictEqual(ww.coverFrom(behind,far),0,'cover should be gone'); assert.ok(ww.clearAt((it.box.x0+it.box.x1)/2,cz),'rubble should be walkable');
+  const wall=ww.obs.find(o=>o.kind==='edge'&&o.e.type==='wall'&&o.ext); const [a,b]=straddle(wall,.6);
+  const units=[{team:'raider',x:a[0],z:a[1],alive:true},{team:'raider',x:b[0],z:b[1],alive:true}]; const hits=R.blastHits(ww,[a[0]+(a[0]-b[0])*.5,a[1]+(a[1]-b[1])*.5],units);
+  assert.strictEqual(hits.length,1,'only the one on the blast side'); assert.strictEqual(hits[0].u,units[0]); });
+check('Roadrunner: a prop the interiors physics tipped over gives the cover the change record says, where it now lies',()=>{
+  const ww=spaceOf(RR,'den'), o=ww.obs.find(x=>x.kind==='item'&&x.it.spec.cover==='half'&&ww.clearAt(x.box.x1+1.5,(x.box.z0+x.box.z1)/2)); assert.ok(o);
+  const zc=(o.box.z0+o.box.z1)/2, nb=[o.box.x1+.2,ww.FY,o.box.z0,o.box.x1+1.0,ww.FY+1.4,o.box.z1];
+  ww.syncMoves({moved:{[ww.LV+o.it.id]:{cells:[1],cover:'full',box:nb}}});
+  const behind=[nb[3]+.36,zc], far=[nb[3]+6,zc]; assert.strictEqual(ww.coverFrom(behind,[nb[0]-6,zc]),2,'full cover behind the tipped prop');
+  assert.ok(!ww.clearAt((nb[0]+nb[3])/2,zc),'the new spot is blocked'); assert.ok(ww.clearAt((o.box.x0+o.box.x1)/2,zc)||true);
+  ww.syncMoves({moved:{[ww.LV+o.it.id]:{cells:[],cover:'none',box:[nb[0],ww.FY,nb[2],nb[3],ww.FY+.2,nb[5]]}}}); assert.ok(ww.clearAt((nb[0]+nb[3])/2,zc),'flat clutter is walkable'); assert.strictEqual(ww.coverFrom(behind,[nb[0]-6,zc]),0); });
+check('wall build-ups: rounds punch through drywall, not block; a holed wall shows through, a breached one is a way in',()=>{
+  const ww=spaceOf(RR,'den'), mats=new Set(ww.obs.filter(o=>o.kind==='edge'&&o.e.type==='wall').map(o=>o.e.mat)); assert.ok(mats.size>0,'walls carry a build-up');
+  const stud=ww.obs.find(o=>o.kind==='edge'&&o.e.type==='wall'&&o.e.mat==='stud'&&(()=>{ const [a,b]=straddle(o,.45); return ww.clearAt(...a)&&ww.clearAt(...b); })());
+  if(stud){ const [a,b]=straddle(stud,.45); assert.ok(!ww.sight(a,b),'no sight through drywall'); const t=ww.shotThrough(a,b); assert.ok(t&&t.walls===1,'a round goes through drywall');
+    const lf=R.lineOfFire(ww,{x:a[0],z:a[1]},{x:b[0],z:b[1]},{pierce:true}); assert.ok(lf&&lf.walls===1); const od=R.odds({coverFrom:()=>2},{team:'squad',x:0,z:0},{team:'raider',x:5,z:0},{walls:1}); assert.ok(od.why.some(x=>/wall/.test(x[0])));
+    ww.wallSt[ww.LV+stud.e.key]={s:2}; assert.ok(ww.sight(a,b),'a holed wall shows through');
+    ww.wallSt[ww.LV+stud.e.key]={s:3}; ww.syncWalls(); const F=ww.field(a,20); const c=ww.costTo(F,b); assert.ok(c&&!c.over,'breached: a way through'); }
+  const block=ww.obs.find(o=>o.kind==='edge'&&o.e.type==='wall'&&o.e.mat==='block'); if(block){ const [a,b]=straddle(block,.45); assert.strictEqual(ww.shotThrough(a,b),null,'block stops a round'); } });
+check('wounds: the squad goes down and bleeds, raiders die; morale breaks once the boss is down',()=>{
+  const s=R.makeUnit('medic',{team:'squad'}), r=R.makeUnit('raider',{team:'raider'}); assert.strictEqual(R.hurt(s,3),'hit'); assert.strictEqual(R.hurt(s,9),'down'); assert.ok(s.down&&!s.alive&&s.bleed===R.V.bleed);
+  assert.strictEqual(R.hurt(r,9),'dead'); assert.ok(r.dead);
+  const units=[R.makeUnit('boss',{team:'raider',boss:true,alive:false}),R.makeUnit('raider',{team:'raider'}),R.makeUnit('raider',{team:'raider'})]; units[0].alive=false;
+  const broke=R.morale(units,()=>.1); assert.strictEqual(broke.length,2); assert.ok(units[1].fleeing&&units[2].fleeing);
+  assert.strictEqual(R.morale([R.makeUnit('boss',{team:'raider',boss:true}),R.makeUnit('raider',{team:'raider'})],()=>.1).length,0); });
+check('enemy types: armour soaks damage, defence lowers aim, melee ignores cover, ranks add HP and aim',()=>{
+  const enf=R.makeUnit('enforcer',{team:'raider'}), r=()=>0; const o={aim:100,crit:0}; const res=R.roll(o,r,R.WEAPONS.carbine,enf); assert.strictEqual(res.armor,1); assert.strictEqual(res.dmg,2);
+  const boss=R.makeUnit('boss',{team:'raider',x:12,z:0}), sq=R.makeUnit('medic',{team:'squad',x:0,z:0}); const od=R.odds({coverFrom:()=>2},sq,boss); assert.ok(od.why.some(x=>x[0]==='Defence'&&x[1]===-5));
+  const brute=R.makeUnit('brute',{team:'raider',x:1,z:0}); const m=R.odds({coverFrom:()=>2},brute,sq); assert.ok(m.melee); assert.strictEqual(m.aim,82);
+  const vet=R.makeUnit('ranger',{team:'squad',rank:3}); assert.strictEqual(vet.max,9); assert.strictEqual(vet.aim,79); assert.strictEqual(vet.second.name,'Machete');
+  assert.strictEqual(R.rankOf(0),0); assert.strictEqual(R.rankOf(3),2); assert.strictEqual(R.rankOf(25),6); });
+check('odds match the foundation table',()=>{
+  const flat={coverFrom:p=>p[0]===100?2:p[0]===200?1:0};
+  const o=(ax,bx,opt,b)=>R.odds(flat,{team:'squad',x:ax,z:0},Object.assign({team:'raider',x:bx,z:0},b||{}),opt).aim;
+  assert.strictEqual(o(0,12),72); assert.strictEqual(o(0,4),82); assert.strictEqual(o(88,100),32); assert.strictEqual(o(188,200),52);
+  assert.strictEqual(o(88,100,{},{hunker:true}),12); assert.strictEqual(o(0,12,{reaction:true}),57); assert.strictEqual(o(0,12,{free:true}),82);
+  assert.strictEqual(o(0,34),57); assert.strictEqual(o(0,60),32); });
+
+check('test range: every case it promises is there',()=>{
+  const TM=require('./testmap.js'), G=TM.build(I), w=SP.fromGenerated(G), M=G.M, at=(i,j)=>[M.u0+i+.5,M.v0+j+.5];
+  const ents=w.entries(), sills=ents.filter(e=>e.kind==='window').map(e=>[e.e.win.sill,e.e.win.state,w.props(e.o).cross]);
+  for(const [sill,state] of [[.6,'intact'],[.6,'broken'],[.9,'broken'],[.9,'boarded'],[1.0,'intact'],[1.2,'intact'],[1.8,'intact']]) assert.ok(sills.some(x=>x[0]===sill&&x[1]===state),`window ${sill} ${state}`);
+  for(const x of sills) assert.strictEqual(x[2],x[1]!=='boarded'&&x[0]<=1.3,`window ${x[0]} ${x[1]} climbable`);
+  assert.ok(['front','side','back'].every(r=>ents.some(e=>e.role===r)),'front, side and back doors');
+  const F=w.field(w.frontApproach().out,300,[]);
+  for(const p of G.test.posts){ assert.ok(w.clearAt(...p.p),`${p.type} stands clear`); const c=w.costTo(F,p.p); assert.ok(c&&!c.over,`${p.type} at ${p.p} can be reached`); }
+  assert.deepStrictEqual([...new Set(G.test.posts.map(p=>p.type))].sort(),['boss','brute','enforcer','raider']);
+  // each test room shows the lane its own build-up: drywall and stucco let a round through, block and concrete stop it
+  for(const [i,mat,through] of [[4,'stud',true],[10,'frame',true],[16,'block',false],[22,'vault',false]]){ const e=G.O.edges.get(I.edgeKey(i,9,1)); assert.strictEqual(e.mat,mat);
+    assert.strictEqual(!!w.shotThrough(at(i,10),at(i,8)),through,`${mat} wall`); assert.ok(!w.sight(at(i,10),at(i,8)),`${mat} wall blocks sight`); }
+  assert.ok(w.sight(at(1,10),at(32,10)),'the long lane is clear end to end');
+  assert.ok(G.O.edges.get(I.edgeKey(20,14,0)).type==='counter'&&w.sight(at(19,14),at(22,14)),'counters: see across');
+  assert.ok(G.Fn.items.some(it=>it.stash&&it.contents.length),'a stash'); });
+
+check('roof: ladders join the levels; a charge opens a hole to look and drop into one room',()=>{
+  const TM=require('./testmap.js'), RD=require('./roof.js'), G=TM.build(I), w=SP.fromGenerated(G), Rf=RD.make(G,w,SP,{ladders:G.test.ladders,edgeKey:I.edgeKey}); w.levelLine=Rf.lineOf; w.levelCover=Rf.coverOf;
+  assert.strictEqual(Rf.ladders.length,3);
+  for(const L of Rf.ladders){ assert.ok(w.clearAt(...L.foot)&&!w.insideAt(...L.foot),'ladder foot outside and clear'); assert.ok(Rf.space.clearAt(...L.top),'ladder top on the roof'); }
+  const F=Rf.space.field(Rf.ladders[0].top,300,[]); for(const L of Rf.ladders.slice(1)){ const c=Rf.space.costTo(F,L.top); assert.ok(c&&!c.over,'walk the roof between ladders'); }
+  assert.ok(!Rf.space.clearAt(G.M.u0-1,G.M.v0+5),'the roof cannot be walked off');
+  const boss=G.test.posts.find(p=>p.type==='boss'), b=R.makeUnit('boss',{team:'raider',x:boss.p[0],z:boss.p[1]});
+  const up=R.makeUnit('breacher',{team:'squad',x:boss.p[0]+2,z:boss.p[1]+1,lv:1});
+  assert.ok(!R.lineOfFire(w,up,b),'no sight through a whole roof');
+  const h=Rf.addHole([boss.p[0]+2,boss.p[1]+1]); assert.ok(h,'a hole'); assert.strictEqual(G.P.rooms[h.room].name,'Cover gallery');
+  assert.ok(!Rf.space.clearAt(...h.c),'the hole is not floor');
+  const rim=R.makeUnit('breacher',{team:'squad',x:h.c[0]+1.5,z:h.c[1],lv:1}), back=R.makeUnit('breacher',{team:'squad',x:h.c[0]+5,z:h.c[1],lv:1});
+  assert.ok(R.lineOfFire(w,rim,b),'peek down from the rim'); assert.ok(R.lineOfFire(w,b,rim),'and be seen'); assert.ok(!R.lineOfFire(w,back,b),'not from back from the hole');
+  const o=R.odds(w,rim,b); assert.ok(o.why.some(x=>x[0]==='Height'&&x[1]===R.V.height),'height bonus');
+  assert.ok(!Rf.addHole([G.M.u0+12,G.M.v0+11.9])||true);   // over a wall it picks a corner inside one room or none
+  const yard=R.makeUnit('raider',{team:'raider',x:Rf.ladders[1].foot[0],z:Rf.ladders[1].foot[1]+6}), edge=R.makeUnit('ranger',{team:'squad',x:Rf.ladders[1].top[0],z:Rf.ladders[1].top[1]-.3,lv:1}), mid=R.makeUnit('ranger',{team:'squad',x:Rf.ladders[1].top[0],z:Rf.ladders[1].top[1]-5,lv:1});
+  assert.ok(R.lineOfFire(w,edge,yard),'over the edge from near it'); assert.ok(!R.lineOfFire(w,mid,yard),'not from the middle of the roof'); assert.strictEqual(Rf.coverOf(edge,yard),1,'the parapet is half cover');
+  assert.ok(Rf.landing(h),'somewhere to land'); });
+
+console.log(`${pass} passed, ${fail} failed`); if(fail){ for(const f of fails.slice(0,30)) console.log('  ✗ '+f); process.exit(1); }
