@@ -85,6 +85,7 @@ button.pri{background:var(--gold);color:#211b10;border-color:var(--gold)}
   <div class="seg" id="viewSeg" hidden role="group" aria-label="Camera"><button type="button" data-v="tp" title="Over the shoulder of the selected soldier">Shoulder</button><button type="button" data-v="iso" aria-pressed="true">Isometric</button><button type="button" data-v="top">Top</button></div>
   <details class="menu" id="viewMenu"><summary>View ▾</summary><div class="menu-body">
     <button type="button" id="tpBtn" aria-pressed="false" title="Over the shoulder of the selected soldier: move with WASD and shoot with the mouse, in real time">Third person, free [V]</button>
+    <button type="button" id="bloodBtn" aria-pressed="true" title="Blood sprays, wound marks and pools">Blood</button>
     <button type="button" id="camBtn" aria-pressed="true" title="When someone fires, the camera goes over their shoulder; hovering an attack previews it">Action cam</button>
     <button type="button" id="sightBtn" aria-pressed="true" title="While concealed: the raiders' eyes">Raiders' sight</button>
     <button type="button" id="labelsBtn" aria-pressed="false" title="On the test range: what each part of the building tests">Test range labels</button>
@@ -4838,7 +4839,7 @@ scene.add(new THREE.AmbientLight(0xffffff,.18));
 const STRICT=!!window.COMBAT_STRICT;
 const DBG=window.COMBAT_DEBUG?{reveal:true,cones:true,lines:true,passive:false,god:false,blind:false}:null;
 // ---------- state ----------
-const S={tp:!!window.COMBAT_TP,tpYaw:0,tpPitch:.18,tpDist:3.2,tpFollow:true,actionCam:true,cam:null,camPreview:null,labels:false,timeScale:1,slow:1,w:null,G:null,rec:null,units:[],sel:null,phase:'explore',busy:false,mode:'move',round:1,minutes:14*60,seed:0,F:null,camGoal:null,camHold:0,sight:true,free:false,fps:false,destroyed:new Set(),stats:null,mission:null,declined:new Set(),prompt:false};
+const S={gore:true,tp:!!window.COMBAT_TP,tpYaw:0,tpPitch:.18,tpDist:3.2,tpFollow:true,actionCam:true,cam:null,camPreview:null,labels:false,timeScale:1,slow:1,w:null,G:null,rec:null,units:[],sel:null,phase:'explore',busy:false,mode:'move',round:1,minutes:14*60,seed:0,F:null,camGoal:null,camHold:0,sight:true,free:false,fps:false,destroyed:new Set(),stats:null,mission:null,declined:new Set(),prompt:false};
 let dirtyBuild=false, shake=0;
 const order=SITES.map((s,i)=>i).sort((a,b)=>(SITES[b].id==='newriver/2_2/0')-(SITES[a].id==='newriver/2_2/0'));
 { const o=document.createElement('option'); o.value='test'; o.textContent='Test range · every combat case'; $('bSel').appendChild(o); }
@@ -4921,6 +4922,12 @@ function drawEntries(){ while(entryMarks.children.length) entryMarks.children.po
 const arc=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineDashedMaterial({color:0xff7a4a,dashSize:.25,gapSize:.15})); arc.visible=false; scene.add(arc);
 function arcPoints(a,b,n,la){ const pts=[], y0=yOf(a[0],a[1],la||0)+1.5, y1=yOf(b[0],b[1],0)+.1, L=Math.hypot(b[0]-a[0],b[1]-a[1]); for(let k=0;k<=n;k++){ const t=k/n; pts.push(new THREE.Vector3(a[0]+(b[0]-a[0])*t,y0+(y1-y0)*t+Math.sin(t*Math.PI)*Math.max(1.2,L*.28),a[1]+(b[1]-a[1])*t)); } return pts; }
 const blastFx=[];
+const downRings=new THREE.Group(); scene.add(downRings);
+const downRingM=new THREE.MeshBasicMaterial({color:0xc23b2e,transparent:true,opacity:.8,depthWrite:false}), downRingG=new THREE.RingGeometry(.75,.92,36); downRingG.rotateX(-Math.PI/2);
+function stepDownRings(now){ const want=S.units.filter(u=>u.team==='squad'&&u.down&&!u.dead&&!u.evac&&u.fig.root.visible);
+  while(downRings.children.length>want.length) downRings.remove(downRings.children[downRings.children.length-1]);
+  while(downRings.children.length<want.length){ const m=new THREE.Mesh(downRingG,downRingM); m.renderOrder=6; downRings.add(m); }
+  want.forEach((u,i)=>{ const m=downRings.children[i]; m.position.set(u.x,yU(u)+.06,u.z); m.scale.setScalar(1+.08*Math.sin(now/260)); }); downRingM.opacity=.55+.3*Math.sin(now/260); }
 const roofG=new THREE.Group(); scene.add(roofG); let roofDeck=null;
 const roofMat=new THREE.MeshBasicMaterial({color:0x4a463f,transparent:true,opacity:.5,depthWrite:false}), rimMat=new THREE.MeshLambertMaterial({color:0x2b2622}), ladMat=new THREE.MeshLambertMaterial({color:0x6b6f72});
 function drawRoof(){ while(roofG.children.length){ const m=roofG.children.pop(); if(m.geometry) m.geometry.dispose(); } roofDeck=null; if(!S.roof) return;
@@ -5047,15 +5054,81 @@ function bark(u,kind,ctx){ if(!u||!u.fig||!u.fig.root.visible||u.evac) return; c
 function stepBarks(real){ for(const b of barks){ b.t+=real; const s=screenOf(b.u.x,yU(b.u)+2.05,b.u.z); if(!s||!b.u.fig.root.visible) b.el.style.opacity='0'; else { b.el.style.left=s[0]+'px'; b.el.style.top=s[1]+'px'; b.el.style.opacity=String(Math.max(0,Math.min(1,(2.6-b.t)/.4))); } }
   for(let i=barks.length-1;i>=0;i--) if(barks[i].t>2.6){ barks[i].el.remove(); barks.splice(i,1); } }
 // the shot camera: over the shooter's shoulder, the target in frame. One at a time; the rest play as they are.
-function shotCam(a,b){ if(!S.actionCam||S.cam||FP||S.phase==='live'||S.phase==='explore'||!b||!a.fig.root.visible) return null; if(b.team==='raider'&&!b.vis&&a.team!=='squad') return null; return S.cam={a,b,t:0}; }
-const camGoalV=new THREE.Vector3(), camLook=new THREE.Vector3(), camNow=new THREE.Vector3(); let camOn=false;
-function overShoulder(a,b,real){ const A=[a.x,yOf(a.x,a.z,a.lv||0),a.z], B=[b.x,yOf(b.x,b.z,b.lv||0),b.z], dx=B[0]-A[0], dz=B[2]-A[2], L=Math.hypot(dx,dz)||1, fx=dx/L, fz=dz/L;
-  camGoalV.set(A[0]-fx*1.7-fz*.6,A[1]+1.85+(B[1]<A[1]?.6:0),A[2]-fz*1.7+fx*.6);
-  if(!camOn){ camNow.copy(camera.position); camOn=true; } camNow.lerp(camGoalV,1-Math.exp(-real*9));
-  camera.position.copy(camNow); camLook.set(A[0]+dx*.62,B[1]+1.15,A[2]+dz*.62); camera.lookAt(camLook);
-  if(camera.fov!==42){ camera.fov=42; camera.updateProjectionMatrix(); }
-  if(typeof CUT!=='undefined') CUT.goal.set(B[0],0,B[2]); }
-function camOff(){ if(!camOn) return; camOn=false; camera.fov=FOV; camera.updateProjectionMatrix(); }
+// The shot camera is blended, never cut: each frame the normal camera (orbit, isometric, top or shoulder) is worked
+// out first, then eased toward the over-the-shoulder pose by a weight that rises and falls over about a third of a
+// second; field of view eases with it. A shot holds the screen for a minimum time; a later shot takes over by gliding
+// from one pose to the next, without going back out. Enemy shots get the close-up sparingly (two a round, with a
+// breather between), the rest play in the normal view, so the raiders' half reads as one scene.
+const CAM_HOLD=1500, CAM_LINGER=450, CAM_REST=900;
+function shotCam(a,b){ if(!S.actionCam||FP||S.phase==='live'||S.phase==='explore'||!b||!a.fig.root.visible) return null; if(b.team==='raider'&&!b.vis&&a.team!=='squad') return null;
+  const now=performance.now(), enemy=a.team==='raider';
+  if(S.cam&&now<S.cam.hold) return null;                                   // the current shot keeps the screen
+  if(!S.cam&&enemy&&now<(S.camRest||0)) return null;                         // a breather between enemy close-ups
+  if(enemy&&(S.camEnemy||0)>=2) return null; if(!enemy&&(S.camOurs||0)>=3) return null;
+  if(enemy) S.camEnemy=(S.camEnemy||0)+1; else S.camOurs=(S.camOurs||0)+1;
+  return S.cam={a,b,hold:now+CAM_HOLD,endAt:0}; }
+function releaseCam(cam){ if(cam&&S.cam===cam) cam.endAt=performance.now()+CAM_LINGER; }
+const rig={w:0,pos:new THREE.Vector3(),look:new THREE.Vector3(),on:false,q:new THREE.Quaternion(),q0:new THREE.Quaternion(),p0:new THREE.Vector3(),dummy:new THREE.Object3D()};
+const camGoalV=new THREE.Vector3(), camLook=new THREE.Vector3();
+// the pose over a's shoulder toward b
+function shotPose(a,b){ const A=[a.x,yOf(a.x,a.z,a.lv||0),a.z], B=[b.x,yOf(b.x,b.z,b.lv||0),b.z], dx=B[0]-A[0], dz=B[2]-A[2], L=Math.hypot(dx,dz)||1, fx=dx/L, fz=dz/L;
+  camGoalV.set(A[0]-fx*1.8-fz*.65,A[1]+1.85+(B[1]<A[1]?.6:0),A[2]-fz*1.8+fx*.65); camLook.set(A[0]+dx*.6,B[1]+1.15,A[2]+dz*.6); return B; }
+function baseFov(){ return STRICT?(S.view==='iso'?20:S.view==='top'?28:50):S.tp?56:FOV; }
+function camRig(shot,rawDt){ const k=t=>1-Math.exp(-rawDt*t);
+  if(S.bullet&&rig.on){ const B=S.bullet, P0=bulletM.position, side=new THREE.Vector3(-B.dir.z,0,B.dir.x);
+    camGoalV.copy(P0).addScaledVector(B.dir,-.8).addScaledVector(side,.16).add(new THREE.Vector3(0,.1,0)); camLook.copy(P0).addScaledVector(B.dir,3);
+    rig.pos.lerp(camGoalV,k(28)); rig.look.lerp(camLook,k(28)); rig.w+=(1-rig.w)*k(8); if(typeof CUT!=='undefined') CUT.goal.set(B.T.x,0,B.T.z); }
+  else if(shot){ const B=shotPose(shot.a,shot.b); if(!rig.on){ rig.pos.copy(camera.position); rig.dummy.position.copy(camera.position); rig.look.copy(camLook); rig.on=true; }
+    rig.pos.lerp(camGoalV,k(3.5)); rig.look.lerp(camLook,k(4.5)); if(typeof CUT!=='undefined'&&rig.w>.5) CUT.goal.set(B[0],0,B[2]); }
+  if(!S.bullet){ rig.w+=((shot?1:0)-rig.w)*k(shot?3:2.2); if(!shot&&rig.w<.002){ rig.w=0; rig.on=false; } }
+  const fov0=baseFov(); let fov=fov0;
+  if(rig.w>0&&rig.on){ const e=rig.w*rig.w*(3-2*rig.w); rig.p0.copy(camera.position); rig.q0.copy(camera.quaternion);
+    rig.dummy.position.copy(rig.pos); rig.dummy.lookAt(rig.look); camera.position.lerpVectors(rig.p0,rig.pos,e); camera.quaternion.slerpQuaternions(rig.q0,rig.dummy.quaternion,e); fov=fov0+((S.bullet?58:42)-fov0)*e; }
+  if(Math.abs(camera.fov-fov)>.01){ camera.fov=fov; camera.updateProjectionMatrix(); } }
+function camOff(){}
+// ---------- blood, wounds and the bullet cam ----------
+// A hit sprays blood out along the round's line (more from the head); the drops fall and stain the floor. The round
+// leaves a wound mark on the body where it struck, carried with that part. The dead and the downed lie in a pool that
+// spreads. View ▸ Blood turns it all off. The bullet cam: on a killing shot or a crit (once a side each round), the
+// camera rides behind the round in slow motion from the muzzle to the target, then the hit plays.
+const BL={parts:[],max:500,decMax:900,decN:0,pools:[],
+  mesh:new THREE.InstancedMesh(new THREE.BoxGeometry(.045,.045,.045),new THREE.MeshBasicMaterial({color:0x8e1410}),500),
+  dec:new THREE.InstancedMesh((()=>{ const g=new THREE.CircleGeometry(1,14); g.rotateX(-Math.PI/2); return g; })(),new THREE.MeshBasicMaterial({color:0x5e0c09,transparent:true,opacity:.86,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2}),900),
+  woundM:new THREE.MeshBasicMaterial({color:0x6a0d0a,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-1}), woundG:new THREE.CircleGeometry(.045,10)};
+BL.mesh.count=0; BL.mesh.frustumCulled=false; BL.dec.count=0; BL.dec.frustumCulled=false; scene.add(BL.mesh); scene.add(BL.dec);
+const bv=new THREE.Vector3(), bm=new THREE.Matrix4(), bq=new THREE.Quaternion(), bs=new THREE.Vector3();
+function decal(x,z,y,r,i){ const k=i!=null?i:(BL.decN++)%BL.decMax; bm.compose(bv.set(x,y+.012+(k%50)*2e-4,z),bq.setFromAxisAngle(bs.set(0,1,0),Math.random()*6.28),bs.set(r,1,r*(.7+Math.random()*.5)));
+  BL.dec.setMatrixAt(k,bm); BL.dec.count=Math.max(BL.dec.count,Math.min(BL.decN,BL.decMax),k+1); BL.dec.instanceMatrix.needsUpdate=true; return k; }
+function clearBlood(){ BL.parts.length=0; BL.pools.length=0; BL.decN=0; BL.dec.count=0; BL.mesh.count=0; }
+// where the round meets the body: a ray from the muzzle at the chest (or the head), against the figure's own meshes
+function impactOn(a,b,head){ const f=b.fig, ms=[]; f.root.traverse(o=>{ if(o.isMesh&&!o.userData.ink&&!o.userData.wound) ms.push(o); });
+  const A=new THREE.Vector3(a.x,yU(a)+1.4,a.z), T=new THREE.Vector3(); if(head&&f.head) f.head.getWorldPosition(T); else T.set(b.x,yU(b)+(b.down?.25:1.15),b.z);
+  const dir=T.clone().sub(A).normalize(); ray.set(A,dir); const h=ray.intersectObjects(ms,false)[0]; return {A,T,dir,hit:h}; }
+function bloodHit(a,b,head,dmg){ if(!S.gore||!b.fig) return; const im=impactOn(a,b,head), P0=im.hit?im.hit.point:im.T, lv=b.lv||0;
+  // the wound, on the part that was hit, facing out
+  if(im.hit){ const m=new THREE.Mesh(BL.woundG,BL.woundM); m.userData.wound=true; const n=im.hit.face?im.hit.face.normal.clone().transformDirection(im.hit.object.matrixWorld):im.dir.clone().negate();
+    m.position.copy(P0).addScaledVector(n,.004); m.lookAt(P0.clone().add(n)); m.scale.setScalar(.8+Math.random()*.6+(dmg>3?.4:0)); im.hit.object.attach(m); }
+  // the spray, out the far side along the round
+  const n=Math.min(70,(head?34:16)+dmg*5);
+  for(let k=0;k<n&&BL.parts.length<BL.max;k++){ const sp=1.4+Math.random()*3.2; BL.parts.push({x:P0.x,y:P0.y,z:P0.z,vx:im.dir.x*sp+(Math.random()-.5)*1.6,vy:im.dir.y*sp+Math.random()*1.8,vz:im.dir.z*sp+(Math.random()-.5)*1.6,lv}); }
+  decal(b.x+im.dir.x*.6,b.z+im.dir.z*.6,yOf(b.x,b.z,lv),.12+Math.random()*.12); }
+function blastBlood(v,c){ if(!S.gore||!v.fig) return; const lv=v.lv||0, y=yU(v)+.9; for(let k=0;k<24&&BL.parts.length<BL.max;k++){ const a=Math.random()*6.28, sp=1+Math.random()*3; BL.parts.push({x:v.x,y,z:v.z,vx:Math.cos(a)*sp+(v.x-c[0])*.8,vy:Math.random()*2.5,vz:Math.sin(a)*sp+(v.z-c[1])*.8,lv}); } }
+function poolUnder(u){ if(!S.gore||BL.pools.some(p=>p.u===u)) return; BL.pools.push({u,t:0,max:(u.dead?.85:.6)+Math.random()*.3,i:null}); }
+function stepBlood(dt){ if(!BL.parts.length&&!BL.pools.length){ BL.mesh.count=0; return; }
+  let n=0; for(let i=BL.parts.length-1;i>=0;i--){ const q=BL.parts[i]; q.vy-=9.8*dt; q.x+=q.vx*dt; q.y+=q.vy*dt; q.z+=q.vz*dt; const fl=yOf(q.x,q.z,q.lv);
+    if(q.y<=fl+.01){ decal(q.x,q.z,fl,.03+Math.random()*.07); BL.parts.splice(i,1); continue; }
+    bm.makeTranslation(q.x,q.y,q.z); BL.mesh.setMatrixAt(n++,bm); }
+  BL.mesh.count=n; BL.mesh.instanceMatrix.needsUpdate=true;
+  for(const p of BL.pools){ if(p.t>3) continue; p.t+=dt; const r=p.max*Math.min(1,p.t/3)*(.3+.7*Math.min(1,p.t/3)); p.i=decal(p.u.x,p.u.z,yOf(p.u.x,p.u.z,p.u.lv||0)-.002,Math.max(.05,r),p.i); } }
+// the bullet cam
+const bulletM=new THREE.Mesh(new THREE.CylinderGeometry(.014,.014,.14,6),new THREE.MeshBasicMaterial({color:0xffe9b0})); bulletM.visible=false; scene.add(bulletM);
+async function bulletCam(a,b,res){ const im=impactOn(a,b,res.head), T=res.hit?(im.hit?im.hit.point:im.T):im.T.clone().add(new THREE.Vector3((Math.random()-.5)*1.4,.5,(Math.random()-.5)*1.4));
+  const A=im.A.clone().addScaledVector(im.dir,.35), dist=A.distanceTo(T), dir=T.clone().sub(A).normalize();
+  S.bullet={A,T,dir,t:0,dur:Math.min(1.7,.55+dist/9)}; bulletM.visible=true; bulletM.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),dir); const slow=S.slow; S.slow=.08;
+  while(S.bullet&&S.bullet.t<S.bullet.dur) await new Promise(r=>requestAnimationFrame(r));
+  bulletM.visible=false; S.slow=slow; S.bulletHold=performance.now()+350; }
+function stepBullet(rawDt){ const B=S.bullet; if(!B) return; B.t+=rawDt; const e=Math.min(1,B.t/B.dur); bulletM.position.copy(B.A).lerp(B.T,e);
+  if(B.t>=B.dur&&performance.now()>(S.bulletHold||0)&&S.bulletHold) { S.bullet=null; S.bulletHold=0; } }
 // ---------- popups, tracers, log ----------
 const pops=[], tracers=[], waits=[];
 const wait=ms=>new Promise(r=>waits.push({t:ms,r}));
@@ -5075,7 +5148,7 @@ function setup(){
   const g=test?CombatTestMap.build({prepFootprint,streetSense,R,IT,edgeKey,DIRS,styleFor,rngOf,setLevel,noise2,TYPES,WALLMAT}):generate(site,'auto',seedStr,hist); const rec={doors:{},taken:[],moved:{},windows:{},blasts:[],walls:{}}; const w=InteriorSpace.fromGenerated(g,{doors:rec.doors,walls:rec.walls});
   G=g; REC=rec;   // the interiors physics code works on these page globals
   Object.assign(S,{G:g,w,rec,units:[],phase:'explore',round:1,minutes:14*60,busy:false,free:false,slow:1,mode:'move',prompt:false,declined:new Set(),rng:CR.rng(seedStr+'|fight'),destroyed:new Set(),stats:{shots:0,hits:0,bombs:0,wasted:0}});
-  logEl.innerHTML=''; bannerEl.hidden=true;
+  logEl.innerHTML=''; bannerEl.hidden=true; clearBlood(); S.bullet=null; bulletM.visible=false;
   rebuild();
   S.roof=RoofDeck.make(g,w,InteriorSpace,{ladders:(g.test&&g.test.ladders)||[],edgeKey});
   w.levelLine=(a,b,o)=>S.roof.lineOf(a,b,o); w.levelCover=(b,a)=>S.roof.coverOf(b,a); DL=0; drawRoof();
@@ -5208,6 +5281,10 @@ function rightClick(ev,p,hit){ const u=S.sel; if(!u||!u.alive) return; if(hit&&!
     if(u.role==='medic'&&u.hp<u.max) items.push({label:'First aid: self',sub:'+'+CR.V.aidHeal,off:u.kit.aid<=0?'none left':null,fn:()=>{ setAct(u,{type:'aid',target:u}); afterOrder(u); }});
     if(u.role==='breacher') items.push({label:'Throw a pipe bomb…',sub:'×'+u.kit.pipe,off:u.kit.pipe<=0?'none left':null,fn:()=>{ S.mode='throw'; clearReach(); drawBar(); }});
     items.push({label:'Hold: clear orders',sub:'',fn:()=>{ u.order=null; afterOrder(u); }}); openMenu(ev,u.name,items); return; }
+  if(ally&&ally!==u&&u.role!=='medic'&&ally.down){ const med=standing().find(v=>v.role==='medic'&&v.kit.aid>0&&(v.lv||0)===(ally.lv||0));
+    items.push({label:`${med?med.name+': ':''}${ally.stable?'get '+ally.name+' up':'stabilise '+ally.name}`,sub:ally.stable?'stable':`bleeding · ${ally.bleed} turns`,off:!med?'no medic or kit':null,fn:()=>{ select(med); const ap=planned(ally), box={x0:ap[0]-.3,x1:ap[0]+.3,z0:ap[1]-.3,z1:ap[1]+.3}, spot=standBeside(med,box,besideBudget(med));
+      if(!spot){ log(`${med.name} cannot reach ${ally.name} this round.`); return; } moveFor(med,spot); setAct(med,{type:'aid',target:ally}); afterOrder(med); }});
+    openMenu(ev,`${ally.name} is down`,items,ally.stable?'Stable: the medic can get them back up.':`Bleeding out: ${ally.bleed} turns. The medic can stop it.`); return; }
   if(ally&&u.role==='medic'){ const ap=planned(ally), box={x0:ap[0]-.3,x1:ap[0]+.3,z0:ap[1]-.3,z1:ap[1]+.3}, spot=standBeside(u,box,besideBudget(u));
     items.push({label:ally.down?(ally.stable?'Get them up':'Stabilise'):'First aid',sub:ally.down?'':'+'+CR.V.aidHeal+' HP',off:u.kit.aid<=0?'none left':!spot?'too far':null,fn:()=>{ moveFor(u,spot); setAct(u,{type:'aid',target:ally}); afterOrder(u); }}); openMenu(ev,ally.name,items); return; }
   if(STRICT&&!u.lv){ const ent=S.w.entries().find(x=>near(x.out[0],x.out[1],1.1)&&usable(x,u));
@@ -5250,11 +5327,13 @@ async function fireAt(a,b,W,opt={}){ if(!a.alive) return false;
   if(!W.melee&&W.ammo!==Infinity&&a.ammo<=0){ log(`${a.name} is out of ammunition.`); return false; }
   const o=opt.manual?null:CR.odds(S.w,a,b,Object.assign({},opt,{weapon:W,walls:lf.walls}));
   a.face=Math.atan2(b.x-a.x,b.z-a.z); a.aiming=true; if(a.team==='raider') a.revealT=1.6; const cam=shotCam(a,b); await wait(W.melee?150:cam?700:300);
-  if(!b.alive){ a.aiming=false; if(S.cam===cam) S.cam=null; if(a.team==='squad'){ S.stats.wasted++; bark(a,'wasted'); } log(`${a.name} lowers the ${W.name.toLowerCase()}: ${b.name} went down first.`); pop(a,'no target','info'); return false; }
+  if(!b.alive){ a.aiming=false; releaseCam(cam); if(a.team==='squad'){ S.stats.wasted++; bark(a,'wasted'); } log(`${a.name} lowers the ${W.name.toLowerCase()}: ${b.name} went down first.`); pop(a,'no target','info'); return false; }
   if(!W.melee&&W.ammo!==Infinity) a.ammo=Math.max(0,a.ammo-1);
   const res=opt.manual||CR.roll(o,S.rng,W,b);
+  if(cam&&!W.melee&&res.hit&&res.dmg&&(res.crit||res.head||res.dmg>=b.hp)){ const ours=a.team==='squad', used=ours?S.bulletOurs:S.bulletEnemy;
+    if(!used&&(ours||Math.random()<.5)){ if(ours) S.bulletOurs=1; else S.bulletEnemy=1; cam.hold=performance.now()+CAM_HOLD+1600; await bulletCam(a,b,res); } }
   if(!W.melee){ tracer(lf.from,lf.to,res.hit,S.rng,a.lv,b.lv); Motion.kick(a.fig,'recoil'); } else pop(a,'slash','info');
-  if(res.hit&&res.dmg) Motion.kick(b.fig,'hit',1,{from:{x:a.x,z:a.z}});
+  if(res.hit&&res.dmg){ Motion.kick(b.fig,'hit',1,{from:{x:a.x,z:a.z}}); bloodHit(a,b,!!(res.head||res.crit&&Math.random()<.4),res.dmg); }
   if(a.team==='squad'){ S.stats.shots++; if(res.hit) S.stats.hits++; }
   if(!W.melee){ const crossed=[]; S.w.sight(lf.from,lf.to,{shot:true,collect:crossed}); for(const x of crossed) if(x.e&&x.e.type==='window'&&x.e.win.state==='intact'){ S.w.setWindow(x.e.key,'broken'); S.rec.windows[S.w.LV+x.e.key]=1; dirtyBuild=true; } }
   pop(b,res.blocked?'HIT COVER':res.hit?(res.head?`HEADSHOT −${res.dmg}`:res.crit?`CRIT −${res.dmg}`:res.dmg?`−${res.dmg}`:'ARMOR'):'Miss',res.hit?(res.crit||res.head?'crit':''):'miss');
@@ -5263,8 +5342,8 @@ async function fireAt(a,b,W,opt={}){ if(!a.alive) return false;
   const killed=!b.alive;
   if(a.team==='squad'){ if(killed) bark(a,'kill'); else if(!res.hit&&Math.random()<.45) bark(a,'miss'); } else if(a.vis&&Math.random()<.25) bark(a,'rShoot');
   if(cam&&killed){ S.slow=.28; await wait(260); S.slow=1; }
-  if(!opt.free) b.unaware=false; ink(b); if(dirtyBuild) rebuild(); await wait(cam?850:380); a.aiming=false; if(S.cam===cam) S.cam=null; drawBar(); drawHud(); return res.hit; }
-function harm(b,dmg,by){ if(DBG&&DBG.god&&b.team==='squad'){ pop(b,'(debug: no damage)','info'); return; } const r=CR.hurt(b,dmg);
+  if(!opt.free) b.unaware=false; ink(b); if(dirtyBuild) rebuild(); await wait(cam?850:380); a.aiming=false; releaseCam(cam); drawBar(); drawHud(); return res.hit; }
+function harm(b,dmg,by){ if(DBG&&DBG.god&&b.team==='squad'){ pop(b,'(debug: no damage)','info'); return; } const r=CR.hurt(b,dmg); if(r==='down'||r==='dead') setTimeout(()=>poolUnder(b),700);
   if(b.team==='squad'){ if(r==='down'){ const mate=standing().filter(v=>v!==b).sort((p,q)=>CR.dist(p,b)-CR.dist(q,b))[0]; bark(mate,'allyDown',{n:b.name}); } else if(r==='hit') bark(b,b.hp<=2?'low':'hurt'); }
   else if(r==='hit'&&b.vis&&Math.random()<.4) bark(b,'rHurt'); if(r==='down'){ log(`${b.name} is down and bleeding: ${CR.V.bleed} turns to reach them.`); pop(b,'DOWN','crit'); } else if(r==='dead'){ log(`${b.name} is down.`); if(by&&by.team==='squad') by.kills=(by.kills||0)+1; } ink(b); }
 async function overwatchCheck(m){ for(const w of S.units){ if(!w.alive||!w.ow||w.team===m.team||!m.alive||w.ammo<=0||w.evac) continue; if(CR.dist(w,m)>CR.V.overwatch||!CR.lineOfFire(S.w,w,m)) continue;
@@ -5333,7 +5412,7 @@ async function throwBomb(u,p){ if(!p) return; u.kit.pipe--; S.stats.bombs++; u.f
   log(`${u.name} throws a pipe bomb.`); await blast(p,u,CR.V.blastRadius,{grenade:true}); }
 async function blast(p,by,r,opt){ const fx=new THREE.Mesh(new THREE.SphereGeometry(1,20,14),new THREE.MeshBasicMaterial({color:0xffa040,transparent:true,opacity:.85,depthWrite:false})); fx.position.set(p[0],yOf(...p)+.4,p[1]); scene.add(fx); blastFx.push({m:fx,t:0}); shake=.45;
   pop(p,opt.charge?'BLAM':'BOOM','crit'); noise(p,60,'blast');
-  for(const {u:v,dmg,shred} of CR.blastHits(S.w,p,S.units,r)){ if(v.dead) continue; Motion.kick(v.fig,'hit',1.4,{from:{x:p[0],z:p[1]}}); if(v.down){ v.dead=true; log(`${v.name} is caught in the blast.`); ink(v); continue; }
+  for(const {u:v,dmg,shred} of CR.blastHits(S.w,p,S.units,r)){ if(v.dead) continue; Motion.kick(v.fig,'hit',1.4,{from:{x:p[0],z:p[1]}}); blastBlood(v,p); if(v.down){ v.dead=true; log(`${v.name} is caught in the blast.`); ink(v); continue; }
     if(shred){ v.armor--; pop(v,'SHRED','info'); } pop(v,`−${dmg}`,''); log(`${v.team==='raider'&&!v.vis?'Someone unseen':v.name} takes ${dmg} from the blast${shred?', armour shredded':''}.`); v.hunker=false; harm(v,dmg,by); v.unaware=false; }
   if(opt.grenade){ if(physicsOn()){ grenade({x:p[0],z:p[1]}); await waitSim(); }
     else { const reach=S.w.blastReach(p,r); for(const o of reach.items){ S.w.destroyItem(o); S.destroyed.add(o.it.id); } for(const o of reach.openings){ if(o.e.type==='window'&&o.e.win.state!=='broken') S.w.setWindow(o.e.key,'broken'); else if(/door/.test(o.e.type)&&S.w.doorState(o.e)!=='broken') S.w.setDoor(o.e.key,'broken'); } } }
@@ -5402,7 +5481,7 @@ function beginPlan(){ S.phase='plan'; S.busy=false; S.mode='move'; for(const u o
   if(STRICT){ revealRooms(); drawEntries(); }
   inkAll(); select(standing()[0]); drawOrders(); drawHud(); drawBar(); }
 // Go: every soldier carries out their orders at the same moment
-async function execute(){ if(!planning()) return; closeMenu(); S.phase='exec'; S.busy=true; S.mode='move'; clearReach(); hideHover(); drawOrders(); drawSight(); drawBar(); drawHud();
+async function execute(){ if(!planning()) return; S.camOurs=0; S.bulletOurs=0; closeMenu(); S.phase='exec'; S.busy=true; S.mode='move'; clearReach(); hideHover(); drawOrders(); drawSight(); drawBar(); drawHud();
   const sq=standing(), noise0=S.stats.shots+S.stats.bombs;
   { const talk=sq.filter(u=>u.order&&(u.order.act||u.order.move)).sort(()=>Math.random()-.5).slice(0,2); talk.forEach((u,i)=>wait(i*450).then(()=>bark(u,u.order&&u.order.act?u.order.act.type:'move'))); }
   const frees=sq.filter(u=>u.order&&u.order.free); if(frees.length){ await Promise.all(frees.map((u,i)=>wait(i*110).then(()=>fireAt(u,u.order.free.target,u.weapon,{free:true,mod:u.entryMod||0,modLabel:'Through a window'})))); }
@@ -5446,7 +5525,7 @@ function reinforce(){ const w=S.w, sq=standing(); const cands=[];
   picks.forEach((q,i)=>{ const type=i===0?'raider':'brute'; const u=CR.makeUnit(type,{id:'x'+S.units.length,team:'raider',name:CR.ROLES[type].label,x:q[0],z:q[1],ap:0,face:0,unaware:false,vis:false}); u.fig=makeFig(7000+S.units.length*17,i===1,INKS.raider,gunKind(u.weapon)); u.fig.root.visible=false; S.units.push(u); });
   if(picks.length){ log(`Engines on the road: ${picks.length} more raiders arrive.`); flash('Reinforcements',`You hear ${picks.length} more of them come in from the road.`,false); } }
 // the raiders' half of the round: every raider decides both its actions, then they all go at once
-async function raiderPhase(scramble){ S.phase='raiders'; S.busy=true; clearReach(); hideHover(); drawOrders(); drawSight(); drawBar(); drawHud(); if(!scramble) flash(`Round ${S.round}`,'Raiders',false); await wait(500);
+async function raiderPhase(scramble){ S.camEnemy=0; S.bulletEnemy=0; S.phase='raiders'; S.busy=true; clearReach(); hideHover(); drawOrders(); drawSight(); drawBar(); drawHud(); if(!scramble) flash(`Round ${S.round}`,'Raiders',false); await wait(500);
   const M=S.mission; if(!scramble&&M.reinforceIn!=null&&M.reinforceIn>0){ M.reinforceIn--; if(M.reinforceIn===1) log('Engines on the road: more of them are coming.'); if(M.reinforceIn===0) reinforce(); }
   for(const b of CR.morale(S.units,S.rng)){ if(b.vis){ log(`${b.name} breaks and runs.`); pop(b,'RUNS','info'); bark(b,'rFlee'); } ink(b); }
   const rs=S.units.filter(u=>u.team==='raider'&&u.alive), field=S.units.filter(u=>!u.evac);
@@ -5520,11 +5599,19 @@ const canvas3=renderer.domElement, ray=new THREE.Raycaster(), ndc=new THREE.Vect
 function pointUnder(ev){ const r=canvas3.getBoundingClientRect(); ndc.set((ev.clientX-r.left)/r.width*2-1,-(ev.clientY-r.top)/r.height*2+1); ray.setFromCamera(ndc,camera); plane.constant=-(DL&&S.roof?S.roof.H:.08); return ray.ray.intersectPlane(plane,hitP)?[hitP.x,hitP.z]:null; }
 // the unit under the pointer, picked on screen along its figure (feet to head), not on the ground behind it
 function pickUnit(ev,filter){ const r=canvas3.getBoundingClientRect(), mx=ev.clientX-r.left, my=ev.clientY-r.top; let best=null;
+  // someone lying down: a click anywhere on the floor within 1.2 m of them, or on their outline on screen, picks them
+  ray.setFromCamera(ndc.set(mx/r.width*2-1,-(my/r.height)*2+1),camera);
+  for(const u of S.units){ if(!u.down||u.dead||u.evac||!u.fig.root.visible||(filter&&!filter(u))) continue;
+    plane.constant=-yU(u)-.05; const g=ray.ray.intersectPlane(plane,hitP)?[hitP.x,hitP.z]:null, dg=g?Math.hypot(g[0]-u.x,g[1]-u.z):99;
+    const bx=new THREE.Box3().setFromObject(u.fig.root), c=[[bx.min.x,bx.min.z],[bx.max.x,bx.min.z],[bx.min.x,bx.max.z],[bx.max.x,bx.max.z]].map(([x,z])=>screenOf(x,bx.max.y,z)).concat([[bx.min.x,bx.min.z],[bx.max.x,bx.max.z]].map(([x,z])=>screenOf(x,bx.min.y,z))).filter(Boolean);
+    const inBox=c.length&&mx>=Math.min(...c.map(q=>q[0]))-10&&mx<=Math.max(...c.map(q=>q[0]))+10&&my>=Math.min(...c.map(q=>q[1]))-10&&my<=Math.max(...c.map(q=>q[1]))+10;
+    if(dg<=1.2||inBox){ const d=Math.min(dg*20,inBox?8:99); if(!best||d<best.d) best={u,d}; } }
+  const down=best; best=null;   // a click squarely on someone standing beats the floor round someone down
   for(const u of S.units){ if(u.fled||u.evac||!u.fig.root.visible||(filter&&!filter(u))) continue; const y0=yU(u), standing=u.alive&&!u.down;
     const a=screenOf(u.x,y0+(standing?.1:.05),u.z), b=screenOf(u.x,y0+(standing?1.75:.4),u.z); if(!a||!b) continue;
     const hgt=Math.hypot(b[0]-a[0],b[1]-a[1]), wid=Math.max(14,hgt*.22), q=SP.ptSeg(mx,my,a[0],a[1],b[0],b[1]);
-    if(q.d<=wid&&(!best||q.d<best.d)) best={u,d:q.d}; }
-  return best&&best.u; }
+    if(q.d<=wid&&(!best||q.d<best.d)) best={u,d:q.d,w:wid}; }
+  if(best&&(!down||best.d<=best.w*.6)) return best.u; return down?down.u:best&&best.u; }
 function target(p){ if(!p||!S.F) return null; const W=wS(), q=W.snap(p), ct=W.costTo(S.F,q); if(ct&&!ct.over) return {p:q,cost:ct.cost,snapped:q!==p};
   const c2=W.costTo(S.F,p); return c2&&!c2.over?{p,cost:c2.cost,snapped:false}:null; }
 function landing(u,p){ if(!p) return null; const d=Math.hypot(p[0]-u.x,p[1]-u.z); let q=p; if(d>CR.V.throwRange){ q=[u.x+(p[0]-u.x)/d*CR.V.throwRange,u.z+(p[1]-u.z)/d*CR.V.throwRange]; }
@@ -5533,6 +5620,7 @@ function landing(u,p){ if(!p) return null; const d=Math.hypot(p[0]-u.x,p[1]-u.z)
 let drag=null;
 canvas3.addEventListener('pointerdown',e=>{ drag={x:e.clientX,y:e.clientY,btn:e.button,pan:e.button===2||e.shiftKey,moved:0}; canvas3.setPointerCapture(e.pointerId); });
 canvas3.addEventListener('pointermove',e=>{ if(!drag){ const fp=S.w&&pointUnder(e); if(fp&&S.w.insideAt(...fp)){ cutAt=fp; cutT=performance.now(); } const h=S.w&&!FP?pickUnit(e,v=>v.team==='squad'||v.vis):null; canvas3.style.cursor=h?'pointer':'';
+    if(h&&h.team==='squad'&&h.down&&!h.dead&&ctxEl.hidden){ hideHover(); hoverEl.textContent=`${h.name} is down · ${h.stable?'stable':'bleeding: '+h.bleed+' turns'}\nClick: first aid`; hoverEl.style.whiteSpace='pre-line'; return; }
     if(h&&h.team==='raider'&&h.alive&&ctxEl.hidden){ hideHover(); hoverEl.textContent=`${h.name} · ${h.hp}/${h.max} HP${h.armor?' · armour '+h.armor:''}${planning()?'\nClick or right click: what '+(S.sel?S.sel.name:'your soldier')+' can do to them':S.phase==='explore'?'\nRight click: engage':''}`; hoverEl.style.whiteSpace='pre-line'; return; }
     hover(pointUnder(e)); return; } const dx=e.clientX-drag.x, dy=e.clientY-drag.y; drag.x=e.clientX; drag.y=e.clientY; drag.moved+=Math.abs(dx)+Math.abs(dy);
   if(drag.moved<(drag.btn===2?12:6)) return; S.camGoal=null; S.camHold=performance.now()+5000; closeMenu();
@@ -5546,7 +5634,7 @@ canvas3.addEventListener('pointerup',e=>{ const click=drag&&drag.moved<(drag.btn
   if(DBG&&e.altKey&&S.sel&&p&&!S.busy){ const W=wS(); if(W.clearAt(...p)){ S.sel.x=p[0]; S.sel.z=p[1]; S.sel.order=null; log(`Debug: ${S.sel.name} put at ${p.map(v=>v.toFixed(1)).join(', ')}.`); select(S.sel); } else log('Debug: not clear there.'); return; }
   if(S.mode==='drag'&&S.sel&&p){ setAct(S.sel,{type:'drag',item:S.dragItem,point:p}); S.mode='move'; S.dragItem=null; afterOrder(S.sel); return; }
   if(S.mode==='throw'&&S.sel){ const q=landing(ghostAt(S.sel),p); if(q){ setAct(S.sel,{type:'throw',point:q}); S.mode='move'; afterOrder(S.sel); } else log('No clear throw there.'); return; }
-  if(hit&&hit.team==='raider'&&planning()){ rightClick(e,p,hit); return; }   // a left click on a raider opens the same options
+  if(hit&&(hit.team==='raider'||(hit.down&&!hit.dead))&&planning()){ rightClick(e,p,hit); return; }   // a left click on a raider opens the same options
   if(!p) return;
   const u=hit&&hit.team==='squad'&&hit.alive&&!hit.evac?hit:S.units.find(v=>v.alive&&!v.evac&&v.team==='squad'&&S.phase==='plan'&&Math.hypot(planned(v)[0]-p[0],planned(v)[1]-p[1])<.55); if(u&&!S.busy){ if(u!==S.sel&&S.phase==='plan'&&Math.random()<.45) bark(u,'select'); select(u); return; }
   if(S.busy||!S.sel) return; const t=target(p);
@@ -5598,6 +5686,7 @@ function frame(now){ requestAnimationFrame(frame); const real=Math.min(.05,(now-
     if((detT+=real)>.2){ detT=0; if(!spottedCheck()) contactCheck(); } }
   if(roofDeck){ roofDeck.visible=squad().some(u=>u.lv&&(u.alive||u.down))||!!(S.sel&&S.sel.lv); roofDeck.userData.outline.visible=roofDeck.visible; }
   { const rawT=Math.min(.5,(now-tpLast)/1000); tpLast=now; if(S.tp) tpStep(dt,real,now); S.tpRaw=rawT; }
+  stepDownRings(now); stepBlood(real); stepBullet(Math.min(.05,(now-(frame.lastBullet||now))/1000)); frame.lastBullet=now;
   const acting=[];
   for(const u of S.units){ const f=u.fig; if(u.fled||u.evac) continue;
     let moving=now-(u.tpMoveT||0)<120;
@@ -5620,8 +5709,9 @@ function frame(now){ requestAnimationFrame(frame); const real=Math.min(.05,(now-
   if(S.phase==='explore'&&S.sight&&(frame.t=(frame.t||0)+real)>.25){ frame.t=0; drawSight(); }
   if(FP){ fpsFrame(real); renderer.render(scene,camera); return; }
   // while orders play out, the camera follows whoever is moving or shooting (the middle of them)
-  if((S.phase==='exec'||S.phase==='raiders'||S.phase==='breach')&&now>S.camHold){ const vis=acting.filter(u=>u.team==='squad'||u.vis); if(vis.length){ let x=0,z=0; for(const u of vis){ x+=u.x; z+=u.z; } S.camGoal={x:x/vis.length,z:z/vis.length}; } }
-  if(S.camGoal&&now>S.camHold){ view.target.x+=(S.camGoal.x-view.target.x)*Math.min(1,real*2.2); view.target.z+=(S.camGoal.z-view.target.z)*Math.min(1,real*2.2); if(S.sel&&(S.phase==='plan'||S.phase==='explore')&&!S.busy&&S.sel.alive) S.camGoal={x:S.sel.x,z:S.sel.z}; }
+  if((S.phase==='exec'||S.phase==='raiders'||S.phase==='breach')&&now>S.camHold&&!S.cam){ const vis=acting.filter(u=>u.team==='squad'||u.vis); if(vis.length){ let x=0,z=0; for(const u of vis){ x+=u.x; z+=u.z; } x/=vis.length; z/=vis.length;
+    if(!S.camGoal||Math.hypot(x-S.camGoal.x,z-S.camGoal.z)>2.5) S.camGoal={x,z}; } }   // re-aim only when the action has really moved
+  if(S.camGoal&&now>S.camHold){ const ck=Math.min(1,real*((S.phase==='exec'||S.phase==='raiders')?1.1:2.2)); view.target.x+=(S.camGoal.x-view.target.x)*ck; view.target.z+=(S.camGoal.z-view.target.z)*ck; if(S.sel&&(S.phase==='plan'||S.phase==='explore')&&!S.busy&&S.sel.alive) S.camGoal={x:S.sel.x,z:S.sel.z}; }
   // WASD moves the camera over the ground, relative to the way it faces
   if(held.size&&!FP&&!S.tp){ const f=(held.has('w')?1:0)-(held.has('s')?1:0), rt=(held.has('d')?1:0)-(held.has('a')?1:0), sp=view.dist*.9*real, sa=Math.sin(view.az), ca=Math.cos(view.az);
     if(f||rt){ view.target.x+=(-sa*f+ca*rt)*sp; view.target.z+=(-ca*f-sa*rt)*sp; S.camGoal=null; S.camHold=now+5000; } }
@@ -5632,10 +5722,10 @@ function frame(now){ requestAnimationFrame(frame); const real=Math.min(.05,(now-
   placeCamera();
   if(STRICT&&S.view==='tp'&&S.sel&&!FP&&S.phase!=='over') svCamera(Math.max(S.tpRaw||.016,.016));
   if(S.tp&&!FP&&S.sel&&S.phase!=='over') tpCamera(Math.max(S.tpRaw||.016,.016)); else tpOff();
-  const shot=S.cam||(planning()&&S.actionCam&&S.camPreview);
   const rawDt=Math.min(.5,(now-(frame.lastRaw||now))/1000); frame.lastRaw=now;   // the camera eases on wall-clock time, so it arrives on any frame rate
-  if(shot&&!FP){ overShoulder(shot.a,shot.b,Math.max(rawDt,.016)); } else camOff();
-  $('stage').classList.toggle('cine',!!S.cam&&!FP);
+  if(S.cam&&S.cam.endAt&&now>S.cam.endAt){ if(S.cam.a.team==='raider') S.camRest=now+CAM_REST; S.cam=null; }
+  camRig(FP?null:(S.cam||(planning()&&S.actionCam&&S.camPreview)||null),Math.max(rawDt,.016));
+  $('stage').classList.toggle('cine',rig.w>.6&&!!S.cam&&!FP);
   if(shake>0){ shake=Math.max(0,shake-real); const k=shake*.35; camera.position.x+=(Math.random()-.5)*k; camera.position.y+=(Math.random()-.5)*k; } applyView(); if(typeof stepCut==='function') stepCut(); drawBadges(); stepBarks(real); renderer.render(scene,camera); }
 
 // ---------- third person, free: move and shoot in real time ----------
@@ -5686,7 +5776,7 @@ function tpFire(){ const u=S.sel; if(!u||!u.alive||u.evac||u.reloading||(u.tpCoo
   const b=first&&map.get(first.object);
   if(b){ let head=false; for(let o=first.object;o;o=o.parent) if(o===b.fig.head) head=true;
     const d=CR.dist(u,b); let dmg=W.dmg[0]+Math.floor(S.rng()*(W.dmg[1]-W.dmg[0]+1))+(head?W.critDmg:0); if(W.profile==='short'&&d>12) dmg=Math.max(1,dmg-2);
-    const armor=Math.min(b.armor||0,dmg); dmg-=armor; S.stats.hits++; Motion.kick(b.fig,'hit',1,{from:{x:u.x,z:u.z}});
+    const armor=Math.min(b.armor||0,dmg); dmg-=armor; S.stats.hits++; Motion.kick(b.fig,'hit',1,{from:{x:u.x,z:u.z}}); if(dmg) bloodHit(u,b,head,dmg);
     pop(b,head?`HEADSHOT −${dmg}`:dmg?`−${dmg}`:'ARMOR',head?'crit':''); log(`${u.name} → ${b.name}: ${head?'headshot ':'hit '}${dmg}${armor?' ('+armor+' soaked)':''}.`);
     if(dmg) harm(b,dmg,u); b.unaware=false; b.revealT=2; if(!b.alive) bark(u,'kill'); drawBar(); }
   else if(first&&first.distance<70){ pop([end.x,end.z,u.lv||0],'·','miss'); }
@@ -5858,6 +5948,7 @@ if(STRICT){ const seg=$('viewSeg'); if(seg){ seg.hidden=false; seg.addEventListe
 $('bSel').onchange=()=>{ S.seed=0; setup(); }; $('hSel').onchange=()=>setup();
 $('rerollBtn').onclick=()=>{ S.seed++; setup(); }; $('restartBtn').onclick=()=>setup();
 $('tpBtn').onclick=()=>setTP(!S.tp);
+$('bloodBtn').onclick=()=>{ S.gore=!S.gore; $('bloodBtn').setAttribute('aria-pressed',S.gore); if(!S.gore){ clearBlood(); for(const u of S.units) u.fig.root.traverse(o=>{ if(o.userData.wound) o.visible=false; }); } };
 $('camBtn').onclick=()=>{ S.actionCam=!S.actionCam; $('camBtn').setAttribute('aria-pressed',S.actionCam); };
 $('labelsBtn').onclick=()=>{ S.labels=!S.labels; $('labelsBtn').setAttribute('aria-pressed',S.labels); };
 $('sightBtn').onclick=()=>{ S.sight=!S.sight; $('sightBtn').setAttribute('aria-pressed',S.sight); drawSight(); };
