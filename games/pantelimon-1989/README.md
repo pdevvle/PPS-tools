@@ -107,5 +107,11 @@ Research notes behind the choices, and where they are uncertain:
   - Surface types (panel concrete, windows, setts, asphalt, plaster, wool, quilting, skin) are selected per vertex.
 - **Windows**: interior mapping gives every window real depth, with a reveal, frames, curtains and a room behind it. No textures are used.
 - **Paint filter**: a Kuwahara filter, film grade, vignette and grain are applied after the scene renders. Falling snow and the overhead wires are drawn after the filter so they stay crisp.
-- **People**: rigid-part rigs with painted faces, animated procedurally. The woman's rug is a verlet cloth pinned to her hands.
+- **People** are modelled after the cast of *The Long Dark*:
+  - Each person is one continuous skinned mesh that bends at the shoulders, elbows, hips and knees, with up to four bone weights per vertex. A coat skirt follows the thighs more strongly toward its hem.
+  - Heads are sculpted in code: brow ridge, eye sockets, cheekbones, jaw corner, laugh lines and lips. Each has a faceted nose, eyeballs under heavy upper lids, and ears.
+  - Hands have four jointed fingers and a thumb, posed to grip, hold a cigarette or hang relaxed.
+  - Clothes have thickness and weight: hems and turned-back cuffs, lapels, a turned-up collar, padded shoulders, folds in the skirts, quilted channels and diamonds, and knit ribbing.
+  - The shader paints light from above into the colours, adds brush strokes to the cloth and a soft sky rim around each figure, and reddens noses and cheeks in the cold.
+  - Everyone is animated procedurally. The woman's rug is a verlet cloth pinned to her hands.
 - **Sound**: all synthesised, including footsteps that change with the surface, the ball, the rug, hooded crows, stray dogs and the city's low hum.
