@@ -63,6 +63,15 @@ button.pri{background:var(--gold);color:#211b10;border-color:var(--gold)}
 .tp-tip{position:absolute;left:50%;bottom:54px;transform:translateX(-50%);z-index:3;max-width:min(760px,92%);text-align:center;font:12px/1.5 var(--mono);color:#cfcac0;pointer-events:none;text-shadow:0 1px 2px #000}
 .tp-tip b{display:inline-block;background:#f3d38a;color:#211b10;padding:0 5px;border-radius:2px;margin-right:4px}.tp-tip span{opacity:.75}
 .seg{display:flex}.seg button{border-radius:0;margin-left:-1px}.seg button:first-child{border-radius:3px 0 0 3px}.seg button:last-child{border-radius:0 3px 3px 0}.seg[hidden]{display:none}
+/* the right-click wheel */
+.ctx.wheel{width:0;height:0;min-width:0;max-width:none;padding:0;border:0;background:none;box-shadow:none}
+.ctx.wheel::before{content:'';position:absolute;left:calc(var(--r) * -1.45);top:calc(var(--r) * -1);width:calc(var(--r) * 2.9);height:calc(var(--r) * 2);border-radius:50%;border:1px dashed rgba(224,165,38,.35);background:radial-gradient(circle,rgba(24,24,26,.35),rgba(24,24,26,0) 70%);pointer-events:none}
+.ctx.wheel .hub{position:absolute;transform:translate(-50%,-50%);max-width:150px;text-align:center;font:600 11px var(--mono);color:#f1eee8;background:rgba(24,24,26,.92);border:1px solid #6e1a10;border-radius:14px;padding:5px 9px;letter-spacing:.03em}
+.ctx.wheel button{position:absolute;transform:translate(-50%,-50%);display:block;width:auto;max-width:170px;white-space:nowrap;text-align:center;background:rgba(24,24,26,.95);border:1px solid var(--line);border-radius:16px;padding:5px 12px;font:600 13px var(--body);box-shadow:0 3px 10px rgba(0,0,0,.4)}
+.ctx.wheel button span{display:block;font:11px var(--mono);color:#f3d38a}.ctx.wheel button:hover:not(:disabled),.ctx.wheel button:focus-visible{border-color:var(--gold);background:#2d2f33;outline:none}
+.ctx.wheel button:disabled{opacity:.55}.ctx.wheel button:disabled span{color:var(--muted)}
+.ctx.wheel p{position:absolute;left:0;transform:translateX(-50%);width:260px;text-align:center;margin:0;font:11px var(--mono);color:var(--muted);text-shadow:0 1px 2px #000}
+.badge.pips u{text-decoration:none;font:600 9px var(--mono);color:#cfcac0;margin-right:3px;vertical-align:1px;line-height:1}.badge.pips.sel u{color:#f3d38a}
 /* the squad up close: faces on the bar, a card for the selected soldier, what they say, the shot camera */
 .unit .face{width:34px;height:34px;border-radius:3px;float:left;margin:0 6px 0 0;background:#34302b;object-fit:cover}.unit.dead .face{filter:grayscale(1) brightness(.6)}.unit.down .face{filter:sepia(.6) saturate(2) hue-rotate(-25deg)}
 .hud .card{display:flex;gap:8px;margin-top:6px;padding-top:6px;border-top:1px solid var(--line)}.hud .card img{width:62px;height:62px;border-radius:4px;background:#34302b}
@@ -93,7 +102,7 @@ button.pri{background:var(--gold);color:#211b10;border-color:var(--gold)}
     <button type="button" id="fpsBtn" aria-pressed="false" title="When one of your soldiers takes an overwatch shot, aim it yourself in first person">Aim overwatch yourself</button>
     <button type="button" id="rerollBtn" title="Same building, another procedural layout">Reroll layout</button>
     <button type="button" id="rosterBtn" title="Start a fresh squad: ranks and the memorial are kept in this browser">New squad</button>
-    <p>Click a soldier to select them (Tab: next). Left click: move. Right click a raider, a thing or the soldier: what to do. Space: Go. WASD, Q/E: camera.</p>
+    <p>Click a soldier to select them (1–9, 0 or Tab to jump; Shift+click to group; G or Ctrl+A the whole squad). Right click the ground, a raider, a thing or the soldier for the wheel: move, act. Space: Go. WASD, Q/E: camera.</p>
   </div></details>
 </header>
 <div id="stage">
@@ -5007,7 +5016,7 @@ function drawBadges(){ const out=[], u=S.sel, M=S.mission, put=(x,y,z,cls,txt)=>
     if(t.armor) txt+=(txt?' ':'')+'<span class="arm">'+'◆'.repeat(t.armor)+'</span>';
     if(txt) put(t.x,yU(t)+2.15,t.z,cls,txt); }
   if(S.phase!=='over'&&!S.cam) for(const v of squad()){ if(v.evac||v.dead||!v.fig.root.visible) continue; const hurt=v.hp<v.max;
-    put(v.x,yU(v)+2.05,v.z,'pips'+(hurt?' hurt':'')+(S.sel===v?' sel':''),'<i></i>'.repeat(v.hp)+'<i class="lost"></i>'.repeat(Math.max(0,v.max-v.hp))+(v.down?`<em>${v.stable?'stable':'bleeding '+v.bleed}</em>`:'')); }
+    put(v.x,yU(v)+2.05,v.z,'pips'+(hurt?' hurt':'')+(S.sel===v||inGroup(v)?' sel':''),`<u>${squad().indexOf(v)+1}</u>`+'<i></i>'.repeat(v.hp)+'<i class="lost"></i>'.repeat(Math.max(0,v.max-v.hp))+(v.down?`<em>${v.stable?'stable':'bleeding '+v.bleed}</em>`:'')); }
   const stashSeen=!STRICT||!S.intel||(M&&M.stash&&S.intel.rooms.has(S.G.P.roomOf[Math.floor(M.stash[1]-S.G.M.v0)*S.G.M.W+Math.floor(M.stash[0]-S.G.M.u0)]));
   if(M&&M.stash&&!M.stashTaken&&S.phase!=='over'&&stashSeen) put(M.stash[0],yOf(M.stash[0],M.stash[1],0)+1.4,M.stash[1],'loot','Stash');
   if(M&&M.stashTaken&&S.phase!=='over') put(M.evac[0],.6,M.evac[1],'evac','Way out');
@@ -5185,8 +5194,29 @@ function rebuild(){ const items=S.destroyed.size?S.G.Fn.items.map(it=>S.destroye
 window.__combatRefresh=()=>{ rebuild(); if(S.w){ const a=S.w.syncMoves(S.rec), b=S.w.syncWalls(); if((a||b)&&planning()){ drawReach(); drawSight(); } } };
 
 // ---------- selection and the bar ----------
+// A left click only selects (a soldier) or looks (at a raider or someone down); it never moves anyone. Moves are on the
+// right-click wheel. Shift+click adds a soldier to the group (or takes them out); Ctrl+A or G takes the whole squad;
+// Esc lets the group go. 1–9 and 0 jump to soldiers 1–10, like changing weapons.
+function groupOf(){ const g=[...(S.group||[])].filter(v=>v.alive&&!v.evac); if(S.sel&&S.sel.alive&&!g.includes(S.sel)) g.unshift(S.sel); return g; }
+const inGroup=v=>!!(S.group&&S.group.has(v)&&S.group.size>1);
+function setGroup(list){ S.group=new Set(list.filter(v=>v&&v.alive&&!v.evac)); drawGroup(); drawHud(); }
+const groupRings=new THREE.Group(); scene.add(groupRings); const groupRingM=new THREE.MeshBasicMaterial({color:0xe0a526,transparent:true,opacity:.75,depthWrite:false}), groupRingG=new THREE.RingGeometry(.42,.5,30); groupRingG.rotateX(-Math.PI/2);
+function drawGroup(){ while(groupRings.children.length) groupRings.remove(groupRings.children[0]); if(!S.group||S.group.size<2) return; for(const v of S.group){ const m=new THREE.Mesh(groupRingG,groupRingM); m.userData.u=v; m.renderOrder=6; groupRings.add(m); } }
+function stepGroup(){ for(const m of groupRings.children){ const v=m.userData.u; m.visible=v.alive&&!v.evac; m.position.set(v.x,yU(v)+.05,v.z); } }
+// the whole group to one point: each to the nearest free spot round it, by their own routes and allowance
+async function groupMove(p,then){ const g=groupOf(), lv=(S.sel&&S.sel.lv)||0, W=wOf(S.sel); if(!g.length||!p||S.busy) return;
+  const slots=[[0,0],[1.2,0],[-1.2,0],[0,1.2],[0,-1.2],[1.2,1.2],[-1.2,1.2],[1.2,-1.2],[-1.2,-1.2],[2.4,0],[-2.4,0],[0,2.4],[0,-2.4]].map(([dx,dz])=>[p[0]+dx,p[1]+dz]).filter(q=>W.clearAt(...q));
+  const left=g.filter(v=>(v.lv||0)===lv).sort((a,b)=>Math.hypot(a.x-p[0],a.z-p[1])-Math.hypot(b.x-p[0],b.z-p[1])), taken=[], moves=[];
+  for(const v of left){ const mv=v.move||CR.V.move, budget=S.phase==='explore'?80:STRICT?Math.max(0,v.mvLeft)+(canDash(v)?mv:0):2*mv;
+    const F=W.field(P(v),Math.max(budget,.5),others(v)); let best=null;
+    for(const q of slots){ if(taken.some(t=>Math.hypot(t[0]-q[0],t[1]-q[1])<.7)) continue; const c=W.costTo(F,q); if(!c||c.over||c.cost>budget+1e-6) continue; const d=Math.hypot(q[0]-p[0],q[1]-p[1]); if(!best||d<best.d-1e-6||(Math.abs(d-best.d)<1e-6&&c.cost<best.cost)) best={q,c,d}; }
+    if(!best){ log(`${v.name} cannot get there this round.`); continue; } taken.push(best.q); moves.push({v,q:best.q,cost:best.c.cost,path:W.pathTo(F,best.q)}); }
+  if(S.phase==='explore'){ S.busy=true; clearReach(); await Promise.all(moves.map(m=>m.path&&walk(m.v,m.path.points))); if(S.phase==='explore'){ S.busy=false; select(S.sel); } return; }
+  for(const m of moves){ if(!m.path) continue; if(STRICT){ await strictMove(m.v,m.q,m.cost,m.path); for(let k=0;k<200&&S.busy;k++) await wait(30); } else setMove(m.v,m.q,m.cost,m.path);
+    if(then&&!(STRICT&&m.v.dashed)) setAct(m.v,{type:then}); }
+  drawOrders(); drawReach(); drawBar(); drawHud(); }
 const others=except=>{ const lv=(except&&except.lv)||0, same=u=>(u.lv||0)===lv; return S.units.filter(u=>u.alive&&u!==except&&same(u)).map(P).concat(S.units.filter(u=>u.down&&!u.dead&&same(u)).map(P)); };
-function select(u){ if(!u||!u.alive||u.evac) return; if(STRICT&&u!==S.sel&&S.view==='tp') S.svYaw=u.face; S.sel=u; DL=u.lv||0; S.mode='move'; closeMenu(); arc.visible=false; inkAll(); S.camGoal={x:u.x,z:u.z}; drawReach(); drawSight(); drawOrders(); drawBar(); drawHud(); if(S.phase==='explore') drawEntries(); }
+function select(u,keepGroup){ if(!u||!u.alive||u.evac) return; if(!keepGroup&&!(S.group&&S.group.has(u)&&S.group.size>1)) S.group=new Set([u]); if(S.group&&!S.group.has(u)) S.group.add(u); drawGroup(); if(STRICT&&u!==S.sel&&S.view==='tp') S.svYaw=u.face; S.sel=u; DL=u.lv||0; S.mode='move'; closeMenu(); arc.visible=false; inkAll(); S.camGoal={x:u.x,z:u.z}; drawReach(); drawSight(); drawOrders(); drawBar(); drawHud(); if(S.phase==='explore') drawEntries(); }
 const squad=()=>S.units.filter(u=>u.team==='squad');
 const standing=()=>squad().filter(u=>u.alive&&!u.evac);
 function usable(e,u){ if(!S.w.clearAt(e.out[0],e.out[1])) return false; if(e.kind==='window'&&(e.e.win.sill==null?.9:e.e.win.sill)>1.3) return false; if(S.w.props(e.o).cross&&e.kind!=='garage') return true; return !!(u&&u.role==='breacher'&&u.kit.charge>0&&(e.kind!=='garage')); }
@@ -5214,7 +5244,7 @@ function drawHud(){ const left=S.units.filter(u=>u.team==='raider'&&u.alive&&u.v
   const rf=M&&M.reinforceIn!=null&&M.reinforceIn>0?` · <span style="color:#e2b0a8">reinforcements in ${M.reinforceIn}</span>`:'';
   const ph={explore:'Concealed',plan:'Orders',exec:'Go',raiders:'Raiders',breach:'Breach',over:'Over',live:'Free'}[S.phase];
   hudEl.innerHTML=`<b>${ph}</b>${clock()} · ${S.phase==='explore'?'exploring':'round '+S.round} · ${left} in sight${rf}<div class="sub">${obj}</div>`+
-    (S.sel&&S.sel.team==='squad'?soldierCard(S.sel):''); }
+    (S.sel&&S.sel.team==='squad'?soldierCard(S.sel)+(groupOf().length>1?`<div class="sub">+ ${groupOf().filter(v=>v!==S.sel).map(v=>v.name).join(', ')} (group · Esc lets go)</div>`:''):''); }
 // the selected soldier, up close: their face, name and record, what they carry and how they are
 function soldierCard(u){ const m=u.member||{}, st=u.dead?'dead':u.down?(u.stable?'down, stable':`bleeding: ${u.bleed} turns`):u.hp<=u.max/2?'wounded':'';
   return `<div class="card"><img src="${portrait(u)}" alt=""><div><b>${u.name}${u.nick?' “'+u.nick+'”':''}</b><span>${rankName(m.xp||0)} ${roleOf(u).label}${u.lv?' · on the roof':''}</span>${STRICT&&S.phase==='plan'&&!u.down?`<span>Move ${Math.max(0,u.mvLeft).toFixed(0)} m left${u.dashed?' · dashed: no action':canDash(u)?` · dash +${u.move||CR.V.move} m costs the action`:''}</span>`:''}<span>${m.missions||0} missions · ${(m.kills||0)+(u.kills||0)} kills</span>`+
@@ -5223,10 +5253,13 @@ function whyHtml(o,W){ return '<div class="why">'+o.why.map(([k,v],i)=>`<span>${
 
 // ---------- the right-click menu ----------
 function closeMenu(){ S.camPreview=null; ctxEl.hidden=true; ctxEl.innerHTML=''; ctxEl.items=null; }
-function openMenu(ev,title,items,note){ if(!items.length) return; const st=$('stage').getBoundingClientRect();
-  ctxEl.innerHTML=`<h3>${title}</h3>`+items.map((it,i)=>`<button type="button" role="menuitem" data-k="${i}" ${it.off?'disabled':''}>${it.label}<span>${it.off?it.off:it.sub||''}</span></button>`).join('')+(note?`<p>${note}</p>`:'');
-  ctxEl.items=items; ctxEl.hidden=false; const x=Math.min(ev.clientX-st.left,st.width-ctxEl.offsetWidth-8), y=Math.min(ev.clientY-st.top,st.height-ctxEl.offsetHeight-8); ctxEl.style.left=Math.max(8,x)+'px'; ctxEl.style.top=Math.max(8,y)+'px';
-  const b=ctxEl.querySelector('button:not(:disabled)'); if(b) b.focus(); }
+// the options for a right click, on a wheel round the pointer: the target's name in the hub, the choices round it from
+// the top, clockwise; a choice that cannot be taken says why. The wheel keeps clear of the screen's edges.
+function openMenu(ev,title,items,note){ if(!items.length) return; const st=$('stage').getBoundingClientRect(), n=items.length, R=Math.max(86,44+n*15), RX=R*1.45;   // an ellipse: the labels are wider than they are tall
+  const cx=clamp(ev.clientX-st.left,RX+80,Math.max(RX+80,st.width-RX-80)), cy=clamp(ev.clientY-st.top,R+34,Math.max(R+34,st.height-R-60));
+  ctxEl.className='ctx wheel'; ctxEl.style.setProperty('--r',R+'px'); ctxEl.style.left=cx+'px'; ctxEl.style.top=cy+'px';
+  ctxEl.innerHTML=`<div class="hub">${title}</div>`+items.map((it,i)=>{ const a=-Math.PI/2+i/n*Math.PI*2; return `<button type="button" role="menuitem" data-k="${i}" ${it.off?'disabled':''} style="left:${(Math.cos(a)*RX).toFixed(0)}px;top:${(Math.sin(a)*R).toFixed(0)}px">${it.label}<span>${it.off?it.off:it.sub||''}</span></button>`; }).join('')+(note?`<p style="top:${R+30}px">${note}</p>`:'');
+  ctxEl.items=items; ctxEl.hidden=false; const b=ctxEl.querySelector('button:not(:disabled)'); if(b) b.focus({preventScroll:true}); }
 ctxEl.addEventListener('click',e=>{ const b=e.target.closest('button[data-k]'); if(!b||b.disabled) return; const it=ctxEl.items[+b.dataset.k]; closeMenu(); hoverEl.textContent=''; it.fn(); });
 ctxEl.addEventListener('pointerover',e=>{ const b=e.target.closest('button[data-k]'); const it=b&&ctxEl.items&&ctxEl.items[+b.dataset.k]; hoverEl.innerHTML=it&&it.why?it.why:''; S.camPreview=it&&it.cam&&!it.off?it.cam:null; });
 ctxEl.addEventListener('pointerleave',()=>{ S.camPreview=null; });
@@ -5252,7 +5285,8 @@ function rightClick(ev,p,hit){ const u=S.sel; if(!u||!u.alive) return; if(hit&&!
       if(h) items.push({label:'Drop through',sub:'starts the fight',fn:async()=>{ const rim=rimSpot(u,h,99); S.busy=true; if(rim&&rim.path) await walk(u,rim.path.points); await dropDown(u,h); S.busy=false; startFight('squad','Dropping in from above.'); }});
       else if(u.role==='breacher'&&S.roof.onRoof(...p)) items.push({label:'Blow a hole in the roof',sub:'starts the fight: free shots',off:u.kit.charge<=0?'no charge left':null,fn:async()=>{ const st=chargeSpot(u,p,99); S.busy=true; if(st&&st.path) await walk(u,st.path.points); const ok=await roofCharge(u,p); S.busy=false; if(ok) startFight('squad','The roof caves in.'); else select(u); }});
       if(items.length) openMenu(ev,'Roof',items); }
-    else { const e=S.w.entries().find(x=>near(x.out[0],x.out[1],.9)&&usable(x,u)); if(e) openMenu(ev,e.kind==='window'?'Window':(e.role||'side')+' door',[{label:!S.w.props(e.o).cross?'Set charge here':'Stack here',sub:u.name,fn:async()=>{ const path=S.F&&S.w.pathTo(S.F,e.out); S.busy=true; await walk(u,path?path.points:[{x:u.x,z:u.z},{x:e.out[0],z:e.out[1]}]); if(S.phase!=='explore') return; S.busy=false; u.stack=e; u.face=Math.atan2(e.in[0]-e.out[0],e.in[1]-e.out[1]); drawReach(); drawBar(); }}]); }
+    else { const tw=target(p), walkItems=[]; if(tw) walkItems.push({label:'Walk here',sub:u.name,fn:()=>walkTo(u,tw.p)}); if(groupOf().length>1&&p) walkItems.push({label:`All ${groupOf().length} walk here`,sub:'together',fn:()=>groupMove(p)});
+      const e=S.w.entries().find(x=>near(x.out[0],x.out[1],.9)&&usable(x,u)); if(!e&&walkItems.length) openMenu(ev,'Here',walkItems); if(e) openMenu(ev,e.kind==='window'?'Window':(e.role||'side')+' door',[{label:!S.w.props(e.o).cross?'Set charge here':'Stack here',sub:u.name,fn:async()=>{ const path=S.F&&S.w.pathTo(S.F,e.out); S.busy=true; await walk(u,path?path.points:[{x:u.x,z:u.z},{x:e.out[0],z:e.out[1]}]); if(S.phase!=='explore') return; S.busy=false; u.stack=e; u.face=Math.atan2(e.in[0]-e.out[0],e.in[1]-e.out[1]); drawReach(); drawBar(); }}]); }
     return; }
   if(!planning()){ if(S.phase==='exec'||S.phase==='raiders') log('Orders are given between rounds.'); return; } const items=[], g=ghostAt(u), o=orderOf(u);
   // raiders: what this soldier can do to them, with odds from where the soldier will stand
@@ -5262,6 +5296,8 @@ function rightClick(ev,p,hit){ const u=S.sel; if(!u||!u.alive) return; if(hit&&!
     if(u.second&&!u.second.melee){ const o2=previewOdds(u,t,u.second); items.push({cam:{a:g,b:t},label:u.second.name,sub:o2?o2.aim+'% · no reload':'',off:!lf?'no line from there':null,why:o2&&whyHtml(o2,u.second),fn:()=>{ setAct(u,{type:'pistol',target:t,weapon:u.second,odds:previewOdds(u,t,u.second)}); afterOrder(u); }}); }
     if(u.second&&u.second.melee){ const F=wS().field(P(u),(u.move||CR.V.move)*2,others(u)), spot=CR.meleeSpot(S.w,F,u,t,S.units), om=CR.odds(S.w,u,t,{weapon:u.second}); items.push({label:'Slash',sub:om.aim+'% · run in',off:(t.lv||0)!==(u.lv||0)?'not from up here':spot?null:'too far to reach',why:whyHtml(om,u.second),fn:()=>{ setAct(u,{type:'slash',target:t,weapon:u.second,odds:om}); afterOrder(u); }}); }
     if(u.role==='breacher'){ const q=landing(g,P(t)); items.push({label:'Pipe bomb on them',sub:'×'+u.kit.pipe,off:u.kit.pipe<=0?'none left':!q?'no clear throw':null,fn:()=>{ setAct(u,{type:'throw',point:q}); afterOrder(u); }}); }
+    { const grp=groupOf().filter(v=>v!==u&&(!STRICT||!v.dashed)); const able=grp.filter(v=>v.ammo>0&&CR.lineOfFire(S.w,ghostAt(v),t,{pierce:true}));
+      if(grp.length) items.push({label:`All shoot (${able.length+1})`,sub:`${grp.length+1} in the group`,off:!able.length?'no one else has a line':null,fn:()=>{ setAct(u,{type:'shoot',target:t,weapon:u.weapon,odds:previewOdds(u,t)}); for(const v of able) setAct(v,{type:'shoot',target:t,weapon:v.weapon,odds:previewOdds(v,t)}); afterOrder(u); }}); }
     openMenu(ev,`${u.name} → ${t.name} (${t.hp} HP${t.armor?', armour '+t.armor:''})`,items,'Odds are from where '+u.name+' will stand. Others ordered onto them may leave nothing to hit.'); return; }
   // ladders and the roof
   const R=S.roof, lad=R&&R.ladders.find(L=>u.lv?near(L.top[0],L.top[1],1.3):near(L.foot[0],L.foot[1],1.3));
@@ -5271,13 +5307,16 @@ function rightClick(ev,p,hit){ const u=S.sel; if(!u||!u.alive) return; if(hit&&!
     if(h){ const rim=rimSpot(u,h,besideBudget(u)); items.push({label:'Drop through',sub:'into the '+(S.G.P.rooms[h.room]||{name:'room'}).name.toLowerCase(),off:rim?null:'too far this round',fn:()=>{ moveFor(u,rim); setAct(u,{type:'drop',hole:h}); afterOrder(u); }}); }
     else if(u.role==='breacher'&&R.onRoof(...p)){ const st=chargeSpot(u,p,besideBudget(u)); items.push({label:'Blow a hole in the roof',sub:'look in · drop in',off:u.kit.charge<=0?'no charge left':!st?'too far this round':null,fn:()=>{ moveFor(u,st); setAct(u,{type:'roofcharge',point:p.slice()}); afterOrder(u); }}); } }
   if(u.lv&&!hit){ const tg=target(p), oneAct=(u.move||CR.V.move)*(apTotal(u)-1);
+    if(tg) items.push({label:'Move here',sub:tg.cost.toFixed(0)+' m',fn:()=>{ setMove(u,tg.p,tg.cost,wS().pathTo(S.F,tg.p)); afterOrder(u); }});
+    if(groupOf().length>1) items.push({label:`Move all ${groupOf().length} here`,sub:'on the roof',fn:()=>groupMove(p)});
     if(tg) items.push({label:'Move here, then overwatch',sub:tg.cost.toFixed(0)+' m',off:u.ammo<=0?'empty':tg.cost>oneAct?'needs a dash':null,fn:()=>{ setMove(u,tg.p,tg.cost,wS().pathTo(S.F,tg.p)); setAct(u,{type:'ow'}); afterOrder(u); }});
     if(u.role==='breacher'){ const q=landing(u,p); if(q) items.push({label:'Pipe bomb down there',sub:'×'+u.kit.pipe,off:u.kit.pipe<=0?'none left':null,fn:()=>{ setAct(u,{type:'throw',point:q}); afterOrder(u); }}); }
     openMenu(ev,'Roof',items,'Up here you see down only near the edge, or through a hole.'); return; }
   if(lad&&!hit&&items.length){ openMenu(ev,'Ladder',items); return; }
   // a soldier: the selected one's own actions, or first aid for someone else
   const ally=hit&&hit.team==='squad'&&(hit.alive||hit.down&&!hit.dead)&&!hit.evac?hit:null;
-  if(ally&&ally===u){ items.push({label:'Overwatch',sub:'react to movement',off:u.ammo<=0?'empty':null,fn:()=>{ setAct(u,{type:'ow'}); afterOrder(u); }},{label:'Hunker down',sub:'cover counts more',fn:()=>{ setAct(u,{type:'hunker'}); afterOrder(u); }},{label:'Reload',sub:u.ammo+'/'+u.weapon.ammo,off:u.ammo>=u.weapon.ammo?'full':null,fn:()=>{ setAct(u,{type:'reload'}); afterOrder(u); }});
+  if(ally&&ally===u){ if(groupOf().length>1) items.push({label:`All overwatch (${groupOf().length})`,sub:'the group',fn:()=>{ for(const v of groupOf()) if(v.ammo>0) setAct(v,{type:'ow'}); afterOrder(u); }},{label:`All hunker (${groupOf().length})`,sub:'the group',fn:()=>{ for(const v of groupOf()) setAct(v,{type:'hunker'}); afterOrder(u); }});
+    items.push({label:'Overwatch',sub:'react to movement',off:u.ammo<=0?'empty':null,fn:()=>{ setAct(u,{type:'ow'}); afterOrder(u); }},{label:'Hunker down',sub:'cover counts more',fn:()=>{ setAct(u,{type:'hunker'}); afterOrder(u); }},{label:'Reload',sub:u.ammo+'/'+u.weapon.ammo,off:u.ammo>=u.weapon.ammo?'full':null,fn:()=>{ setAct(u,{type:'reload'}); afterOrder(u); }});
     if(u.role==='ranger') items.push({label:o.rungun?'Cancel run and gun':'Run and gun',sub:'+1 action',off:u.cooldown?'ready in '+u.cooldown:null,fn:()=>{ o.rungun=!o.rungun; afterOrder(u); }});
     if(u.role==='medic'&&u.hp<u.max) items.push({label:'First aid: self',sub:'+'+CR.V.aidHeal,off:u.kit.aid<=0?'none left':null,fn:()=>{ setAct(u,{type:'aid',target:u}); afterOrder(u); }});
     if(u.role==='breacher') items.push({label:'Throw a pipe bomb…',sub:'×'+u.kit.pipe,off:u.kit.pipe<=0?'none left':null,fn:()=>{ S.mode='throw'; clearReach(); drawBar(); }});
@@ -5304,7 +5343,10 @@ function rightClick(ev,p,hit){ const u=S.sel; if(!u||!u.alive) return; if(hit&&!
   if(edge&&edge.e.type==='wall'&&u.role==='breacher'){ const dm=S.w.wallSt[S.w.LV+edge.e.key]; const m=SP.ptSeg(p[0],p[1],...edge.seg); const spot=standBeside(u,{x0:m.x-.45,x1:m.x+.45,z0:m.z-.45,z1:m.z+.45},besideBudget(u));
     items.push({label:'Set a breaching charge',sub:(edge.e.mat||'wall')+(dm&&dm.s?' · damaged':''),off:u.kit.charge<=0?'no charge left':dm&&dm.s>=3?'already open':!spot?'too far':null,fn:()=>{ moveFor(u,spot); setAct(u,{type:'charge',edge,at:[m.x,m.z]}); afterOrder(u); }}); }
   if(M&&M.stashTaken&&near(M.evac[0],M.evac[1],M.evacR)){ const c=S.F&&S.w.costTo(S.F,p); items.push({label:'Get out this way',sub:'',off:c&&!c.over?null:'too far',fn:()=>{ setMove(u,p,c.cost,S.w.pathTo(S.F,p)); setAct(u,{type:'evac'}); afterOrder(u); }}); }
-  const tg=target(p), oneAct=(u.move||CR.V.move)*(apTotal(u)-1);
+  const tg=target(p), oneAct=(u.move||CR.V.move)*(apTotal(u)-1), grp=groupOf();
+  if(tg) items.unshift({label:'Move here',sub:tg.cost.toFixed(0)+' m'+(STRICT&&tg.cost>u.mvLeft?' · dash':''),off:STRICT&&tg.cost>u.mvLeft+(canDash(u)?(u.move||CR.V.move):0)?'too far':null,fn:()=>{ setMove(u,tg.p,tg.cost,wS().pathTo(S.F,tg.p)); afterOrder(u); }});
+  else if(!items.length) items.push({label:'Move here',off:'out of reach',fn:()=>{}});
+  if(grp.length>1&&p) items.unshift({label:`Move all ${grp.length} here`,sub:'spread round the point',fn:()=>groupMove(p)},{label:`All: move, then overwatch`,sub:'',fn:()=>groupMove(p,'ow')});   // with a group, the group's moves come first
   if(tg){ items.push({label:'Move here, then overwatch',sub:tg.cost.toFixed(0)+' m',off:u.ammo<=0?'empty':tg.cost>oneAct?'needs a dash':null,fn:()=>{ setMove(u,tg.p,tg.cost,wS().pathTo(S.F,tg.p)); setAct(u,{type:'ow'}); afterOrder(u); }},
     {label:'Move here, then hunker',sub:'',off:tg.cost>oneAct?'needs a dash':null,fn:()=>{ setMove(u,tg.p,tg.cost,wS().pathTo(S.F,tg.p)); setAct(u,{type:'hunker'}); afterOrder(u); }}); }
   if(u.role==='breacher'){ const q=landing(g,p); items.push({label:'Pipe bomb here',sub:'×'+u.kit.pipe,off:u.kit.pipe<=0?'none left':!q?'no clear throw':null,fn:()=>{ setAct(u,{type:'throw',point:q}); afterOrder(u); }}); }
@@ -5480,7 +5522,7 @@ function startFight(first,why,breachers){ S.round=1; S.prompt=false; S.slow=1; b
   else { flash('Spotted','They saw you first and scramble for cover.',false); for(const r of S.units) if(r.team==='raider'){ r.unaware=false; r.revealT=2; } inkAll(); raiderPhase(true); } }
 function beginPlan(){ S.phase='plan'; S.busy=false; S.mode='move'; for(const u of standing()){ u.order=null; u.ow=false; u.hunker=false; if(STRICT){ u.mvLeft=u.move||CR.V.move; u.dashed=false; } }
   if(STRICT){ revealRooms(); drawEntries(); }
-  inkAll(); select(standing()[0]); drawOrders(); drawHud(); drawBar(); }
+  inkAll(); select(standing().includes(S.sel)?S.sel:standing()[0],true); drawOrders(); drawHud(); drawBar(); }
 // Go: every soldier carries out their orders at the same moment
 async function execute(){ if(!planning()) return; S.camOurs=0; S.bulletOurs=0; closeMenu(); S.phase='exec'; S.busy=true; S.mode='move'; clearReach(); hideHover(); drawOrders(); drawSight(); drawBar(); drawHud();
   const sq=standing(), noise0=S.stats.shots+S.stats.bombs;
@@ -5588,13 +5630,15 @@ addEventListener('keydown',e=>{ if(e.target.tagName==='SELECT') return; const k=
   if(k==='Shift'){ held.add('shift'); return; }
   if((k==='v'||k==='V')&&!e.ctrlKey&&!e.metaKey){ if(STRICT) setView({tp:'iso',iso:'top',top:'tp'}[S.view]); else setTP(!S.tp); return; }
   if(S.tp&&tpKey(e)) return;
-  if(k==='Escape'){ if(!ctxEl.hidden){ closeMenu(); return; } act('back'); return; }
+  if(k==='Escape'){ if(!ctxEl.hidden){ closeMenu(); return; } if(S.group&&S.group.size>1){ setGroup([S.sel]); return; } act('back'); return; }
+  if(/^[0-9]$/.test(k)&&!e.ctrlKey&&!e.metaKey&&!e.altKey){ const v=squad()[k==='0'?9:+k-1]; if(v&&!v.evac){ if(v.alive&&!S.busy) select(v); else S.inspect=v; S.camGoal={x:v.x,z:v.z}; S.camHold=0; if(STRICT&&S.view==='tp'&&v.alive) S.svYaw=v.face; } return; }
+  if(((k==='a'||k==='A')&&(e.ctrlKey||e.metaKey))||((k==='g'||k==='G')&&!e.ctrlKey&&!e.metaKey)){ if(!S.busy&&S.sel){ e.preventDefault(); setGroup(standing()); log(`The whole squad: ${standing().length}. Right click the ground to move them together.`); } return; }
   if(STRICT&&S.view==='tp'&&(k==='q'||k==='Q'||k==='e'||k==='E')) S.svYaw+=(k==='q'||k==='Q')?.5:-.5;
   else if(k==='q'||k==='Q') view.az-=Math.PI/2; else if(k==='e'||k==='E') view.az+=Math.PI/2;
   if(S.busy||S.prompt) return; const u=S.sel;
   if(k===' '&&S.phase==='plan'){ e.preventDefault(); execute(); return; }
   if(k==='b'||k==='B') act('breach');
-  if(S.phase==='plan'&&u){ if(k==='2'&&u.ammo>0){ setAct(u,{type:'ow'}); afterOrder(u); } else if(k==='3'){ setAct(u,{type:'hunker'}); afterOrder(u); } else if(k==='4'&&u.ammo<u.weapon.ammo){ setAct(u,{type:'reload'}); afterOrder(u); } else if(k==='Backspace'){ e.preventDefault(); act('clear'); } }
+  if(false&&S.phase==='plan'&&u){ if(k==='2'&&u.ammo>0){ setAct(u,{type:'ow'}); afterOrder(u); } else if(k==='3'){ setAct(u,{type:'hunker'}); afterOrder(u); } else if(k==='4'&&u.ammo<u.weapon.ammo){ setAct(u,{type:'reload'}); afterOrder(u); } else if(k==='Backspace'){ e.preventDefault(); act('clear'); } }
   if(k==='Tab'){ e.preventDefault(); const sq=standing(); select(sq[(sq.indexOf(S.sel)+1)%sq.length]); } });
 const canvas3=renderer.domElement, ray=new THREE.Raycaster(), ndc=new THREE.Vector2(), plane=new THREE.Plane(new THREE.Vector3(0,1,0),-.08), hitP=new THREE.Vector3();
 function pointUnder(ev){ const r=canvas3.getBoundingClientRect(); ndc.set((ev.clientX-r.left)/r.width*2-1,-(ev.clientY-r.top)/r.height*2+1); ray.setFromCamera(ndc,camera); plane.constant=-(DL&&S.roof?S.roof.H:.08); return ray.ray.intersectPlane(plane,hitP)?[hitP.x,hitP.z]:null; }
@@ -5621,8 +5665,8 @@ function landing(u,p){ if(!p) return null; const d=Math.hypot(p[0]-u.x,p[1]-u.z)
 let drag=null;
 canvas3.addEventListener('pointerdown',e=>{ drag={x:e.clientX,y:e.clientY,btn:e.button,pan:e.button===2||e.shiftKey,moved:0}; canvas3.setPointerCapture(e.pointerId); });
 canvas3.addEventListener('pointermove',e=>{ if(!drag){ const fp=S.w&&pointUnder(e); if(fp&&S.w.insideAt(...fp)){ cutAt=fp; cutT=performance.now(); } const h=S.w&&!FP?pickUnit(e,v=>v.team==='squad'||v.vis):null; canvas3.style.cursor=h?'pointer':'';
-    if(h&&h.team==='squad'&&h.down&&!h.dead&&ctxEl.hidden){ hideHover(); hoverEl.textContent=`${h.name} is down · ${h.stable?'stable':'bleeding: '+h.bleed+' turns'}\nClick: first aid`; hoverEl.style.whiteSpace='pre-line'; return; }
-    if(h&&h.team==='raider'&&h.alive&&ctxEl.hidden){ hideHover(); hoverEl.textContent=`${h.name} · ${h.hp}/${h.max} HP${h.armor?' · armour '+h.armor:''}${planning()?'\nClick or right click: what '+(S.sel?S.sel.name:'your soldier')+' can do to them':S.phase==='explore'?'\nRight click: engage':''}`; hoverEl.style.whiteSpace='pre-line'; return; }
+    if(h&&h.team==='squad'&&h.down&&!h.dead&&ctxEl.hidden){ hideHover(); hoverEl.textContent=`${h.name} is down · ${h.stable?'stable':'bleeding: '+h.bleed+' turns'}\nRight click: first aid`; hoverEl.style.whiteSpace='pre-line'; return; }
+    if(h&&h.team==='raider'&&h.alive&&ctxEl.hidden){ hideHover(); hoverEl.textContent=`${h.name} · ${h.hp}/${h.max} HP${h.armor?' · armour '+h.armor:''}${planning()?'\nRight click: what '+(groupOf().length>1?'the group':S.sel?S.sel.name:'your soldier')+' can do to them':S.phase==='explore'?'\nRight click: engage':''}`; hoverEl.style.whiteSpace='pre-line'; return; }
     hover(pointUnder(e)); return; } const dx=e.clientX-drag.x, dy=e.clientY-drag.y; drag.x=e.clientX; drag.y=e.clientY; drag.moved+=Math.abs(dx)+Math.abs(dy);
   if(drag.moved<(drag.btn===2?12:6)) return; S.camGoal=null; S.camHold=performance.now()+5000; closeMenu();
   if(STRICT&&S.view==='tp'){ S.svYaw-=dx*.008; S.svPitch=clamp(S.svPitch+dy*.005,-.3,.7); return; }
@@ -5635,9 +5679,12 @@ canvas3.addEventListener('pointerup',e=>{ const click=drag&&drag.moved<(drag.btn
   if(DBG&&e.altKey&&S.sel&&p&&!S.busy){ const W=wS(); if(W.clearAt(...p)){ S.sel.x=p[0]; S.sel.z=p[1]; S.sel.order=null; log(`Debug: ${S.sel.name} put at ${p.map(v=>v.toFixed(1)).join(', ')}.`); select(S.sel); } else log('Debug: not clear there.'); return; }
   if(S.mode==='drag'&&S.sel&&p){ setAct(S.sel,{type:'drag',item:S.dragItem,point:p}); S.mode='move'; S.dragItem=null; afterOrder(S.sel); return; }
   if(S.mode==='throw'&&S.sel){ const q=landing(ghostAt(S.sel),p); if(q){ setAct(S.sel,{type:'throw',point:q}); S.mode='move'; afterOrder(S.sel); } else log('No clear throw there.'); return; }
-  if(hit&&(hit.team==='raider'||(hit.down&&!hit.dead))&&planning()){ rightClick(e,p,hit); return; }   // a left click on a raider opens the same options
+  if(hit&&(hit.team==='raider'||(hit.down&&!hit.dead))){ S.inspect=hit; S.camGoal={x:hit.x,z:hit.z}; S.camHold=0; return; }   // a look, nothing more
+  if(e.shiftKey&&hit&&hit.team==='squad'&&hit.alive&&!hit.evac){ const g=new Set(S.group||[]); if(S.sel) g.add(S.sel); if(g.has(hit)&&g.size>1){ g.delete(hit); if(S.sel===hit) S.sel=[...g][0]; } else g.add(hit); S.group=g; select(S.sel,true); return; }
   if(!p) return;
   const u=hit&&hit.team==='squad'&&hit.alive&&!hit.evac?hit:S.units.find(v=>v.alive&&!v.evac&&v.team==='squad'&&S.phase==='plan'&&Math.hypot(planned(v)[0]-p[0],planned(v)[1]-p[1])<.55); if(u&&!S.busy){ if(u!==S.sel&&S.phase==='plan'&&Math.random()<.45) bark(u,'select'); select(u); return; }
+  if(!e.shiftKey&&!S.busy&&S.sel){ S.inspect=null; if(S.group&&S.group.size>1){ setGroup([S.sel]); log('Group let go.'); } }
+  return;   // the ground: nothing; moves are on the right-click wheel
   if(S.busy||!S.sel) return; const t=target(p);
   if(S.phase==='explore'){ if(t) walkTo(S.sel,t.p); return; }
   if(S.phase==='plan'&&STRICT){ if(!t){ log('Out of reach this round.'); return; } strictMove(S.sel,t.p,t.cost,wS().pathTo(S.F,t.p)); return; }
@@ -5687,7 +5734,7 @@ function frame(now){ requestAnimationFrame(frame); const real=Math.min(.05,(now-
     if((detT+=real)>.2){ detT=0; if(!spottedCheck()) contactCheck(); } }
   if(roofDeck){ roofDeck.visible=squad().some(u=>u.lv&&(u.alive||u.down))||!!(S.sel&&S.sel.lv); roofDeck.userData.outline.visible=roofDeck.visible; }
   { const rawT=Math.min(.5,(now-tpLast)/1000); tpLast=now; if(S.tp) tpStep(dt,real,now); S.tpRaw=rawT; }
-  stepDownRings(now); stepBlood(real); stepBullet(Math.min(.05,(now-(frame.lastBullet||now))/1000)); frame.lastBullet=now;
+  stepDownRings(now); stepGroup(); stepBlood(real); stepBullet(Math.min(.05,(now-(frame.lastBullet||now))/1000)); frame.lastBullet=now;
   const acting=[];
   for(const u of S.units){ const f=u.fig; if(u.fled||u.evac) continue;
     let moving=now-(u.tpMoveT||0)<120;
