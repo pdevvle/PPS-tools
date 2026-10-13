@@ -184,7 +184,7 @@ export function buildExterior(plan: BuildingPlan, b: GeoBuilder, g: GeoBuilder |
         // near: a real opening — reveal through the wall, frame and glass
         const depth = EXT;
         reveal(b, pl.side, pl.c, h, 0, -depth, rev, isDoor ? null : A('#c8c4b8', M.PAINT, {}));
-        if (h.kind === 'entrance') { entranceDoor(b, pl.side, pl.c, h, r); continue; }
+        if (h.kind === 'entrance') continue; // the leaves are animated doors (world/doorman.ts)
         windowFrame(b, g!, pl.side, pl.c, h, frameCol, h.kind === 'shopfront');
       }
     }
@@ -314,27 +314,6 @@ function windowFrame(b: GeoBuilder, g: GeoBuilder, side: Side, c: number, h: Hol
   for (const dd of [d + 0.02, d - 0.04]) {
     const p = [onPlane(side, c, h.t0, h.y0, dd), onPlane(side, c, h.t1, h.y0, dd), onPlane(side, c, h.t1, h.y1, dd), onPlane(side, c, h.t0, h.y1, dd)];
     quadFacing(g, p, A('#000000', M.GLASS, { seed: shop ? 1 : 0 }), outward(side));
-  }
-}
-
-/** A vertical slab from ground point p0 toward p1 (local x along it), y0..y1 high, `th` thick. */
-function slab(b: GeoBuilder, p0: V3, dir: V3, len: number, y0: number, y1: number, th: number, a: Attr, face?: Attr) {
-  b.push().translate(p0[0], 0, p0[2]).rotateY(Math.atan2(-dir[2], dir[0]));
-  b.boxMM(0, y0, -th / 2, len, y1, th / 2, a, face ? { pz: face, nz: face } : {});
-  b.pop();
-}
-const tAxis = (side: Side): V3 => (side === 'n' || side === 's' ? [1, 0, 0] : [0, 0, 1]);
-
-function entranceDoor(b: GeoBuilder, side: Side, c: number, h: Hole, r: () => number) {
-  // double doors standing open into the lobby, so you can walk in
-  const n = outward(side), T = tAxis(side);
-  const leafA = A(h.room.type === 'lobby' ? '#5a4632' : '#3e4a3e', M.WOOD, { seed: r() });
-  const half = (h.t1 - h.t0) / 2 - 0.01;
-  const th = 1.35;
-  for (const [t, s] of [[h.t0, 1], [h.t1, -1]] as const) {
-    const hinge = onPlane(side, c, t, 0, -EXT + 0.03);
-    const dir: V3 = [T[0] * s * Math.cos(th) - n[0] * Math.sin(th), 0, T[2] * s * Math.cos(th) - n[2] * Math.sin(th)];
-    slab(b, hinge, dir, half, h.y0 + 0.01, h.y1 - 0.03, 0.045, leafA);
   }
 }
 
@@ -529,30 +508,9 @@ function interior(b: GeoBuilder, plan: BuildingPlan, room: Room, r: () => number
         const fr = A(room.type === 'hall' && o.to?.includes('/r') && plan.rooms.find((x) => x.id === o.to)?.type === 'stair' ? '#5a3a24' : '#c8c0aa', M.PAINT, { seed: 0.2 });
         for (const t of [o.t0 - 0.05, o.t1]) { const bx = boxOnPlane(side, c, t, t + 0.05, y0, y0 + o.y1 + 0.05, -0.015, 0.0); b.boxMM(bx[0], bx[1], bx[2], bx[3], bx[4], bx[5], fr); }
         const hb = boxOnPlane(side, c, o.t0 - 0.05, o.t1 + 0.05, y0 + o.y1, y0 + o.y1 + 0.06, -0.015, 0); b.boxMM(hb[0], hb[1], hb[2], hb[3], hb[4], hb[5], fr);
-        if (side === 'n' || side === 'w') doorLeaf(b, side, c, o, y0, room, plan);
       }
     }
   }
-}
-
-function doorLeaf(b: GeoBuilder, side: Side, c: number, o: Opening, y0: number, room: Room, plan: BuildingPlan) {
-  const other = plan.rooms.find((x) => x.id === o.to);
-  const front = other?.type === 'stair' || room.type === 'stair';
-  // flat front doors are padded brown leatherette; inner doors are cream with a frosted panel
-  const leaf = front ? A('#4a2e1e', M.UPHOLSTERY, { seed: 0.5 }) : A('#d4ccb4', M.PAINT, { seed: 0.4 });
-  const n = outward(side), T = tAxis(side);
-  const w = o.t1 - o.t0 - 0.02, hgt = o.y1 - 0.03;
-  // hinged at t0, swung ~85° into this room
-  const hinge = onPlane(side, c, o.t0 + 0.01, 0, -0.03);
-  const th = 1.48;
-  const dir: V3 = [T[0] * Math.cos(th) - n[0] * Math.sin(th), 0, T[2] * Math.cos(th) - n[2] * Math.sin(th)];
-  slab(b, hinge, dir, w, y0 + 0.01, y0 + hgt, 0.04, leaf);
-  if (!front) {
-    const p0: V3 = [hinge[0] + dir[0] * 0.15, 0, hinge[2] + dir[2] * 0.15];
-    slab(b, p0, dir, w - 0.3, y0 + hgt * 0.45, y0 + hgt - 0.15, 0.046, A('#a8a898', M.LACE, { seed: 0.3 }));
-  }
-  const kn: V3 = [hinge[0] + dir[0] * (w - 0.1), 0, hinge[2] + dir[2] * (w - 0.1)];
-  b.box(kn[0], y0 + 1.0, kn[2], 0.05, 0.05, 0.12, A('#9a9488', M.CHROME));
 }
 
 function stairsAndLandings(b: GeoBuilder, plan: BuildingPlan, r: () => number, inBand: (y: number) => boolean) {

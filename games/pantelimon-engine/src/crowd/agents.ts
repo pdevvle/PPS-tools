@@ -42,6 +42,7 @@ function residentAgent(r: Resident, x: number, y: number, z: number, yaw: number
     top: lin(o.top), hat, bottom: lin(o.bottom), flags: (o.skirt ? FLAG.skirt : 0) | FLAG.indoor | (lit ? FLAG.lit : 0),
     skin: lin(o.skin), hairStyle: r.sex === 'f' ? (r.age > 50 ? 2 : 1) : 0, hair: lin(o.hair),
     name: r.name, info: `${r.age} ani · ${r.occupation} · ${where}`, what: r.activity.what,
+    fem: r.sex === 'f', age: Math.min(1, r.age / 80),
   };
 }
 
@@ -68,7 +69,8 @@ function streetPerson(r: Rng, kind: 'march' | 'walk', idx: number): Agent {
     x: 0, y: 0, z: 0, yaw: 0, pose: kind === 'march' ? (chance(r, 0.35) ? POSE.chant : POSE.walk) : POSE.walk, phase: r() * 6.28, speed: 0, scale: f ? 0.94 + r() * 0.05 : 0.98 + r() * 0.06,
     top, hat, bottom: f && flags & FLAG.skirt ? lin(pick(r, COATS_F)) : lin(pick(r, TROUSERS)), flags,
     skin: lin(pick(r, SKIN)), hairStyle: f ? (chance(r, 0.5) ? 1 : 2) : 0, hair: lin(age > 55 ? pick(r, HAIR.slice(4)) : pick(r, HAIR.slice(0, 4))),
-    name: `${first} ${pick(r, SURN)}`, info: `${age} ani · ${pick(r, WORK)}`, what: kind === 'march' ? `strigă ${pick(r, CHANTS)}` : idx % 3 ? 'merge grăbit spre centru' : 'se uită după coloană',
+    fem: f, age: age / 80,
+    name: `${first} ${pick(r, SURN)}`, info: `${age} ani · ${age < 25 && chance(r, 0.5) ? "student" : age > 62 ? (f ? "pensionară" : "pensionar") : pick(r, WORK.filter((w) => w !== "student"))}`, what: kind === 'march' ? `strigă ${pick(r, CHANTS)}` : idx % 3 ? 'merge grăbit spre centru' : 'se uită după coloană',
   };
 }
 

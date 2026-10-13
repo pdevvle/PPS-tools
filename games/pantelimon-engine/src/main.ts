@@ -24,6 +24,7 @@ import { exteriorSteps } from './world/extras';
 import { planBuilding } from './gen/plan';
 import { City } from './gen/city';
 import { Hud } from './hud';
+import { DoorManager } from './world/doorman';
 
 const $ = (id: string) => document.getElementById(id)!;
 const params = new URLSearchParams(location.search);
@@ -54,10 +55,12 @@ async function main() {
   }, mats.furniture, mats.depth, false, true);
   scene.add(props.group, furniture.group);
   const crowd = new Crowd(4096);
-  scene.add(crowd.mesh);
+  scene.add(crowd.group);
   const col = new Collider(data);
   const worker = await startWorker();
-  const stream = new Streamer(worker, data, mats, props, furniture, col, crowd);
+  const doors = new DoorManager(mats.furniture);
+  scene.add(doors.group);
+  const stream = new Streamer(worker, data, mats, props, furniture, col, crowd, doors);
   scene.add(stream.root);
   // the boys' football
   const ballB = new GeoBuilder(256);
@@ -146,6 +149,7 @@ async function main() {
     if (e.code === 'KeyY') { const ks = Object.keys(WEATHER) as WeatherKey[]; weather = ks[(ks.indexOf(weather) + 1) % ks.length]; hud.toast(WEATHER[weather].label); }
     if (e.code === 'KeyP') { post.mat.uniforms.uPaint.value = post.mat.uniforms.uPaint.value > 0 ? 0 : 1; }
     if (e.code === 'KeyH') hud.toggleHelp();
+    if (e.code === 'KeyE') doors.toggle();
   });
   addEventListener('keyup', (e) => keys.delete(e.code));
   canvas.addEventListener('click', () => { if (!locked) canvas.requestPointerLock?.(); });
@@ -195,6 +199,9 @@ async function main() {
       right: (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0),
       run: keys.has('ShiftLeft') || keys.has('ShiftRight'), jump: keys.has('Space'),
     };
+    camera.getWorldDirection(dir);
+    doors.update(dt, player.x, player.y, player.z, dir.x, dir.z);
+    doors.segments(player.x, player.z, col.dynamic);
     player.step(inp, Math.min(dt, 0.05), col);
     const bobY = Math.sin(player.bob * 2) * 0.03 * Math.min(1, player.speed / 2);
     camera.position.set(player.x, player.y + player.eye + bobY, player.z);
@@ -225,7 +232,7 @@ async function main() {
     hud.update({
       hours, weather: WEATHER[weather].label,
       place: where ? where.label : near && near.dist < 30 ? near.name || 'Pantelimon' : 'Pantelimon',
-      room: where?.room || '', who,
+      room: where?.room || '', who, prompt: doors.prompt(),
       stats: DEBUG ? `${fps.toFixed(0)} fps · ${renderer.info.render.calls} draws · ${(renderer.info.render.triangles / 1000).toFixed(0)}k tris · tiles ${stream.stats().tiles} · near ${stream.stats().near} · floors ${stream.stats().floors} · q ${stream.stats().queue} · ${stream.lastMs} · people ${crowd.count} · furniture ${furniture.instances} in ${furniture.draws} draws` : '',
     });
     fpsAcc += dt; fpsN++;
@@ -249,7 +256,7 @@ async function main() {
     walk(fwd: number, right: number, seconds: number) { const k = new Set(keys); keys.clear(); if (fwd > 0) keys.add('KeyW'); if (fwd < 0) keys.add('KeyS'); if (right > 0) keys.add('KeyD'); if (right < 0) keys.add('KeyA'); for (let t = 0; t < seconds; t += 1 / 30) frame(1 / 30); keys.clear(); for (const q of k) keys.add(q); },
     setTime(h: number) { hours = h; },
     setWeather(w: WeatherKey) { weather = w; },
-    player, stream, crowd, start, data, col,
+    player, stream, crowd, start, data, col, doors,
     stats() { return { ...stream.stats(), people: crowd.count, furniture: furniture.instances, furnitureDraws: furniture.draws, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, player: { x: player.x, y: player.y, z: player.z } }; },
     entrance(bi: number) {
       const p = planBuilding(data.buildings[bi], city, { furnish: false });

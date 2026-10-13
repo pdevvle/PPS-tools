@@ -17,6 +17,7 @@
   #place { bottom: 18px; left: 16px; font-size: 18px; max-width: calc(100% - 32px); }
   #who { bottom: 64px; left: 50%; transform: translateX(-50%); text-align: center; font-size: 16px; line-height: 1.45; background: var(--panel); padding: 8px 14px; border-radius: 3px; max-width: min(520px, calc(100% - 32px)); }
   #who i { color: var(--dim); }
+  #prompt { top: calc(50% + 22px); left: 50%; transform: translateX(-50%); font: 13px 'IBM Plex Mono', monospace; color: var(--ink); background: var(--panel); padding: 3px 9px; border-radius: 3px; }
   #stats { top: 16px; right: 16px; font: 11px 'IBM Plex Mono', monospace; color: #9a9; max-width: 46ch; text-align: right; }
   #dot { top: 50%; left: 50%; width: 4px; height: 4px; margin: -2px; border-radius: 50%; background: rgba(232,226,212,0.55); }
   #status { top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 18px; color: var(--dim); }
@@ -40,6 +41,7 @@
 <div id="dot" class="hud"></div>
 <div id="place" class="hud"></div>
 <div id="who" class="hud" hidden></div>
+<div id="prompt" class="hud" hidden></div>
 <div id="status" class="hud"></div>
 <div id="help" onclick="document.getElementById('view').click()">
   <div class="card">
@@ -48,6 +50,7 @@
     <div class="keys">
       <span><kbd>W A S D</kbd></span><span>walk · <kbd>Shift</kbd> run · <kbd>Space</kbd> jump</span>
       <span><kbd>Mouse</kbd></span><span>look; look at a person to see who they are</span>
+      <span><kbd>E</kbd></span><span>open or shut the door in front of you (they also open as you come near)</span>
       <span><kbd>T</kbd> / <kbd>G</kbd></span><span>an hour later / earlier</span>
       <span><kbd>Y</kbd></span><span>weather (haze, overcast, fog, the first snow)</span>
       <span><kbd>P</kbd></span><span>paint filter on/off · <kbd>H</kbd> this card</span>

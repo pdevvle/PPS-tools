@@ -13,6 +13,7 @@ This is a vertical slice of the engine for a longer game set during the Romanian
 |---|---|
 | ![The street](docs/street.jpg) | ![A living room](docs/living-room.jpg) |
 | ![The march on Șoseaua Pantelimon](docs/march.jpg) | ![A stairwell](docs/stairwell.jpg) |
+| ![The marchers, after Nightfall's FigureKit](docs/characters.jpg) | ![A door swinging open](docs/door.jpg) |
 
 ## Running it
 
@@ -109,8 +110,8 @@ Every home gets a household, apart from about 8% of flats, where the family has 
 | Level | What | Radius | Built from |
 |---|---|---|---|
 | Tile (96 m) | ground, roads, pavements, tram rails, catenary; *far shells* of every building whose centre is in the tile (interior-mapped windows, balconies, roofs, aerials); street furniture | ~280 m | worker, one message per tile |
-| Near building | the exterior with real openings, glass, reveals, open entrance doors; one *plug* mesh per storey (interior-mapped panes) | 40 m (kept to 55 m) | worker |
-| Storey | rooms, papered walls, floors, ceilings, stairs and landings; furniture as instances; residents | the storey you're on ±1 inside; the 2–3 storeys at eye level from outside | worker |
+| Near building | the exterior with real openings, glass and reveals; one *plug* mesh per storey (interior-mapped panes) | 40 m (kept to 55 m) | worker |
+| Storey | rooms, papered walls, floors, ceilings, stairs and landings; furniture and doors as instances; residents | the storey you're on ±1 inside; the 2–3 storeys at eye level from outside | worker |
 
 A far shell is hidden on the GPU once its near version is up: every shell vertex carries its building's index (`aBid`), and a 1-byte-per-building texture (`uHide`) collapses those vertices. Storeys that aren't loaded show their plugs, so a facade never has holes. Furniture is drawn as one `InstancedMesh` per model, shared by every loaded storey, so a ten-storey block costs about 150 draw calls for furniture however many flats are in view.
 
@@ -131,12 +132,27 @@ The sun, moon and sky follow Bucharest's latitude on 22 December 1989, including
 
 ### The crowd
 
-`crowd/body.ts` builds one figure of about 1,900 triangles. Each vertex is tagged with the bone that moves it (11 bones) and the garment it belongs to. Garments include:
+The figures follow Nightfall Protocol's FigureKit (`games/nightfall-protocol/mockups/base-figure.html` on the Nightfall branches).
+- **Bodies.** Every part is a loft of superellipse cross-sections taken from FigureKit's proportion tables for men and women: torso, pelvis, neck, arms, hands with a thumb, thighs, shins. Soft lobes give the chest and seat their shape.
+- **Faces.** Heads are sculpted with FigureKit's displacement terms: eye sockets, brow ridge, cheekbones, the mouth's curve and both lips, chin, temples and the angle of the jaw. They have a faceted nose (bridge, tip and wings), ears, eyes and brows. Sockets, lips and cheeks are painted into the vertices.
+- **Hair.** Hair is a block whose lower edge drops from the fringe to the ears to the nape, in a short crop, a longer cut and a bun.
+- **Joints.** Elbows, wrists and knees get FigureKit's faceted joint blocks.
+- **Ink.** People are drawn with FigureKit's ink: a back-facing shell pushed out in view space, so the stroke keeps its width on screen. It is wide enough to survive the paint filter. Light falls in three soft bands, FigureKit's inked toon eased into the painted street.
+
+FigureKit builds one mesh per person, which a street of hundreds can't afford. Here the figure is split into one instanced mesh per body (man and woman) and one per face, twelve in all (six men, six women), with their hair. Each person is drawn twice, body and head, about 3,900 welded vertices in all. FigureKit's per-person build (`P.body`) becomes instance data the vertex shader applies before posing:
+- girth
+- shoulder width, which also carries the arms
+- hips, which also carry the legs
+- a belly under the coat
+- age, with a stoop at the shoulders, the head pushed forward and soft knees
+
+Builds and faces come from each person's name, so they stay the same from one visit to the next. The clothes of December 1989 are the lofts themselves, inflated for winter bulk:
+- coats with a turned-up collar and a skirt to the knee
+- trousers, or skirts with stockings
+- winter shoes
 - hats: flat cap, fur *căciulă*, knitted hat, *basma*
-- three hair styles
-- coat skirt or skirt
-- a flag on a pole
-- a rug shaken out of a window
+
+A flag on a pole and a rug for shaking out of a window are attachments.
 
 The vertex shader computes forward kinematics from the instance's pose id and phase:
 - walk cycle
@@ -150,7 +166,7 @@ The vertex shader computes forward kinematics from the instance's pose id and ph
 - reading
 - kicking a ball
 
-Instance attributes carry position, pose and clothing colours, so the CPU only moves people along their paths. Everyone (residents, about 180 marchers, 70 pedestrians) is drawn in one call, and in one more for the shadow map.
+Instance attributes carry position, pose, build, face and clothing colours, so the CPU only moves people along their paths. Everyone (residents, about 180 marchers, 70 pedestrians) is drawn in 14 instanced draws, plus 14 for the ink and 14 for the shadow map.
 
 The march walks west along Șoseaua Pantelimon toward the centre, as the factory workers did on the morning of the 22nd. They chant "Jos Ceaușescu!" and "Ole, ole, ole, Ceaușescu nu mai e!", and some carry the tricolour with the arms cut out of it.
 
@@ -158,6 +174,19 @@ The street scene from the demo is staged in front of the block where you start:
 - two boys passing a ball
 - a woman shaking a rug out of a second-storey window
 - a man walking past with *România Liberă* and a Carpați
+
+### Doors
+
+Every doorway on a loaded storey gets a door leaf, and every leaf is animated:
+- **Interior doors** are cream panel doors with a frosted pane. They open into the room, never into the hall or the stairwell.
+- **Flats' front doors** are padded brown leatherette with studs, a spy-hole and a brass number plate. They open into the flat's hall.
+- **Block entrances** have double varnished doors with wired glass and a push bar.
+- **Houses** have plank doors with a small window.
+- **Shops** have glazed aluminium doors.
+- **Workshops** have double steel doors.
+- **Garages** have up-and-over steel doors that tilt up.
+
+`world/doors.ts` derives them from the plan as pure data: hinge, width, height, the shut direction and the swing direction. A leaf hinges on whichever side keeps it clear of the stairs. `world/doorman.ts` animates them as instances on a springy hinge, with a little overshoot and a bump against the frame. A door opens as you come within about 1.5 m and swings shut a few seconds after you've gone. `E` opens or shuts the one you're facing, and a door you've shut stays shut until you leave. A shut door blocks you, and a swinging leaf is solid.
 
 ### Collision
 
@@ -180,7 +209,7 @@ The furniture types are listed in `FURNITURE` (`src/gen/furnish.ts`) with their 
 
 These are the next steps toward the game:
 - sound (the demo's procedural audio, crowd chants and gunfire)
-- interaction with objects and doors that open and close
+- interaction with objects (drawers, the radio and TV dials, light switches)
 - NPC schedules and pathfinding indoors
 - the route into the centre (Piața Universității, the TV station, Palatul Telefoanelor)
 - vehicles that move, including trams, ARO jeeps and TAB armoured carriers

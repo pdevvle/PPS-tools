@@ -23,6 +23,8 @@ export class Collider {
   circles = new Map<string, Circle[]>();
   boxes = new Map<string, OBox[]>();
   private footprints = new Map<number, Seg[]>();
+  /** Moving obstacles in world coordinates (door leaves), refreshed every frame. */
+  dynamic: Seg[] = [];
   constructor(private data: CityData) {}
 
   addPlan(bi: number, plan: BuildingPlan) {
@@ -95,6 +97,7 @@ export class Collider {
         for (const s of b.col.segs) if (s.y1 > ya && s.y0 < yb && pushSeg(l, s, r)) moved = true;
         if (moved) { p.x = b.cx + l.x * b.c + l.z * b.s; p.z = b.cz - l.x * b.s + l.z * b.c; }
       }
+      for (const s of this.dynamic) if (s.y1 > ya && s.y0 < yb) pushSeg(p, s, r);
       // buildings near enough to touch whose plan isn't loaded yet: solid footprints
       for (const bi of this.nearBuildings(p.x, p.z, 1.5, this.tmp)) if (!this.plans.has(bi)) for (const s of this.footprint(bi)) pushSeg(p, s, r);
       const key = `${Math.floor(p.x / TILE)},${Math.floor(p.z / TILE)}`;

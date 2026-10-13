@@ -18,6 +18,8 @@ import type { ModelPool } from './pools';
 import type { Collider } from './collide';
 import { PROP_RADIUS } from '../mesh/props';
 import type { Crowd } from '../crowd/crowd';
+import type { DoorManager } from './doorman';
+import { doorsFromPlan } from './doors';
 import { residentsOf } from '../crowd/agents';
 import { U } from '../render/uniforms';
 
@@ -42,7 +44,7 @@ export class Streamer {
   lastMs = '';
   ready = false;
   onReady: (() => void) | null = null;
-  constructor(private worker: Worker, data: CityData, private mats: WorldMats, private props: ModelPool, private furniture: ModelPool, private col: Collider, private crowd: Crowd) {
+  constructor(private worker: Worker, data: CityData, private mats: WorldMats, private props: ModelPool, private furniture: ModelPool, private col: Collider, private crowd: Crowd, private doors: DoorManager) {
     this.info = data.buildings.map((b) => {
       let cx = 0, cz = 0; for (const p of b.poly) { cx += p[0]; cz += p[1]; } cx /= b.poly.length; cz /= b.poly.length;
       let r = 0; for (const p of b.poly) r = Math.max(r, Math.hypot(p[0] - cx, p[1] - cz));
@@ -180,6 +182,7 @@ export class Streamer {
       for (const it of m.inst) this.furniture.add(owner, it.key, rec.matrix.clone().multiply(new THREE.Matrix4().fromArray(it.m)), it.lit ? 2 : 1);
       this.furniture.flush();
       this.crowd.set(owner, residentsOf(rec.plan, m.f));
+      this.doors.add(owner, doorsFromPlan(rec.plan, m.f), rec.plan.frame);
     }
     this.pump();
   }
@@ -204,6 +207,7 @@ export class Streamer {
     const owner = `${rec.bi}:${f}`;
     this.furniture.remove(owner);
     this.crowd.remove(owner);
+    this.doors.remove(owner);
     if (rec.plugs[f]) rec.plugs[f].visible = true;
   }
   private setHidden(bi: number, on: boolean) { this.hideData[bi] = on ? 255 : 0; this.hideTex.needsUpdate = true; }
