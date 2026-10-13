@@ -56,7 +56,7 @@ async function main() {
   const crowd = new Crowd(4096);
   scene.add(crowd.mesh);
   const col = new Collider(data);
-  const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
+  const worker = await startWorker();
   const stream = new Streamer(worker, data, mats, props, furniture, col, crowd);
   scene.add(stream.root);
   // the boys' football
@@ -256,6 +256,29 @@ async function main() {
       return { frame: p.frame, entrances: p.entrances, steps: exteriorSteps(p) };
     },
   };
+}
+
+/** The mesh worker, or the same code on the main thread where workers can't start (some sandboxed hosts). */
+async function startWorker(): Promise<Worker> {
+  try {
+    const w = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
+    const ok = await new Promise<boolean>((res) => {
+      const t = setTimeout(() => res(false), 4000);
+      w.onerror = () => { clearTimeout(t); res(false); };
+      // a probe: the worker answers 'ready' to an empty city
+      w.onmessage = () => { clearTimeout(t); res(true); };
+      w.postMessage({ t: 'init', data: { roads: [], buildings: [], areas: [], trams: [], trees: [] } });
+    });
+    if (ok) { w.onmessage = null; w.onerror = null; return w; }
+    w.terminate();
+  } catch { /* fall through */ }
+  const mod = await import('./worker');
+  const fake = {
+    onmessage: null as ((ev: MessageEvent) => void) | null,
+    postMessage(m: unknown) { setTimeout(() => mod.handle(m as never, (r) => fake.onmessage?.({ data: r } as MessageEvent)), 0); },
+    terminate() {},
+  };
+  return fake as unknown as Worker;
 }
 
 /** A block entrance near Șoseaua Pantelimon with a living-room window on the second storey above the street. */

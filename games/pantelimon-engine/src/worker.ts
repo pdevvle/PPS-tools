@@ -20,11 +20,12 @@ function plan(bi: number): BuildingPlan {
   if (plans.size > 160) plans.delete(plans.keys().next().value!);
   return p;
 }
-const post = (m: FromWorker, tr: ArrayBuffer[] = []) => (self as unknown as Worker).postMessage(m, tr);
+let post: (m: FromWorker, tr?: ArrayBuffer[]) => void = (m, tr = []) => (self as unknown as Worker).postMessage(m, tr);
 const tx = (...ms: MeshData[]) => ms.flatMap(transferables);
 
-self.onmessage = (ev: MessageEvent<ToWorker>) => {
-  const m = ev.data;
+/** Handle one message. Exported so the page can run this in-thread where workers are blocked. */
+export function handle(m: ToWorker, reply?: (m: FromWorker) => void) {
+  if (reply) post = (x) => reply(x);
   const t0 = performance.now();
   if (m.t === 'init') { city = new City(m.data); post({ t: 'ready' }); return; }
   if (!city) return;
@@ -66,3 +67,5 @@ self.onmessage = (ev: MessageEvent<ToWorker>) => {
     post({ t: 'floor', bi: m.bi, f: m.f, shell, inst, ms: performance.now() - t0 }, tx(shell));
   }
 };
+
+if (typeof (globalThis as { WorkerGlobalScope?: unknown }).WorkerGlobalScope !== 'undefined') self.onmessage = (ev: MessageEvent<ToWorker>) => handle(ev.data);
