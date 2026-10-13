@@ -13,8 +13,8 @@ export interface RoadHit { dist: number; dx: number; dz: number; kind: RoadKind;
 export interface PlanContext { roadNear(x: number, z: number): RoadHit | null }
 
 export const SH = 2.75;      // storey height of the prefab blocks
-const EXT = 0.3;             // exterior wall thickness
-const INT = 0.12;            // interior partition thickness
+export const EXT = 0.3;             // exterior wall thickness
+export const INT = 0.12;            // interior partition thickness
 const SLAB = 0.25;
 type Side = 'n' | 's' | 'e' | 'w';
 
@@ -246,6 +246,13 @@ function sectionWing(L: Layout, w: Wing, wi: number, b: CityBuilding, ents: { p:
       if (f === 0) L.open(stair, 'n', c, 1.4, 0, 2.25, 'entrance', T, true);
       else if (f + 1 < p.levels) L.open(stair, 'n', c, 1.1, rise / 2 + 0.6, rise / 2 + 1.7, 'stairwindow', T, true);
       stairsFor(p, c, Z0, coreCell.z1, f, T);
+      // the stairwell: open above the flights that arrive from the storey below
+      if (f >= 1) {
+        const well = mapRect({ x0: c - CHW, z0: Z0 + EXT, x1: c + CHW, z1: coreCell.z1 - INT / 2 - 1.26 }, T);
+        stair.voidFloor = well;
+        const prev = L.rooms.find((q) => q.floor === f - 1 && (q.type === 'stair' || q.type === 'lobby') && Math.abs(q.rect.x0 - stair.rect.x0) < 0.05 && Math.abs(q.rect.z0 - stair.rect.z0) < 0.05);
+        if (prev) prev.voidCeil = well;
+      }
       const floorLabel = f === 0 ? 'Parter' : `Et. ${f}`;
       const shopFloor = shops && f === 0;
       for (const sideLR of ['L', 'R'] as const) {

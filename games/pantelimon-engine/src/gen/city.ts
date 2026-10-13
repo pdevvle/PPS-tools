@@ -142,7 +142,7 @@ export class City implements PlanContext {
             const off = road.width / 2 - 1.0;
             const x = ax + ux * d + nx * off * side, z = az + uz * d + nz * off * side;
             if (!inTile(x, z) || this.inBuilding(x, z, 1.5)) continue;
-            out.push({ type: 'car', x, z, y: 0, rot: ang + (side > 0 ? Math.PI : 0) - Math.PI / 2, variant: Math.floor(rr() * 9) });
+            out.push({ type: 'car', x, z, y: 0, rot: ang + (side > 0 ? Math.PI : 0) - Math.PI / 2, variant: Math.floor(rr() * 9) + (chance(rr, 0.14) ? 9 : 0) }); // some on bricks or under a tarpaulin for the winter
           }
         }
       }

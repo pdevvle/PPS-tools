@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pantelimon 1989 Engine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Spectral:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+  :root { --ink: #e8e2d4; --dim: #a8a090; --bg: #0b0b0c; --panel: rgba(12, 11, 10, 0.62); }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); overflow: hidden; font-family: 'Spectral', Georgia, serif; }
+  #view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; }
+  .hud { position: fixed; pointer-events: none; text-shadow: 0 1px 2px #000, 0 0 8px rgba(0,0,0,0.6); }
+  #clock { top: 16px; left: 16px; font-size: 15px; letter-spacing: 0.02em; color: var(--dim); }
+  #place { bottom: 18px; left: 16px; font-size: 18px; max-width: calc(100% - 32px); }
+  #who { bottom: 64px; left: 50%; transform: translateX(-50%); text-align: center; font-size: 16px; line-height: 1.45; background: var(--panel); padding: 8px 14px; border-radius: 3px; max-width: min(520px, calc(100% - 32px)); }
+  #who i { color: var(--dim); }
+  #stats { top: 16px; right: 16px; font: 11px 'IBM Plex Mono', monospace; color: #9a9; max-width: 46ch; text-align: right; }
+  #dot { top: 50%; left: 50%; width: 4px; height: 4px; margin: -2px; border-radius: 50%; background: rgba(232,226,212,0.55); }
+  #status { top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 18px; color: var(--dim); }
+  #toast { top: 48px; left: 16px; font-size: 14px; color: var(--ink); }
+  #help { position: fixed; inset: 0; display: grid; place-items: center; background: radial-gradient(ellipse at center, rgba(0,0,0,0.25), rgba(0,0,0,0.75)); cursor: pointer; padding: 16px; }
+  #help .card { max-width: 560px; background: var(--panel); border: 1px solid rgba(232,226,212,0.15); padding: 26px 28px; line-height: 1.55; }
+  #help h1 { font-weight: 600; font-size: 30px; margin: 0 0 4px; letter-spacing: 0.01em; }
+  #help .sub { color: var(--dim); font-style: italic; margin-bottom: 16px; }
+  #help kbd { font: 12px 'IBM Plex Mono', monospace; border: 1px solid rgba(232,226,212,0.35); border-bottom-width: 2px; padding: 0 5px; border-radius: 3px; }
+  #help .keys { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 15px; margin: 12px 0 14px; }
+  #help .foot { font-size: 12px; color: var(--dim); }
+  #err { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; text-align: center; }
+  @media (max-width: 600px) { #place { font-size: 15px; } #help h1 { font-size: 24px; } }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<div id="clock" class="hud"></div>
+<div id="toast" class="hud" hidden></div>
+<div id="stats" class="hud" hidden></div>
+<div id="dot" class="hud"></div>
+<div id="place" class="hud"></div>
+<div id="who" class="hud" hidden></div>
+<div id="status" class="hud"></div>
+<div id="help" onclick="document.getElementById('view').click()">
+  <div class="card">
+    <h1>Pantelimon, 1989</h1>
+    <div class="sub">An engine slice: the real streets of Pantelimon from OpenStreetMap, set back to December 1989. Every building has rooms you can walk into, and people living in them.</div>
+    <div class="keys">
+      <span><kbd>W A S D</kbd></span><span>walk · <kbd>Shift</kbd> run · <kbd>Space</kbd> jump</span>
+      <span><kbd>Mouse</kbd></span><span>look; look at a person to see who they are</span>
+      <span><kbd>T</kbd> / <kbd>G</kbd></span><span>an hour later / earlier</span>
+      <span><kbd>Y</kbd></span><span>weather (haze, overcast, fog, the first snow)</span>
+      <span><kbd>P</kbd></span><span>paint filter on/off · <kbd>H</kbd> this card</span>
+    </div>
+    <div>Click to begin.</div>
+    <p class="foot">Map data © OpenStreetMap contributors, ODbL. Buildings and features from after 1989 removed.</p>
+  </div>
+</div>
+<div id="err" hidden>WebGL 2 is needed to run this.</div>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>
