@@ -1,0 +1,24 @@
+{
+  "name": "pantelimon-engine",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Engine slice for Pantelimon, 1989: streaming city, generated interiors and residents, GPU crowds, painterly shaders.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "osm:fetch": "node tools/osm-fetch.mjs",
+    "osm:1989": "node tools/osm-1989.mjs",
+    "bake": "tsx tools/bake.ts"
+  },
+  "dependencies": {
+    "three": "0.170.0"
+  },
+  "devDependencies": {
+    "@types/three": "0.170.0",
+    "tsx": "4.19.2",
+    "typescript": "5.7.3",
+    "vite": "6.2.0"
+  }
+}
