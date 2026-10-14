@@ -1,0 +1,492 @@
+{
+ "name": "48918 N Fig Springs Rd",
+ "source": {
+  "slug": "48918-n-fig-springs",
+  "url": "https://www.redfin.com/AZ/New-River/48918-N-Fig-Springs-Rd-85087/home/27249086",
+  "lat": 33.9282414,
+  "lon": -112.0862034,
+  "osmWay": 1046267351
+ },
+ "facts": {
+  "summary": "Hilltop contemporary, 2001: a D-shaped main floor over a block-walled garage level, wrapped by a balcony deck",
+  "built": 2001,
+  "livingSqft": 2743,
+  "beds": 3,
+  "bedsPossible": 4,
+  "baths": 3,
+  "lotAcres": 2.45,
+  "construction": "Stucco over wood frame, 6 in outside walls; garage level of reinforced block with steel beams",
+  "roof": "Foam (flat)",
+  "basement": "Partial: oversized 4-car garage with a full bath and a walk-in vault",
+  "deckSqft": 1400,
+  "fireplaces": [
+   "great room",
+   "master bedroom",
+   "study (two-way with the master)"
+  ],
+  "features": [
+   "semicircular great room with a wall of windows",
+   "kitchen open to dining and great room",
+   "wet bar",
+   "master bath with a 6 ft square tiled shower and double vanity",
+   "hall bath with double vanity and toilet room",
+   "kiva fireplaces",
+   "knotty alder doors and cabinets",
+   "tile in living areas, carpet in bedrooms",
+   "skylights"
+  ]
+ },
+ "design": {
+  "label": "Hilltop contemporary",
+  "region": "sonoran",
+  "era": "modern",
+  "storeys": "1",
+  "roof": "flat",
+  "roofMat": "foam",
+  "over": 0.7,
+  "clad": "stucco",
+  "cladCol": "#d6c8ad",
+  "trim": "#e8e4da",
+  "wallMat": "frame",
+  "lowerWallMat": "block",
+  "found": "walkout",
+  "wallH": 3.0
+ },
+ "floors": [
+  {
+   "role": "lower",
+   "wallH": 3.0,
+   "note": "Garage level under the house, open to the south under the deck; reinforced block walls",
+   "rooms": [
+    {
+     "name": "Stair hall",
+     "kind": "hall",
+     "where": {
+      "x": [
+       -8.6,
+       -4.4
+      ],
+      "z": [
+       -12.5,
+       -5.6
+      ]
+     }
+    },
+    {
+     "name": "Garage",
+     "kind": "garage",
+     "cars": 4,
+     "where": {
+      "x": [
+       -9.6,
+       4.2
+      ],
+      "z": [
+       -5.6,
+       3.2
+      ]
+     }
+    },
+    {
+     "name": "Garage bath",
+     "kind": "bath",
+     "where": {
+      "x": [
+       4.2,
+       8.2
+      ],
+      "z": [
+       -5.6,
+       -1.8
+      ]
+     }
+    },
+    {
+     "name": "Walk-in vault",
+     "kind": "vault",
+     "where": {
+      "x": [
+       4.2,
+       8.2
+      ],
+      "z": [
+       -1.8,
+       1.2
+      ]
+     }
+    },
+    {
+     "name": "Workshop",
+     "kind": "storage",
+     "where": {
+      "x": [
+       4.2,
+       8.2
+      ],
+      "z": [
+       1.2,
+       3.2
+      ]
+     }
+    }
+   ],
+   "doors": [
+    {
+     "a": "Garage",
+     "b": "outside",
+     "kind": "gdoor",
+     "at": [
+      -6,
+      3.2
+     ],
+     "w": 3
+    },
+    {
+     "a": "Garage",
+     "b": "outside",
+     "kind": "gdoor",
+     "at": [
+      0,
+      3.2
+     ],
+     "w": 3
+    },
+    {
+     "a": "Stair hall",
+     "b": "Garage"
+    },
+    {
+     "a": "Garage bath",
+     "b": "Garage"
+    },
+    {
+     "a": "Walk-in vault",
+     "b": "Garage",
+     "heavy": true
+    },
+    {
+     "a": "Workshop",
+     "b": "Garage"
+    }
+   ]
+  },
+  {
+   "role": "ground",
+   "wallH": 3.0,
+   "fill": true,
+   "note": "Main floor: curved great room under a dropped soffit ring, bedrooms along the straight north wall",
+   "rooms": [
+    {
+     "name": "Bedroom 2",
+     "kind": "bed",
+     "where": {
+      "x": [
+       -13,
+       -7.5
+      ],
+      "z": [
+       -13,
+       -6.5
+      ]
+     }
+    },
+    {
+     "name": "Hall bath",
+     "kind": "bath",
+     "where": {
+      "x": [
+       -5.5,
+       -2
+      ],
+      "z": [
+       -13,
+       -8.5
+      ]
+     }
+    },
+    {
+     "name": "Laundry",
+     "kind": "laundry",
+     "where": {
+      "x": [
+       -5.5,
+       -2
+      ],
+      "z": [
+       -8.5,
+       -6.5
+      ]
+     }
+    },
+    {
+     "name": "Entry",
+     "kind": "hall",
+     "where": {
+      "x": [
+       -2,
+       0.5
+      ],
+      "z": [
+       -13,
+       -6.5
+      ]
+     }
+    },
+    {
+     "name": "Study",
+     "kind": "den",
+     "where": {
+      "x": [
+       0.5,
+       3.5
+      ],
+      "z": [
+       -13,
+       -6.5
+      ]
+     }
+    },
+    {
+     "name": "Main bedroom",
+     "kind": "master",
+     "where": {
+      "x": [
+       3.5,
+       8.5
+      ],
+      "z": [
+       -13,
+       -4.5
+      ]
+     }
+    },
+    {
+     "name": "Main bath",
+     "kind": "mbath",
+     "where": {
+      "x": [
+       8.5,
+       13
+      ],
+      "z": [
+       -13,
+       -4.5
+      ]
+     }
+    },
+    {
+     "name": "Bedroom 3",
+     "kind": "bed",
+     "where": {
+      "x": [
+       6.5,
+       13
+      ],
+      "z": [
+       -4.5,
+       -1.2
+      ]
+     }
+    },
+    {
+     "name": "Hall",
+     "kind": "hall",
+     "where": {
+      "x": [
+       -7.5,
+       3.5
+      ],
+      "z": [
+       -6.5,
+       -4.5
+      ]
+     }
+    },
+    {
+     "name": "Balcony deck",
+     "kind": "deck",
+     "where": {
+      "z": [
+       -3.6,
+       20
+      ],
+      "outCircle": [
+       0,
+       -2,
+       8.6
+      ]
+     }
+    },
+    {
+     "name": "Kitchen",
+     "kind": "kitchen",
+     "where": {
+      "x": [
+       -9.5,
+       -3
+      ],
+      "z": [
+       -6.5,
+       -1.2
+      ]
+     }
+    },
+    {
+     "name": "Dining",
+     "kind": "dining",
+     "where": {
+      "x": [
+       -13,
+       -3
+      ],
+      "z": [
+       -1.2,
+       20
+      ]
+     }
+    },
+    {
+     "name": "Great room",
+     "kind": "living",
+     "where": {
+      "x": [
+       -3,
+       13
+      ],
+      "z": [
+       -4.5,
+       20
+      ]
+     }
+    }
+   ],
+   "stair": {
+    "x": [
+     -7.5,
+     -5.5
+    ],
+    "z": [
+     -12,
+     -7
+    ]
+   },
+   "doors": [
+    {
+     "a": "Entry",
+     "b": "outside",
+     "at": [
+      -0.75,
+      -12.3
+     ]
+    },
+    {
+     "a": "Great room",
+     "b": "Balcony deck",
+     "at": [
+      -1,
+      8.4
+     ],
+     "w": 2,
+     "glass": true
+    },
+    {
+     "a": "Dining",
+     "b": "Balcony deck",
+     "at": [
+      -7.5,
+      4.5
+     ],
+     "w": 2,
+     "glass": true
+    },
+    {
+     "a": "Bedroom 3",
+     "b": "Balcony deck",
+     "at": [
+      9,
+      -2
+     ]
+    },
+    {
+     "a": "Study",
+     "b": "Main bedroom"
+    },
+    {
+     "a": "Main bedroom",
+     "b": "Main bath"
+    },
+    {
+     "a": "Main bedroom",
+     "b": "Hall"
+    },
+    {
+     "a": "Study",
+     "b": "Entry"
+    },
+    {
+     "a": "Bedroom 2",
+     "b": "Hall"
+    },
+    {
+     "a": "Hall bath",
+     "b": "Hall"
+    },
+    {
+     "a": "Laundry",
+     "b": "Hall"
+    },
+    {
+     "a": "Entry",
+     "b": "Hall"
+    }
+   ],
+   "windowWalls": [
+    {
+     "room": "Great room",
+     "toward": "Balcony deck",
+     "sill": 0.45,
+     "head": 2.5
+    },
+    {
+     "room": "Dining",
+     "toward": "Balcony deck",
+     "sill": 0.45,
+     "head": 2.5
+    },
+    {
+     "room": "Kitchen",
+     "toward": "Balcony deck",
+     "sill": 1.0,
+     "head": 2.3
+    }
+   ],
+   "features": [
+    {
+     "kind": "kiva",
+     "room": "Great room",
+     "at": [
+      4,
+      2
+     ]
+    },
+    {
+     "kind": "kiva",
+     "room": "Main bedroom",
+     "at": [
+      6,
+      -11.5
+     ]
+    },
+    {
+     "kind": "kiva",
+     "room": "Study",
+     "at": [
+      3,
+      -11.5
+     ],
+     "twoWay": true
+    }
+   ]
+  }
+ ]
+}

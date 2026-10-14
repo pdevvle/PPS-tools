@@ -1,0 +1,1 @@
+Sector files derived from OpenStreetMap data. © OpenStreetMap contributors, licensed under the Open Database Licence (ODbL) 1.0: https://opendatacommons.org/licenses/odbl/. Elevation from Mapzen Terrain Tiles on AWS. See `../../tools/osm/README.md` for how they were made.
