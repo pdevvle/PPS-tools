@@ -6,7 +6,7 @@ const miniEl=document.getElementById('mini'), costEl=document.getElementById('co
 const fail=t=>{ loadingEl.textContent=t; };
 if(!window.THREE){ fail('The 3D view needs three.js, which could not load. Check your connection and reload.'); return; }
 let renderer; try{ renderer=new THREE.WebGLRenderer({antialias:true, alpha:true}); }catch(e){ fail('This browser could not start WebGL.'); return; }
-renderer.setPixelRatio(Math.min(2,window.devicePixelRatio||1)); renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap; renderer.setClearColor(0x000000,0); stage.prepend(renderer.domElement);
+renderer.setPixelRatio(Math.min(1.5,window.devicePixelRatio||1)); renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap; renderer.setClearColor(0x000000,0); stage.prepend(renderer.domElement);
 stage.style.background='linear-gradient(180deg,#9fc6e4,#e8dcc2)';
 const scene=new THREE.Scene(); scene.fog=new THREE.Fog(0xe2d8c2,380,980);
 const cam=new THREE.PerspectiveCamera(38,1,.5,20000);
@@ -49,13 +49,16 @@ function inkOff(group){ const kill=[]; group.traverse(o=>{ if(o.userData.ink) ki
 
 // ---------- the block ----------
 const IDX=await (await fetch('block/index.json')).json();
-const SEC=IDX.sector, NB=IDX.n, HALF=IDX.half, NS=IDX.navStep, SN=SEC/NS, GN=NB*SN, GNN=GN*GN;
+const SEC=IDX.sector, NB=IDX.n, HALF=IDX.half, NS=IDX.navStep, SN=SEC/NS;
+// the baked area is a rectangle of sectors, NBX across and NBZ down, its north-west corner at (BX0,BZ0); GN cells across, GZ down
+const NBX=IDX.nx||NB, NBZ=IDX.nz||NB, BX0=IDX.x0??-HALF, BZ0=IDX.z0??-HALF, BX1=BX0+NBX*SEC, BZ1=BZ0+NBZ*SEC, GN=NBX*SN, GZ=NBZ*SN, GNN=GN*GZ;
 for(const b of IDX.bridges){ const d=b.d; b.yAt=t=>C.bridgeY(b,t); b.tan=k=>{ const p=d[Math.max(0,k-1)], q=d[Math.min(d.length-1,k+1)], l=Math.hypot(q[0]-p[0],q[1]-p[1])||1; return [(q[0]-p[0])/l,(q[1]-p[1])/l]; }; b.nrm=k=>{ const [tx,tz]=b.tan(k); return [tz,-tx]; };
-  b.sec=[Math.floor((b.mid[0]+HALF)/SEC),Math.floor((b.mid[1]+HALF)/SEC)]; b.bb=C.bbox(d); }
-const RK=RoadKit({THREE,C,heightAt:(x,z)=>heightAt(x,z),IDX,renderer,mat,SHAPES,sectorGeo:(g,s)=>sectorGeo(g,s)});   // road surfaces, paint, signs and signals
+  b.sec=[Math.floor((b.mid[0]-BX0)/SEC),Math.floor((b.mid[1]-BZ0)/SEC)]; b.bb=C.bbox(d); }
+const RK=RoadKit({THREE,C,heightAt:(x,z)=>heightAt(x,z),IDX,renderer,mat,SHAPES,sectorGeo:(g,s)=>sectorGeo(g,s),kindAt:(x,z)=>{ const c=cellOf(x,z); return c<0?255:kindG[c]; }});
+const FK=FloraKit({THREE,mat,C,SEC,ink:INK,sectorGeo:(g,s)=>sectorGeo(g,s)});   // desert plants, rock and wash beds (tools/stream/flora-kit.js)
 const sectors=new Map(), key=(c,r)=>c+','+r;
-const secAt=(x,z)=>{ const c=Math.floor((x+HALF)/SEC), r=Math.floor((z+HALF)/SEC); return c>=0&&r>=0&&c<NB&&r<NB?[c,r]:null; };
-const CX=IDX.context, ctxH=(x,z)=>{ const fx=(x+CX.half)/CX.step, fz=(z+CX.half)/CX.step, i=Math.max(0,Math.min(CX.n-2,Math.floor(fx))), j=Math.max(0,Math.min(CX.n-2,Math.floor(fz))), u=fx-i, v=fz-j, h=(a,b)=>CX.h[b*CX.n+a]; return (h(i,j)*(1-u)+h(i+1,j)*u)*(1-v)+(h(i,j+1)*(1-u)+h(i+1,j+1)*u)*v; };
+const secAt=(x,z)=>{ const c=Math.floor((x-BX0)/SEC), r=Math.floor((z-BZ0)/SEC); return c>=0&&r>=0&&c<NBX&&r<NBZ?[c,r]:null; };
+const CX=IDX.context, CCX=CX.cx||0, CCZ=CX.cz||0, ctxH=(x,z)=>{ const fx=(x-CCX+CX.half)/CX.step, fz=(z-CCZ+CX.half)/CX.step, i=Math.max(0,Math.min(CX.n-2,Math.floor(fx))), j=Math.max(0,Math.min(CX.n-2,Math.floor(fz))), u=fx-i, v=fz-j, h=(a,b)=>CX.h[b*CX.n+a]; return (h(i,j)*(1-u)+h(i+1,j)*u)*(1-v)+(h(i,j+1)*(1-u)+h(i+1,j+1)*u)*v; };
 function heightAt(x,z){ const q=secAt(x,z), s=q&&sectors.get(key(...q)); if(!s||!s.Hf) return ctxH(x,z);
   const n=s.hn, fx=(x-s.x0+4)/4, fz=(z-s.z0+4)/4, i=Math.max(0,Math.min(n-2,Math.floor(fx))), j=Math.max(0,Math.min(n-2,Math.floor(fz))), u=fx-i, v=fz-j, H=s.Hf, h=(a,b)=>H[b*n+a];
   return (h(i,j)*(1-u)+h(i+1,j)*u)*(1-v)+(h(i,j+1)*(1-u)+h(i+1,j+1)*u)*v; }
@@ -65,18 +68,18 @@ function deckAt(x,z,pad=0){ for(const b of IDX.bridges){ if(x<b.bb[0]-b.hw-pad||
     if(Math.hypot(x-a[0]-dx*t,z-a[1]-dz*t)>b.hw+pad) continue; const s=b.L[k]+t*Math.sqrt(l2); return {b,s,y:b.yAt(Math.max(0,Math.min(1,s/b.len)))}; } } return null; }
 // the landscape around the block; inside the block it sits a little low so loaded sectors always cover it
 { const n=CX.n, g=new THREE.PlaneGeometry(CX.half*2,CX.half*2,n-1,n-1); g.rotateX(-Math.PI/2); const p=g.attributes.position;
-  for(let i=0;i<p.count;i++){ const x=p.getX(i), z=p.getZ(i), inB=Math.abs(x)<HALF+60&&Math.abs(z)<HALF+60; p.setY(i,CX.h[i]-(inB?14:0)); }   // well below the real ground: its 50 m grid would otherwise poke through washes and cuts g.computeVertexNormals();
+  for(let i=0;i<p.count;i++){ const x=p.getX(i)+CCX, z=p.getZ(i)+CCZ, inB=x>BX0-60&&x<BX1+60&&z>BZ0-60&&z<BZ1+60; p.setY(i,CX.h[i]-(inB?14:0)); }   // well below the real ground: its 50 m grid would otherwise poke through washes and cuts g.computeVertexNormals();
   const c=document.createElement('canvas'); c.width=c.height=1024; const x2=c.getContext('2d'); x2.fillStyle='#c9ae86'; x2.fillRect(0,0,1024,1024);
   const sh=document.createElement('canvas'); sh.width=sh.height=n; const sg=sh.getContext('2d'), img=sg.createImageData(n,n), L=[-.5,.7,-.5], ll=Math.hypot(...L), flat=L[1]/ll;
   for(let j=0;j<n;j++) for(let i=0;i<n;i++){ const h=(a,b)=>CX.h[Math.min(n-1,Math.max(0,b))*n+Math.min(n-1,Math.max(0,a))], dx=(h(i+1,j)-h(i-1,j))/(2*CX.step), dz=(h(i,j+1)-h(i,j-1))/(2*CX.step), nn=[-dx,1,-dz], nl=Math.hypot(...nn), v=((nn[0]*L[0]+nn[1]*L[1]+nn[2]*L[2])/(nl*ll)-flat)*2.2, o=(j*n+i)*4;
     if(v<0) img.data.set([70,45,25,Math.min(.6,-v)*255],o); else img.data.set([255,248,230,Math.min(.4,v)*255],o); }
   sg.putImageData(img,0,0); x2.drawImage(sh,0,0,1024,1024);
-  const me=new THREE.Mesh(g,new THREE.MeshLambertMaterial({map:new THREE.CanvasTexture(c)})); me.receiveShadow=true; scene.add(me);
+  const me=new THREE.Mesh(g,new THREE.MeshLambertMaterial({map:new THREE.CanvasTexture(c)})); me.position.set(CCX,0,CCZ); me.receiveShadow=true; scene.add(me);
   const skirt=new THREE.Mesh(new THREE.PlaneGeometry(60000,60000),new THREE.MeshLambertMaterial({color:0xc4aa82})); skirt.rotation.x=-Math.PI/2; skirt.position.y=Math.min(...CX.h)-4; scene.add(skirt); }
 
 // ---------- movement: one grid over the whole block, filled in as sectors load ----------
 const kindG=new Uint8Array(GNN).fill(255), spG=new Uint8Array(GNN);
-const cellOf=(x,z)=>{ const i=Math.floor((x+HALF)/NS), j=Math.floor((z+HALF)/NS); return i>=0&&j>=0&&i<GN&&j<GN?j*GN+i:-1; };
+const cellOf=(x,z)=>{ const i=Math.floor((x-BX0)/NS), j=Math.floor((z-BZ0)/NS); return i>=0&&j>=0&&i<GN&&j<GZ?j*GN+i:-1; };
 const deck=[], link=new Map();
 for(const [bi,b] of IDX.bridges.entries()){ const lanes=Math.max(2,Math.round((b.w-1)/2)), base=GNN+deck.length, n=b.d.length;
   for(let k=0;k<n;k++){ const [nx,nz]=b.nrm(k); for(let l=0;l<lanes;l++){ const o=(l/(lanes-1)-.5)*(b.w-1.2); deck.push({x:b.d[k][0]+nx*o,z:b.d[k][1]+nz*o,b:bi,nb:[]}); } }
@@ -84,9 +87,9 @@ for(const [bi,b] of IDX.bridges.entries()){ const lanes=Math.max(2,Math.round((b
   for(const [k,sg] of [[0,-1],[n-1,1]]){ const [tx,tz]=b.tan(k); for(let l=0;l<lanes;l++){ const dn=base+k*lanes+l, p=deck[dn-GNN], c=cellOf(p.x+tx*sg*2.2,p.z+tz*sg*2.2); if(c<0) continue; if(!link.has(c)) link.set(c,[]); link.get(c).push(dn); p.nb.push(c); } } }
 const ui={view:'tactical', swim:false, seams:false};
 const nodeSpeed=n=>{ if(n>=GNN){ const b=IDX.bridges[deck[n-GNN].b], s=sectors.get(key(...b.sec)); return s&&s.state==='built'?1:0; } const k=kindG[n]; if(k===255) return 0; if(k===NK.water) return ui.swim?SWIM:0; return spG[n]/250; };
-const nodePos=n=>{ if(n>=GNN){ const d=deck[n-GNN]; return {x:d.x,z:d.z,l:1}; } return {x:-HALF+(n%GN+.5)*NS,z:-HALF+(Math.floor(n/GN)+.5)*NS,l:0}; };
+const nodePos=n=>{ if(n>=GNN){ const d=deck[n-GNN]; return {x:d.x,z:d.z,l:1}; } return {x:BX0+(n%GN+.5)*NS,z:BZ0+(Math.floor(n/GN)+.5)*NS,l:0}; };
 function nearestDeckNode(x,z){ let best=-1,bd=1e9; deck.forEach((d,i)=>{ const dd=Math.hypot(d.x-x,d.z-z); if(dd<bd){ bd=dd; best=i; } }); return best<0?-1:GNN+best; }
-function nearestPassable(c){ const ci=c%GN, cj=Math.floor(c/GN); for(let r=1;r<40;r++){ let best=-1,bd=1e9; for(let dj=-r;dj<=r;dj++) for(let di=-r;di<=r;di++){ if(Math.max(Math.abs(di),Math.abs(dj))!==r) continue; const i=ci+di, j=cj+dj; if(i<0||j<0||i>=GN||j>=GN) continue; const id=j*GN+i; if(nodeSpeed(id)>0){ const dd=di*di+dj*dj; if(dd<bd){ bd=dd; best=id; } } } if(best>=0) return best; } return -1; }
+function nearestPassable(c){ const ci=c%GN, cj=Math.floor(c/GN); for(let r=1;r<40;r++){ let best=-1,bd=1e9; for(let dj=-r;dj<=r;dj++) for(let di=-r;di<=r;di++){ if(Math.max(Math.abs(di),Math.abs(dj))!==r) continue; const i=ci+di, j=cj+dj; if(i<0||j<0||i>=GN||j>=GZ) continue; const id=j*GN+i; if(nodeSpeed(id)>0){ const dd=di*di+dj*dj; if(dd<bd){ bd=dd; best=id; } } } if(best>=0) return best; } return -1; }
 const TOT=GNN+deck.length, gA=new Float32Array(TOT).fill(Infinity), came=new Int32Array(TOT).fill(-1), closed=new Uint8Array(TOT);
 function findPath(from,to){
   const touched=[], heap=[], goal=nodePos(to);
@@ -97,7 +100,7 @@ function findPath(from,to){
   while(heap.length && guard++<600000){ const [,n]=pop(); if(closed[n]) continue; closed[n]=1; if(n===to){ found=true; break; }
     const sa=Math.max(nodeSpeed(n),.05), pa=nodePos(n), nbrs=[];
     if(n<GNN){ const i=n%GN, j=Math.floor(n/GN);
-      for(let dj=-1;dj<=1;dj++) for(let di=-1;di<=1;di++){ if(!di&&!dj) continue; const i2=i+di, j2=j+dj; if(i2<0||j2<0||i2>=GN||j2>=GN) continue; if(di&&dj&&(nodeSpeed(j*GN+i2)<=0||nodeSpeed(j2*GN+i)<=0)) continue; nbrs.push(j2*GN+i2); }
+      for(let dj=-1;dj<=1;dj++) for(let di=-1;di<=1;di++){ if(!di&&!dj) continue; const i2=i+di, j2=j+dj; if(i2<0||j2<0||i2>=GN||j2>=GZ) continue; if(di&&dj&&(nodeSpeed(j*GN+i2)<=0||nodeSpeed(j2*GN+i)<=0)) continue; nbrs.push(j2*GN+i2); }
       const L=link.get(n); if(L) nbrs.push(...L); }
     else nbrs.push(...deck[n-GNN].nb);
     for(const m of nbrs){ if(closed[m]) continue; const sb=nodeSpeed(m); if(sb<=0) continue; const pb=nodePos(m), c=gA[n]+Math.hypot(pb.x-pa.x,pb.z-pa.z)/((sa+sb)/2);
@@ -133,9 +136,7 @@ function* buildSector(s){
   const line=(pts,w,col)=>{ g.beginPath(); pts.forEach(([x,z],i)=>i?g.lineTo(X(x),Z(z)):g.moveTo(X(x),Z(z))); g.lineWidth=Math.max(.6,w*px); g.strokeStyle=col; g.lineCap='round'; g.lineJoin='round'; g.stroke(); };
   const AREA={residential:'#d4c09c',retail:'#9a9894',commercial:'#9a9894',industrial:'#9d978d',parking:'#7d7c79',grass:'#8fa456',park:'#97ab5d',pitch:'#7f9e4a',playground:'#c9a77a',swimming_pool:'#4aa6c8',scree:'#ae9d84',sand:'#dcc7a0',water:'#4aa6c8'};
   for(const k of ['residential','scree','sand','park','grass','pitch','industrial','retail','commercial','parking','playground','swimming_pool','water']) for(const a of D.areas) if(a.kind===k) poly(a.pts,AREA[k]);
-  for(const b of D.beds){ poly(b,'#dac7a0'); }
-  for(const w of D.water){ if(w.kind==='river'&&D.beds.length){ for(let o=-34;o<=34;o+=5.5) line(w.pts.map(([x,z],i)=>[x+o+Math.sin(i*1.7+o)*3,z]),.5+Math.abs(Math.sin(o))*.6,o%11?'rgba(150,125,90,.45)':'rgba(245,232,205,.6)'); }
-    line(w.pts,w.hw*2+4,'#b9a07a'); line(w.pts,w.hw*2-1,'#dcc9a2'); line(w.pts,w.hw*.6,'#cbb48c'); }
+  FK.paintGround(g,s,X,Z,px);
   for(const l of D.lakes) for(const p of l.shore){ line(p,6,'#9c8a68'); line(p,2.5,'#7e6d52'); }
   RK.paintGround(g,s,X,Z,px);
   g.imageSmoothingEnabled=true; g.drawImage(shadeCanvas(s.Hf,n,4),X(x0-4)-2*px,Z(z0-4)-2*px,n*4*px,n*4*px);
@@ -203,8 +204,7 @@ function* buildSector(s){
   yield 'structures';
   // crease lines for the ink worked out now, one mesh a step, so taking the centre doesn't stall on them
   for(const o of [...s.props.children]) if(o.isMesh&&!o.isInstancedMesh&&!o.userData.noInk&&!o.userData.crease){ o.userData.crease=new THREE.EdgesGeometry(o.geometry,28); yield 'creases'; }
-  buildPlants(s,!!centre&&s.c===centre[0]&&s.r===centre[1]);
-  yield 'plants';
+  yield* FK.buildSteps(s);
   // loot pins and labels
   for(const p of [...D.pois,...(s.extraPois||[])]){ const k=KIND[p.kind]; if(!k) continue; const x=p.p[0], z=p.p[1], top=p.top!==undefined?p.top:heightAt(x,z)+6.5;
     const pin=new THREE.Mesh(SHAPES.pin,mat(k.c)); pin.position.set(x,top+3,z); pin.scale.set(1,1.5,1); pin.userData.noInk=true; grp.add(pin); const stem=new THREE.Mesh(SHAPES.stem,mat(k.c)); stem.position.set(x,top+1.5,z); stem.userData.noInk=true; grp.add(stem);
@@ -213,18 +213,11 @@ function* buildSector(s){
 }
 // plants: one instanced mesh per kind. Each sector gets geometry that shares the shape's buffers but carries
 // bounds covering the whole sector, so three.js doesn't cull the lot when the shape's own origin is off screen.
-// The centre sector shows every plant; the ring keeps trees, cacti and big shrubs, with a lighter saguaro.
 function sectorGeo(shape,s){ const g=new THREE.BufferGeometry(); for(const k in shape.attributes) g.setAttribute(k,shape.attributes[k]); g.boundingSphere=new THREE.Sphere(new THREE.Vector3(s.x0+SEC/2,heightAt(s.x0+SEC/2,s.z0+SEC/2),s.z0+SEC/2),SEC*.75); g.userData.proxy=true; return g; }
-function buildPlants(s,full){
-  for(const o of [...s.gen.children]){ s.gen.remove(o); o.geometry.dispose(); }
-  const L=[[],[],[],[],[]]; for(const p of s.data.plants){ if(!full && !(p[0]===0||p[0]===1||(p[0]===2&&p[4]>1.05)||(p[0]===3&&p[4]>1.15))) continue; L[p[0]].push(mtx(p[1],p[2],p[3],p[4],p[5],p[6],p[7],p[8],0)); }
-  const inst=(shape,m,list)=>{ if(!list.length) return; const me=new THREE.InstancedMesh(sectorGeo(shape,s),m,list.length); list.forEach((mm,i)=>me.setMatrixAt(i,mm)); me.castShadow=true; me.receiveShadow=true; s.gen.add(me); };
-  inst(full?SHAPES.saguaro:SHAPES.saguaroLo,mat('#5f7d3f'),L[0]); inst(SHAPES.trunk,mat('#8a9a52'),L[1]); inst(SHAPES.canopy,mat('#a7b85a'),L[1]); inst(SHAPES.shrub,mat('#6e7f45'),L[2]); inst(SHAPES.rock,mat('#a8937a'),L[3]); inst(SHAPES.reed,mat('#7f9248'),L[4]);
-  s.full=full; }
 const LAKE=new THREE.MeshStandardMaterial({color:0x3a8fae, roughness:.22, metalness:.1, transparent:true, opacity:.86, side:THREE.DoubleSide, polygonOffset:true, polygonOffsetFactor:-1});
 const POOL=new THREE.MeshStandardMaterial({color:0x56c3dc, roughness:.18, metalness:.05, transparent:true, opacity:.9, side:THREE.DoubleSide});
 function disposeSector(s){
-  if(s.group){ inkOff(s.group); scene.remove(s.group); s.group.traverse(o=>{ if(o.geometry && !SHARED.has(o.geometry)) o.geometry.dispose(); if(o.userData.crease) o.userData.crease.dispose(); if(o.material){ if(o.material.map&&!o.material.userData.keep) o.material.map.dispose(); if(o.userData.ownMat||o.isLineSegments) o.material.dispose(); } if(o.isInstancedMesh) o.dispose&&o.dispose(); }); }
+  if(s.group){ inkOff(s.group); scene.remove(s.group); s.group.traverse(o=>{ if(o.geometry && !SHARED.has(o.geometry) && !FK.SHARED.has(o.geometry)) o.geometry.dispose(); if(o.userData.crease) o.userData.crease.dispose(); if(o.material){ if(o.material.map&&!o.material.userData.keep) o.material.map.dispose(); if(o.userData.ownMat||o.isLineSegments) o.material.dispose(); } if(o.isInstancedMesh) o.dispose&&o.dispose(); }); }
   for(const l of s.labels||[]) l.el.remove();
   if(s.data){ const ns=s.data.nav.n; for(let j=0;j<ns;j++) kindG.fill(255,(s.r*ns+j)*GN+s.c*ns,(s.r*ns+j)*GN+s.c*ns+ns); }
   s.Hf=null; s.data=null; s.state='gone'; }
@@ -234,19 +227,19 @@ const stats={lastBuild:0,maxStep:0,lastFetch:0,loads:0,drops:0,frame:16,steps:[]
 const jobs=[]; let centre=null;
 function want(c,r){ return centre && Math.max(Math.abs(c-centre[0]),Math.abs(r-centre[1]))<=1; }
 function ensureWindow(){
-  for(let dr=-1;dr<=1;dr++) for(let dc=-1;dc<=1;dc++){ const c=centre[0]+dc, r=centre[1]+dr; if(c<0||r<0||c>=NB||r>=NB) continue; const k=key(c,r); if(sectors.has(k)) continue;
-    const s={c,r,x0:-HALF+c*SEC,z0:-HALF+r*SEC,state:'fetching',buildMs:0}; sectors.set(k,s); const t0=performance.now();
+  for(let dr=-1;dr<=1;dr++) for(let dc=-1;dc<=1;dc++){ const c=centre[0]+dc, r=centre[1]+dr; if(c<0||r<0||c>=NBX||r>=NBZ) continue; const k=key(c,r); if(sectors.has(k)) continue;
+    const s={c,r,x0:BX0+c*SEC,z0:BZ0+r*SEC,state:'fetching',buildMs:0}; sectors.set(k,s); const t0=performance.now();
     fetchSector(c,r).then(d=>{ stats.lastFetch=performance.now()-t0; if(s.state!=='fetching') return; s.data=d; s.state='queued'; jobs.push({s,it:buildSector(s)}); jobs.sort((a,b)=>(a.s.c===centre[0]&&a.s.r===centre[1]?-1:0)-(b.s.c===centre[0]&&b.s.r===centre[1]?-1:0)); })
       .catch(e=>{ console.error(e); s.state='failed'; }); }
   for(const [k,s] of sectors){ if(want(s.c,s.r)) continue; const i=jobs.findIndex(j=>j.s===s); if(i>=0) jobs.splice(i,1); disposeSector(s); sectors.delete(k); stats.drops++; }
 }
 function setCentre(c,r){ const old=centre&&sectors.get(key(...centre)); centre=[c,r]; const t0=performance.now();
-  if(old&&old.state==='built'){ inkOff(old.props); inkOff(old.gen); buildPlants(old,false); }
-  const s=sectors.get(key(c,r)); if(s&&s.state==='built'){ buildPlants(s,true); inkOn(s.props); inkOn(s.gen); }
+  if(old&&old.state==='built') inkOff(old.props);
+  const s=sectors.get(key(c,r)); if(s&&s.state==='built') inkOn(s.props);
   stats.swap=performance.now()-t0; ensureWindow(); }
 function pump(budget){ const t0=performance.now();
   while(jobs.length && performance.now()-t0<budget){ const j=jobs[0]; j.s.state='building'; const ts=performance.now(), res=j.it.next(), dt=performance.now()-ts; j.s.buildMs+=dt; stats.maxStep=Math.max(stats.maxStep,dt); stats.steps.push([res.value||'labels',dt]); if(stats.steps.length>12) stats.steps.shift();
-    if(res.done){ jobs.shift(); j.s.state='built'; stats.lastBuild=j.s.buildMs; stats.loads++; if(centre&&j.s.c===centre[0]&&j.s.r===centre[1]){ if(!j.s.full) buildPlants(j.s,true); inkOn(j.s.props); inkOn(j.s.gen); } } } }
+    if(res.done){ jobs.shift(); j.s.state='built'; stats.lastBuild=j.s.buildMs; stats.loads++; if(centre&&j.s.c===centre[0]&&j.s.r===centre[1])inkOn(j.s.props); } } }
 
 // ---------- squad ----------
 const squad={x:0,z:0,l:0,heading:0,path:null,trail:[]}; let figs=[], target=new THREE.Vector3(), follow=true;
@@ -296,13 +289,14 @@ document.getElementById('places')?.addEventListener('click',e=>{ const b=e.targe
 document.getElementById('tglSeams').addEventListener('change',e=>{ ui.seams=e.target.checked; for(const s of sectors.values()) if(s.seam) s.seam.visible=ui.seams; });
 
 // ---------- panels ----------
-const cells=[]; for(let r=0;r<NB;r++) for(let c=0;c<NB;c++){ const i=document.createElement('i'); i.title=`Sector ${c+1},${r+1}`; miniEl.appendChild(i); cells.push(i); } const dot=document.createElement('b'); miniEl.appendChild(dot);
+miniEl.style.gridTemplateColumns=`repeat(${NBX},1fr)`; miniEl.style.aspectRatio=`${NBX}/${NBZ}`;
+const cells=[]; for(let r=0;r<NBZ;r++) for(let c=0;c<NBX;c++){ const i=document.createElement('i'); i.title=`Sector ${c+1},${r+1}: go there`; i.addEventListener('click',()=>jumpTo(c,r)); miniEl.appendChild(i); cells.push(i); } const dot=document.createElement('b'); miniEl.appendChild(dot);
 const tot=IDX.sectors.reduce((a,s)=>a+s.bytes,0);
-blockEl.innerHTML=`<div><dt>Size</dt><dd>${NB} × ${NB} sectors, ${(NB*SEC/1000).toFixed(1)} km square</dd></div><div><dt>Sector files</dt><dd>${(tot/1e6).toFixed(1)} MB of JSON, about ${Math.round(IDX.sectors.reduce((a,s)=>a+s.gz,0)/IDX.sectors.length/1000)} KB each compressed</dd></div>
+blockEl.innerHTML=`<div><dt>Size</dt><dd>${NBX} × ${NBZ} sectors, ${(NBX*SEC/1000).toFixed(1)} by ${(NBZ*SEC/1000).toFixed(1)} km</dd></div><div><dt>Sector files</dt><dd>${(tot/1e6).toFixed(1)} MB of JSON, about ${Math.round(IDX.sectors.reduce((a,s)=>a+s.gz,0)/IDX.sectors.length/1000)} KB each compressed</dd></div>
   <div><dt>Buildings</dt><dd>${IDX.sectors.reduce((a,s)=>a+s.b,0)}</dd></div><div><dt>Plants</dt><dd>${IDX.sectors.reduce((a,s)=>a+s.plants,0).toLocaleString()}</dd></div><div><dt>Bridges</dt><dd>${IDX.bridges.length}</dd></div>`;
 function updatePanels(){
-  for(let r=0;r<NB;r++) for(let c=0;c<NB;c++){ const s=sectors.get(key(c,r)); cells[r*NB+c].dataset.s=!s?'':s.state==='built'?(centre[0]===c&&centre[1]===r?'centre':'ring'):s.state==='building'?'building':'queued'; }
-  dot.style.left=((squad.x+HALF)/(NB*SEC)*100)+'%'; dot.style.top=((squad.z+HALF)/(NB*SEC)*100)+'%';
+  for(let r=0;r<NBZ;r++) for(let c=0;c<NBX;c++){ const s=sectors.get(key(c,r)); cells[r*NBX+c].dataset.s=!s?'':s.state==='built'?(centre[0]===c&&centre[1]===r?'centre':'ring'):s.state==='building'?'building':'queued'; }
+  dot.style.left=((squad.x-BX0)/(NBX*SEC)*100)+'%'; dot.style.top=((squad.z-BZ0)/(NBZ*SEC)*100)+'%';
   const inf=renderer.info, built=[...sectors.values()].filter(s=>s.state==='built').length, mem=performance.memory?Math.round(performance.memory.usedJSHeapSize/1e6)+' MB':'n/a';
   costEl.innerHTML=`<div><dt>Loaded</dt><dd>${built} of 9 · ${jobs.length} queued</dd></div><div><dt>Last sector build</dt><dd>${Math.round(stats.lastBuild)} ms</dd></div><div><dt>Longest single step</dt><dd>${Math.round(stats.maxStep)} ms</dd></div>
     <div><dt>Centre swap</dt><dd>${Math.round(stats.swap||0)} ms</dd></div><div><dt>Last fetch</dt><dd>${Math.round(stats.lastFetch)} ms</dd></div><div><dt>Frame</dt><dd>${stats.frame.toFixed(1)} ms</dd></div><div><dt>Draw calls</dt><dd>${inf.render.calls}</dd></div><div><dt>Triangles</dt><dd>${(inf.render.triangles/1e6).toFixed(2)} M</dd></div>
@@ -310,12 +304,39 @@ function updatePanels(){
 
 // ---------- frame loop ----------
 const PACE=2.6, GAIT=PACE/1.39;   // the squad moves faster than real walking pace (1.39 m/s); motion shows a walk played faster
+// ---------- time: exploring runs in real time; pause, 1× and 4× as on the map ----------
+const TM={speed:1, sec:0, base:7.5*60, snap:false};   // game seconds since arriving; base is the clock in game minutes
+{ const css=document.createElement('style'); css.textContent=`.tclock{position:absolute;right:10px;top:10px;display:flex;gap:4px;align-items:center;z-index:3;background:rgba(24,24,26,.82);border:1px solid #38393d;border-radius:4px;padding:4px 6px}
+  .tclock b{font:500 13px var(--mono,monospace);color:#e2e0dc;margin-right:4px;white-space:nowrap}.tclock button{background:#2d2f33;border:1px solid #38393d;color:#e2e0dc;font:600 12px var(--body,sans-serif);padding:3px 8px;cursor:pointer;border-radius:3px}
+  .tclock button[aria-pressed="true"]{border-color:#e0a526;color:#e0a526}.mini i{cursor:pointer}.mini i:hover{outline:1px solid #e0a526;outline-offset:-1px}`; document.head.appendChild(css); }
+const clockBox=document.createElement('div'); clockBox.className='tclock'; clockBox.innerHTML='<b id="tclk"></b><button type="button" data-ts="0" aria-pressed="false" title="Pause">❚❚</button><button type="button" data-ts="1" aria-pressed="true">1×</button><button type="button" data-ts="4" aria-pressed="false">4×</button>'; stage.appendChild(clockBox);
+const clkEl=clockBox.querySelector('#tclk');
+function setSpeed(k){ TM.speed=k; clockBox.querySelectorAll('[data-ts]').forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.ts===k))); }
+clockBox.addEventListener('click',e=>{ const b=e.target.closest('[data-ts]'); if(b) setSpeed(+b.dataset.ts); });
+window.addEventListener('keydown',e=>{ if(e.target.closest&&e.target.closest('input,textarea,button,select')) return; if(e.code==='Space'){ e.preventDefault(); setSpeed(TM.speed?0:1); } });
+// camera keys: W A S D move the view over the ground, Q and E turn it, Shift moves faster, F goes back to the squad
+const held=new Set(), CAMKEYS=new Set(['KeyW','KeyA','KeyS','KeyD','KeyQ','KeyE']);
+window.addEventListener('keydown',e=>{ if((e.target.closest&&e.target.closest('input,textarea,select'))||e.ctrlKey||e.metaKey||e.altKey) return; if(CAMKEYS.has(e.code)){ e.preventDefault(); held.add(e.code); } else if(e.key==='Shift') held.add(e.code); else if(e.code==='KeyF') follow=true; });
+window.addEventListener('keyup',e=>held.delete(e.code)); window.addEventListener('blur',()=>held.clear());
+function camKeys(rdt,fast){ if(!held.size) return; const h=k=>held.has(k)?1:0, f=h('KeyW')-h('KeyS'), r=h('KeyD')-h('KeyA'), t=h('KeyQ')-h('KeyE');
+  if(t){ camT.yaw+=t*rdt*1.7; camS.yaw+=t*rdt*1.7; }
+  if(f||r){ const k=Math.max(14,camS.dist*1.1)*(fast?3:1)*rdt/Math.hypot(f,r), s=Math.sin(camS.yaw), c=Math.cos(camS.yaw); follow=false;
+    target.x=Math.max(BX0-300,Math.min(BX1+300,target.x+(c*r-s*f)*k)); target.z=Math.max(BZ0-300,Math.min(BZ1+300,target.z-(s*r+c*f)*k)); } }
+let clkShown='';
+function drawClock(){ const m=TM.base+TM.sec/60, d=Math.floor(m/1440)+1, h=Math.floor((m%1440)/60), mm=Math.floor(m%60), ss=Math.floor((m*60)%60), t=`Day ${d} ${String(h).padStart(2,'0')}:${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`; if(t!==clkShown){ clkShown=t; clkEl.textContent=t; } }
+// jump to a sector from the overview: the squad is set down at its middle, then on the nearest walkable cell once it has loaded
+function jumpTo(c,r){ const x=BX0+(c+.5)*SEC, z=BZ0+(r+.5)*SEC;
+  if(figs.length){ Object.assign(squad,{x,z,l:0,path:null,trail:[{x,z,l:0}]}); figs.forEach((f,i)=>{ f.x=x; f.z=z+i*.01; f.y=undefined; }); follow=true; TM.snap=true; }
+  else { follow=false; }
+  target.set(x,heightAt(x,z),z); }
+function snapSquad(){ const s=sectors.get(key(...centre)); if(!s||s.state!=='built') return; TM.snap=false; const c=cellOf(squad.x,squad.z); if(c>=0&&nodeSpeed(c)>0) return; const n=nearestPassable(c); if(n<0) return;
+  const p=nodePos(n); Object.assign(squad,{x:p.x,z:p.z,trail:[{x:p.x,z:p.z,l:0}]}); figs.forEach((f,i)=>{ f.x=p.x; f.z=p.z+i*.01; f.y=undefined; }); }
 let last=performance.now(), boost=1, panelT=0; const tmp=new THREE.Vector3();
 const speedHere=(x,z,l)=>{ if(l) return 1; const c=cellOf(x,z); return c<0?.7:Math.max(.15,nodeSpeed(c)||.3); };
 function trailAt(back){ const T=squad.trail; let acc=Math.hypot(squad.x-T[T.length-1].x,squad.z-T[T.length-1].z); if(acc>=back) return null;
   for(let i=T.length-1;i>0;i--){ const a=T[i], b=T[i-1], l=Math.hypot(a.x-b.x,a.z-b.z); if(acc+l>=back){ const t=(back-acc)/(l||1); return {x:a.x+(b.x-a.x)*t,z:a.z+(b.z-a.z)*t,l:t<.5?a.l:b.l}; } acc+=l; } return T[0]; }
 function loop(now){
-  requestAnimationFrame(loop); const raw=now-last; last=now; stats.frame+=(raw-stats.frame)*.05; const dt=Math.min(.05,raw/1000)*boost;
+  requestAnimationFrame(loop); const raw=now-last; last=now; stats.frame+=(raw-stats.frame)*.05; const rdt=Math.min(.05,raw/1000), dt=rdt*boost*TM.speed; TM.sec+=dt; drawClock();   // the camera keeps real time so it still moves while paused
   pump(8);
   if(!figs.length){ const s=centre&&sectors.get(key(...centre)); if(s&&s.state==='built'&&[...sectors.values()].every(q=>q.state==='built'||q.state==='failed')){ spawn(); loadingEl.hidden=true; } else { renderer.render(scene,cam); return; } }
   let moving=false;
@@ -326,6 +347,7 @@ function loop(now){
     const T=squad.trail, lt=T[T.length-1]; if(Math.hypot(lt.x-squad.x,lt.z-squad.z)>.4){ T.push({x:squad.x,z:squad.z,l:squad.l}); if(T.length>300) T.shift(); } }
   // crossing into another sector moves the window
   const q=secAt(squad.x,squad.z); if(q&&(q[0]!==centre[0]||q[1]!==centre[1])) setCentre(...q);
+  if(TM.snap) snapSquad();
   figs.forEach((f,i)=>{
     if(i===0){ f.x=squad.x; f.z=squad.z; f.l=squad.l; if(moving){ let a=squad.heading-f.root.rotation.y; a=Math.atan2(Math.sin(a),Math.cos(a)); f.root.rotation.y+=a*Math.min(1,dt*10); } }
     else { const tp=trailAt(i*1.9); if(tp){ const ddx=tp.x-f.x, ddz=tp.z-f.z, dd=Math.hypot(ddx,ddz); if(dd>.12){ const sp=Math.min(dd,PACE*1.15*speedHere(f.x,f.z,f.l)*dt+Math.max(0,dd-1)*dt*2); f.x+=ddx/dd*sp; f.z+=ddz/dd*sp; let a=Math.atan2(ddx,ddz)-f.root.rotation.y; a=Math.atan2(Math.sin(a),Math.cos(a)); f.root.rotation.y+=a*Math.min(1,dt*8); } f.l=tp.l; } }
@@ -335,18 +357,22 @@ function loop(now){
   if(marker.visible){ const a=(now-markerT)/900; marker.material.opacity=Math.max(0,.8-a*.6); marker.scale.setScalar(1+a*.4); if(a>1.4) marker.visible=false; }
   // camera
   const sy=figs[0].y||0;
-  if(follow){ target.x+=(squad.x-target.x)*Math.min(1,dt*3); target.z+=(squad.z-target.z)*Math.min(1,dt*3); target.y+=(sy+(ui.view==='street'?1.4:0)-target.y)*Math.min(1,dt*4); }
-  const V=VIEWS[ui.view], kk=1-Math.exp(-dt*6); camS.dist+=(V.dist-camS.dist)*kk; camS.pitch+=(V.pitch-camS.pitch)*kk; const ay=camT.yaw-camS.yaw; camS.yaw+=Math.atan2(Math.sin(ay),Math.cos(ay))*kk;
+  camKeys(rdt,held.has('ShiftLeft')||held.has('ShiftRight'));
+  if(!follow) target.y+=(heightAt(target.x,target.z)-target.y)*Math.min(1,rdt*6);
+  if(follow){ target.x+=(squad.x-target.x)*Math.min(1,rdt*3); target.z+=(squad.z-target.z)*Math.min(1,rdt*3); target.y+=(sy+(ui.view==='street'?1.4:0)-target.y)*Math.min(1,rdt*4); }
+  const V=VIEWS[ui.view], kk=1-Math.exp(-rdt*6); camS.dist+=(V.dist-camS.dist)*kk; camS.pitch+=(V.pitch-camS.pitch)*kk; const ay=camT.yaw-camS.yaw; camS.yaw+=Math.atan2(Math.sin(ay),Math.cos(ay))*kk;
   cam.position.set(target.x+Math.sin(camS.yaw)*Math.cos(camS.pitch)*camS.dist, target.y+Math.sin(camS.pitch)*camS.dist, target.z+Math.cos(camS.yaw)*Math.cos(camS.pitch)*camS.dist);
   const gy=heightAt(cam.position.x,cam.position.z)+1.2; if(cam.position.y<gy) cam.position.y=gy; cam.lookAt(target);
   sun.position.set(target.x+.45*400,target.y+.8*400,target.z+.35*400); sun.target.position.copy(target); const R=ui.view==='high'?420:110;
   Object.assign(sun.shadow.camera,{left:-R,right:R,top:R,bottom:-R,near:10,far:1400}); sun.shadow.camera.updateProjectionMatrix();
   scene.fog.near=ui.view==='high'?700:380; scene.fog.far=ui.view==='high'?1600:980;
+  FK.frame(sectors.values(),target.x,target.z,camS.dist);
   updateReadout(); renderer.render(scene,cam);
   for(const s of sectors.values()) for(const l of s.labels||[]){ l.pin.rotation.y=now/900; tmp.set(l.x,l.top+5.2,l.z); const p=tmp.project(cam), show=p.z<1&&Math.hypot(l.x-target.x,l.z-target.z)<(ui.view==='high'?900:180)&&Math.abs(p.x)<1.05&&Math.abs(p.y)<1.05; l.el.style.display=show?'':'none'; if(show) l.el.style.transform=`translate(${(p.x+1)/2*W}px,${(1-p.y)/2*H}px) translate(-50%,-100%)`; }
   whereEl.textContent=`New River · sector ${centre[0]+1},${centre[1]+1}`;
   if((panelT+=raw)>400){ panelT=0; updatePanels(); }
 }
-window.__stream={scene,squad,sectors,stats,orderMove:(x,z,deck)=>orderMove({p:new THREE.Vector3(x,heightAt(x,z),z),deck}),boost:k=>{ boost=k; },heightAt,ui,look:(x,z,yaw,pitch,dist)=>{ follow=false; target.set(x,heightAt(x,z),z); camT.yaw=yaw; VIEWS[ui.view].pitch=pitch; VIEWS[ui.view].dist=dist; },follow:()=>{ follow=true; },renderer,teleport:(x,z)=>{ Object.assign(squad,{x,z,l:0,path:null,trail:[{x,z,l:0}]}); figs.forEach((f,i)=>{ f.x=x; f.z=z+i*.01; f.y=undefined; }); target.set(x,heightAt(x,z),z); follow=true; },lowfi:()=>{ renderer.shadowMap.enabled=false; renderer.setPixelRatio(1); resize(); }};
-setCentre(Math.floor(NB/2),Math.floor(NB/2)); requestAnimationFrame(loop);
+window.__stream={target,camT,camS,scene,squad,sectors,stats,orderMove:(x,z,deck)=>orderMove({p:new THREE.Vector3(x,heightAt(x,z),z),deck}),boost:k=>{ boost=k; },heightAt,ui,look:(x,z,yaw,pitch,dist)=>{ follow=false; target.set(x,heightAt(x,z),z); camT.yaw=yaw; VIEWS[ui.view].pitch=pitch; VIEWS[ui.view].dist=dist; },follow:()=>{ follow=true; },renderer,teleport:(x,z)=>{ Object.assign(squad,{x,z,l:0,path:null,trail:[{x,z,l:0}]}); figs.forEach((f,i)=>{ f.x=x; f.z=z+i*.01; f.y=undefined; }); target.set(x,heightAt(x,z),z); follow=true; },lowfi:()=>{ renderer.shadowMap.enabled=false; renderer.setPixelRatio(1); resize(); }};
+// start where the frame is centred: the New River sector
+setCentre(...(secAt(0,0)||[Math.floor(NBX/2),Math.floor(NBZ/2)])); requestAnimationFrame(loop);
 })();

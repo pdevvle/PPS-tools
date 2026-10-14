@@ -67,4 +67,15 @@ t('wait runs the clock to the next dawn or dusk',()=>{
   const st=C.newGame(7); st.bands=[]; st.minutes=12*60; C.waitTurn(); assert(C.running());
   let g=0; while(C.running()&&g++<100) C.step(30); assert.equal(Math.round(st.minutes),19*60+35); });
 
+t('the live tick runs the world but leaves the squad on the ground alone',()=>{
+  C.newGame(); const st=C.state, sq=st.squads[0], x=sq.x, z=sq.z, w=sq.water, m=st.minutes; st.squads[1]&&C.send(1,sq.x-3000,sq.z-3000);
+  const b=st.bands[0], bx=b.x, bz=b.z; C.tick(240,{except:0});
+  assert(Math.abs(st.minutes-m-240)<1e-6, 'the clock ran four hours'); assert.equal(sq.x,x); assert.equal(sq.z,z); assert.equal(sq.water,w);
+  assert(st.bands.some(o=>o.x!==bx||o.z!==bz)||st.bands.length!==4, 'raiders roam meanwhile'); });
+
+t('a search on the ground takes stock at once and says how long it took',()=>{
+  C.newGame(); const sq=C.state.squads[0];
+  const idx=R.sites.findIndex(s=>s.loot==='food'); const before=C.leftOf(idx), res=C.searchNow(0,idx);
+  assert(res&&res.hours>0, 'it reports the hours'); assert(C.leftOf(idx)<before, 'the site is picked over'); assert(!sq.task, 'the squad is free again'); });
+
 console.log(`${n} checks passed`);

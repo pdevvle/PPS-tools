@@ -12,13 +12,12 @@ The region map as the strategic layer: several squads at once on real roads, tim
 
 ## Where it stands
 
-- **Data**: `tools/osm/prep_region.py` builds `data/region/region_i17.json`. It holds:
-  - a 600 m sector grid with ground type, elevation range and building counts
-  - 100 m terrain
-  - roads and a travel graph
-  - washes, lakes and land use
-  - towns and named peaks
-  - about 245 loot sites
+- **Data**: `tools/osm/fetch_osm.py`, `demfetch.py` and `prep_region.py` build `data/region/region_i17.json` (8 MB), a **realm 100 miles square** centred on the corridor, from the Gila lowlands and Phoenix to Prescott. It holds:
+  - 270 × 269 sectors of 600 m with ground type, elevation range and building counts (counted in the corridor, estimated elsewhere)
+  - 400 m terrain over the realm, and the corridor (the detail box, 30 × 53 sectors) at 100 m
+  - a travel graph of 80,000 junctions, 96% of them in one connected network, with each road's shape. The corridor has every road; elsewhere motorways to unclassified, and arterials only in built-up sectors.
+  - washes, rivers, lakes and land use; 172 towns and places, 716 named peaks
+  - about 31,000 sites (points of interest), and the corridor's 27,500 buildings
 - **Code**: the rules live in `tools/region/campaign.js`, which has no rendering and is tested in Node. The view is `tools/region/region-main.js`, one file shared by the standalone map and the zoom page; the old copy, `tools/zoom/region-z.js`, is gone. `tools/region/build.sh` assembles both pages. See `tools/region/README.md` for the rules in short.
 - **Campaign state** saves in the browser and resumes paused on reload. It covers knowledge, squads and their trips, water and packs, the clock, searched sites, raider bands, base stock and the log. **New campaign** in the log panel starts over.
 - **Day, night and heat**:
@@ -41,7 +40,7 @@ The region map as the strategic layer: several squads at once on real roads, tim
 
 ## Decisions (keep)
 
-- One fixed region (the corridor), a stylised 3D map, several squads at once.
+- One fixed region, a stylised 3D map, several squads at once. **The region is now a realm 100 miles square around the corridor** (proposed foundation change: the foundation says the corridor). Same frame and centre, so the corridor's coordinates and the tactical blocks are unchanged; the corridor stays the detail box.
 - Knowledge: unknown, rumoured, scouted, current. Scouted goes stale after 3 days.
 - **Clock**:
   - It runs only while something is happening (travelling, searching, lying low, waiting) and holds during an encounter.
@@ -94,7 +93,9 @@ The region map as the strategic layer: several squads at once on real roads, tim
 
 ## Known gaps
 
-- The south-east tile (east Anthem) failed to download. Rerun `regionfetch.sh` and then `prep_region.py`.
+- Outside the corridor there are no tracks, so places reached only by dirt tracks (Crown King) are walked cross-country. Fetching tracks for the realm would add several MB.
+- Outside the corridor, building counts are estimates from land use and sites, and there are no building models.
+- Raiders are spread across the realm but behave as before; the metro has no special danger or factions yet.
 - Saving uses the viewer's browser only, and the standalone map and the zoom page share it when they're served from the same origin.
 - Fights off the baked block are a quick placeholder until the tactical ground covers more of the corridor.
 - No weather beyond the daily heat curve, no moon, no traders, no seasons. Night has no extra danger yet.

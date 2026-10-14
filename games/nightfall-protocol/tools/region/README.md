@@ -7,6 +7,10 @@
 - `node test.js` checks the rules.
 - `page-test.js` checks both pages in Chromium: load, play, save, reload, resume. Serve `mockups/` over HTTP first, as described at the top of the file.
 
+## The realm
+
+The map covers a realm 100 miles square (270 × 269 sectors) around the corridor, which stays the detail box. The page draws two terrain layers: the realm at 400 m with major roads drawn from the travel graph, and the corridor at 100 m laid over it with every road and building. Knowledge is painted one pixel per sector and stretched onto both layers; home, hover and selection are ribbons on the ground. Site pins are one instanced mesh. Place labels show by zoom: cities always, towns within 140 km of camera distance, villages within 60 km, hamlets and suburbs within 24 km. **Realm** zooms out to the whole of it. Saves are version 2; a save from the corridor-only map is not loaded.
+
 ## Rules in short
 
 - **Clock**: 1× is 10 game minutes per real second. It runs only while something is happening: a squad travelling, searching or lying low, or the player waiting for dawn or dusk. It holds during an encounter. On the tactical ground exploration runs in real time, and each character's turn in a fight is 5 game minutes (foundation). The map catches up when you come back.

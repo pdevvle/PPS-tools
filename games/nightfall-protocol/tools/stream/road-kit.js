@@ -4,7 +4,7 @@
 // and falls back to plain roads for sector files without it. Coordinates: block metres, x east, z south, y up.
 (function(root){
 function RoadKit(o){
-const {THREE,C,heightAt,IDX,renderer,mat,SHAPES,sectorGeo}=o, TAU=Math.PI*2;
+const {THREE,C,heightAt,IDX,renderer,mat,SHAPES,sectorGeo}=o, kindAt=o.kindAt||(()=>255), TAU=Math.PI*2;
 const aniso=renderer.capabilities.getMaxAnisotropy(), CK=root.CarKit?root.CarKit({mat,C}):null;
 
 // ---------- textures, drawn once ----------
@@ -68,6 +68,30 @@ const MAT={laneDark:M(TEX.laneDark), laneLight:M(TEX.laneLight), plainDark:M(TEX
   jDark:M(TEX.plainDark,'#ffffff',{polygonOffsetFactor:-4,polygonOffsetUnits:-4}), jLight:M(TEX.plainLight,'#ffffff',{polygonOffsetFactor:-4,polygonOffsetUnits:-4}), jGravel:M(gravelTex,'#ffffff',{polygonOffsetFactor:-4,polygonOffsetUnits:-4}) };
 const PAINT=k=>{ const m=new THREE.MeshStandardMaterial({color:k,roughness:.7,metalness:0,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-6,polygonOffsetUnits:-6}); m.userData.keep=true; return m; };
 const WHITE=PAINT('#e6e3da'), YELLOW=PAINT('#dcaa35'), GROOVE=PAINT('#3b3a37');
+
+// ---------- decay decals and weeds ----------
+const alphaTex=(w,h,draw,seed)=>{ const c=document.createElement('canvas'); c.width=w; c.height=h; const g=c.getContext('2d'); draw(g,C.rng(seed),w,h); const t=new THREE.CanvasTexture(c); t.anisotropy=aniso; return t; };
+// a pothole: broken asphalt rim, a dark hollow of grit and gravel, the low side in shadow
+const potholeTex=alphaTex(128,128,(g,r,w,h)=>{ const blob=(rad,jag,col)=>{ g.beginPath(); for(let i=0;i<=24;i++){ const a=i/24*TAU, rr=rad*(1-jag*.5+r()*jag); i?g.lineTo(w/2+Math.cos(a)*rr,h/2+Math.sin(a)*rr):g.moveTo(w/2+Math.cos(a)*rr,h/2+Math.sin(a)*rr); } g.closePath(); g.fillStyle=col; g.fill(); };
+  blob(60,.35,'rgba(118,112,102,.95)'); blob(50,.3,'#3a342d'); blob(40,.35,'#2a251f'); const gr=g.createLinearGradient(0,0,w,h); gr.addColorStop(0,'rgba(0,0,0,.45)'); gr.addColorStop(.6,'rgba(0,0,0,0)'); g.globalCompositeOperation='source-atop'; g.fillStyle=gr; g.fillRect(0,0,w,h);
+  for(let i=0;i<120;i++){ g.fillStyle=['#8f8675','#6d655a','#a99f8c','#4f483f'][Math.floor(r()*4)]; const a=r()*TAU, d=r()*40; g.fillRect(w/2+Math.cos(a)*d,h/2+Math.sin(a)*d,1.5+r()*2.5,1.5+r()*2); } g.globalCompositeOperation='source-over'; },71);
+// alligator cracking: a net of dark polygons with chipped edges
+const alligTex=alphaTex(256,128,(g,r,w,h)=>{ const cx=w/2, cy=h/2; g.strokeStyle='rgba(18,16,14,.75)'; g.lineCap='round';
+  const pts=[]; for(let i=0;i<150;i++) pts.push([r()*w,r()*h]);
+  for(const [x,y] of pts){ const f=Math.max(0,1-Math.hypot((x-cx)/(w*.5),(y-cy)/(h*.5))); if(f>.15){ g.fillStyle=`rgba(${r()<.5?'20,18,15':'150,145,135'},${.12+f*.2})`; g.beginPath(); g.arc(x,y,6+r()*8,0,TAU); g.fill(); } } for(const [x,y] of pts){ const fall=Math.max(0,1-Math.hypot((x-cx)/(w*.5),(y-cy)/(h*.5))); if(fall<=0) continue; let near=pts.map(p=>[Math.hypot(p[0]-x,p[1]-y),p]).sort((a,b)=>a[0]-b[0]).slice(1,4);
+    for(const [d,p] of near){ if(d>60) continue; g.lineWidth=.8+fall*2; g.beginPath(); g.moveTo(x,y); g.lineTo((x+p[0])/2+(r()-.5)*6,(y+p[1])/2+(r()-.5)*6); g.lineTo(p[0],p[1]); g.stroke(); } }
+  for(let i=0;i<25;i++){ const x=cx+(r()-.5)*w*.6, y=cy+(r()-.5)*h*.6; g.fillStyle='rgba(25,22,18,.35)'; g.fillRect(x,y,3+r()*8,2+r()*5); } },73);
+// a sand drift: a soft lobe heaped at one edge (v=0 is the road edge it blew in from), rippled by the wind
+const driftTex=alphaTex(256,128,(g,r,w,h)=>{ const img=g.createImageData(w,h);
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){ const u=x/w, v=y/h, n=.5*Math.sin(u*13.1+Math.sin(v*7)*1.3)+.3*Math.sin(u*29+v*11)+.2*Math.sin(u*5-v*17), lobe=Math.sin(Math.PI*u)**.5*(1-v**1.3)+n*.18*Math.sin(Math.PI*u), rip=.95+.05*Math.sin((u*30+v*9)+n*2), a=Math.max(0,Math.min(1,(lobe-.18)*3.2)), o=(y*w+x)*4;
+    img.data[o]=222*rip; img.data[o+1]=196*rip; img.data[o+2]=150*rip; img.data[o+3]=a*250; } g.putImageData(img,0,0); },79);
+const DEC=(t,extra={})=>{ const m=new THREE.MeshStandardMaterial({map:t,transparent:true,depthWrite:false,roughness:1,metalness:0,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-8,polygonOffsetUnits:-8,...extra}); m.userData.keep=true; return m; };
+const POTHOLE=DEC(potholeTex), ALLIG=DEC(alligTex), DRIFT=DEC(driftTex,{polygonOffsetFactor:-10,polygonOffsetUnits:-10});
+// a tuft of dry grass: thin blades fanned out from one root
+const WEED=(()=>{ const pos=[], r=C.rng(5); for(let k=0;k<16;k++){ const a=k/16*TAU+r()*.4, lean=.2+r()*.45, h=.45+r()*.5, bx=Math.cos(a)*.04, bz=Math.sin(a)*.04, w=.06;
+  pos.push(bx-Math.sin(a)*w,0,bz+Math.cos(a)*w, bx+Math.sin(a)*w,0,bz-Math.cos(a)*w, Math.cos(a)*lean*h,h,Math.sin(a)*lean*h); }
+  const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3)); g.computeVertexNormals(); return g; })();
+const WEEDM=new THREE.MeshStandardMaterial({color:'#9c9a52',roughness:1,flatShading:true,side:THREE.DoubleSide}); WEEDM.userData.keep=true;
 
 // ---------- the sign atlas: one canvas, cells packed in shelves; street names are added as sectors need them ----------
 const AT=1024, atC=document.createElement('canvas'); atC.width=atC.height=AT; const ag=atC.getContext('2d'); const atlas=new THREE.CanvasTexture(atC); atlas.anisotropy=aniso; atlas.flipY=false;
@@ -220,6 +244,42 @@ function* build(s,grp){ const D=s.data, rk=D.rk||{}, J=rk.junctions||[], rnd=C.r
     const c=F(0,0,1.0-1.9); c[1]=flat(c[0],c[2]); for(let i=0;i<W3.length;i++) PB.tri(WHITE,c,W3[i],W3[(i+1)%W3.length]); }
   for(const me of PB.meshes(false)){ me.userData.noInk=true; grp.add(me); }
   yield 'paint';
+  // ---------- wear and decay: potholes, alligator cracking, sand drifts, weeds in the cracks ----------
+  { const DB=new UB(), weeds=[], NK=C.NAVKIND, exposed=k=>k===NK.open||k===NK.brush||k===NK.wash||k===NK.hill;
+    // the wind comes from the west-south-west, so sand piles in from that edge of a road
+    const WX=.94, WZ=-.34;
+    // a decal laid on the road: centre, along-road unit (tx,tz), half length and half width, split so it follows the surface
+    const decal=(m,x,z,tx,tz,hl,hw2,lift,nu=1,nv=1,flip=false)=>{ const nx=-tz, nz=tx, pt=(a,b)=>{ const px=x+tx*a+nx*b, pz=z+tz*a+nz*b; return [px,HM(px,pz)+lift,pz]; };
+      for(let i=0;i<nu;i++) for(let j=0;j<nv;j++){ const a0=-hl+2*hl*i/nu, a1=-hl+2*hl*(i+1)/nu, b0=-hw2+2*hw2*j/nv, b1=-hw2+2*hw2*(j+1)/nv, U=a=>(a+hl)/(2*hl), V=b=>flip?1-(b+hw2)/(2*hw2):(b+hw2)/(2*hw2);
+        DB.quad(m,pt(a0,b0),pt(a1,b0),pt(a1,b1),pt(a0,b1),[U(a0),V(b0)],[U(a1),V(b0)],[U(a1),V(b1)],[U(a0),V(b1)]); } };
+    D.roads.forEach((rd,ri)=>{ const surf=C.roadSurf(rd); if((surf!=='asphalt'&&surf!=='concrete')||rd.bridge>=0||!rd.drive) return;
+      const sec=C.roadSection(rd), pv=sec.pave/2, pts=C.densify(rd.pts,2), Ls=[0]; for(let i=1;i<pts.length;i++) Ls.push(Ls[i-1]+Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1])); const tot=Ls[Ls.length-1]; if(tot<3) return;
+      const r=C.rng(Math.floor(Math.abs(rd.pts[0][0]*31+rd.pts[0][1]*17))+ri*7+1);
+      const at=sv=>{ let i=0; while(i<pts.length-2&&Ls[i+1]<sv) i++; const a=pts[i], b=pts[i+1], l=(Ls[i+1]-Ls[i])||1, t=(sv-Ls[i])/l; return {x:a[0]+(b[0]-a[0])*t,z:a[1]+(b[1]-a[1])*t,tx:(b[0]-a[0])/l,tz:(b[1]-a[1])/l}; };
+      const off=(q,o)=>[q.x-q.tz*o,q.z+q.tx*o];
+      const rate=rd.cls==='motorway'?110:/_link/.test(rd.cls)?70:['secondary','tertiary','primary','trunk'].includes(rd.cls)?40:22;
+      // potholes, in the wheel paths and in little groups
+      for(let sv=r()*rate;sv<tot;sv+=rate*(.5+r())){ const q=at(sv), lanes=sec.lanes.length?sec.lanes:[{o:0}], ln=lanes[Math.floor(r()*lanes.length)], k=1+Math.floor(r()*r()*4);
+        for(let c=0;c<k;c++){ const o=Math.max(-pv+.4,Math.min(pv-.4,ln.o+(r()<.5?-.9:.9)+(r()-.5)*.6)), s2=sv+(r()-.5)*3, q2=at(Math.max(0,Math.min(tot,s2))), [x,z]=off(q2,o); if(nearJ(x,z,-2)) continue;
+          const sz=.4+r()*r()*1.3, a=r()*TAU; decal(POTHOLE,x,z,Math.sin(a),Math.cos(a),sz,sz*(.7+r()*.3),.092); if(r()<.5) weeds.push([x,z,.25+r()*.25]); } }
+      // alligator cracking: a broken patch the size of a car
+      for(let sv=r()*rate*2;sv<tot;sv+=rate*2*(.6+r())){ const q=at(sv), lanes=sec.lanes.length?sec.lanes:[{o:0}], ln=lanes[Math.floor(r()*lanes.length)], [x,z]=off(q,ln.o+(r()-.5)*.8); if(nearJ(x,z)) continue;
+        decal(ALLIG,x,z,q.tx,q.tz,1+r()*2,.9+r()*.8,.088,2,1); for(let k=0;k<3;k++){ const [wx,wz]=off(at(Math.min(tot,sv+(r()-.5)*3)),ln.o+(r()-.5)*1.6); weeds.push([wx,wz,.2+r()*.3]); } }
+      // sand drifts off the open desert on the upwind side; fans where a wash runs over the road
+      for(let sv=r()*25;sv<tot;sv+=18+r()*20){ const q=at(sv), nx=-q.tz, nz=q.tx, up=nx*-WX+nz*-WZ>0?1:-1, [ex,ez]=off(q,up*(rd.w/2+3));
+        if(!exposed(kindAt(ex,ez))||r()>(rd.cls==='motorway'?.3:.55)) continue; const reach=1.5+r()*(pv*1.1), len=4+r()*9, [x,z]=off(q,up*(pv-reach/2+.3));
+        decal(DRIFT,x,z,q.tx,q.tz,len/2,reach/2+.3,.096,3,2,up<0); if(r()<.6) for(let k=0;k<2+Math.floor(r()*4);k++){ const [wx,wz]=off(at(Math.max(0,Math.min(tot,sv+(r()-.5)*len))),up*(pv-.2-r()*reach*.4)); weeds.push([wx,wz,.25+r()*.35]); } }
+      for(const w of D.water) for(let k=1;k<w.pts.length;k++) for(let i=1;i<rd.pts.length;i++){ const X=C.segX(w.pts[k-1],w.pts[k],rd.pts[i-1],rd.pts[i]); if(!X) continue;
+        const dx=rd.pts[i][0]-rd.pts[i-1][0], dz=rd.pts[i][1]-rd.pts[i-1][1], l=Math.hypot(dx,dz)||1; decal(DRIFT,X[0],X[1],dx/l,dz/l,(w.hw||5)+2+r()*3,pv+.4,.097,4,3,r()<.5); }
+      // weeds along the pavement edge and the centre seam
+      for(let sv=r()*3;sv<tot;sv+=1.6+r()*2.4){ const q=at(sv); if(r()<(rd.cls==='motorway'?.35:.22)){ const sd=r()<.5?-1:1, [x,z]=off(q,sd*(pv-.08-r()*.25)); if(!nearJ(x,z)) weeds.push([x,z,.35+r()*.45]); }
+        if(!rd.oneway&&sec.lines.length&&r()<.05){ const [x,z]=off(q,(r()-.5)*.3); if(!nearJ(x,z)) weeds.push([x,z,.15+r()*.2]); } } });
+    for(const me of DB.meshes(false)){ me.userData.noInk=true; me.renderOrder=2; grp.add(me); }
+    if(weeds.length){ const wi=new THREE.InstancedMesh(sectorGeo(WEED,s),WEEDM,weeds.length), r=C.rng(3+s.c*11+s.r*5);
+      const clumps=[]; weeds.forEach(([x,z,sc],i)=>{ if(r()<.35) clumps.push([x,z,sc]); wi.setMatrixAt(i,new THREE.Matrix4().compose(new THREE.Vector3(x,HM(x,z)+.07,z),new THREE.Quaternion().setFromEuler(new THREE.Euler(0,r()*TAU,0)),new THREE.Vector3(sc,sc*(.7+r()*.6),sc))); });
+      if(clumps.length){ const cm=new THREE.InstancedMesh(sectorGeo(SHAPES.shrub,s),mat('#7f8a45'),clumps.length); clumps.forEach(([x,z,sc],i)=>cm.setMatrixAt(i,new THREE.Matrix4().compose(new THREE.Vector3(x+.15,HM(x,z)+.02,z),new THREE.Quaternion().setFromEuler(new THREE.Euler(0,r()*TAU,0)),new THREE.Vector3(sc*.45,sc*.4,sc*.45)))); cm.userData.noInk=true; cm.castShadow=true; s.props.add(cm); }
+      wi.userData.noInk=true; wi.castShadow=true; s.props.add(wi); } }   // in props: the plant rebuild clears s.gen
+  yield 'decay';
   // ---------- signs, signals and the rest of the roadside ----------
   const B=new UB();
   const post=(F,h,w=.04)=>box(B,POST,F,0,h/2-.3,0,w,h/2+.3,w);

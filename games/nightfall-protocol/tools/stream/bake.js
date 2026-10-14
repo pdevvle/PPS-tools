@@ -3,16 +3,16 @@ const fs=require('fs'), zlib=require('zlib'), C=require('./sector-core.js');
 const [src,out]=process.argv.slice(2); fs.mkdirSync(out,{recursive:true});
 const D=JSON.parse(fs.readFileSync(src,'utf8')), t0=Date.now();
 const B=C.bake(D,m=>console.log(((Date.now()-t0)/1000).toFixed(1)+'s',m));
-const SEC=D.sector, N=D.n, HALF=D.half, r2=v=>Math.round(v*100)/100, rp=p=>[Math.round(p[0]*10)/10,Math.round(p[1]*10)/10];
+const SEC=D.sector, NXs=D.nx||D.n, NZs=D.nz||D.n, BX0=D.x0??-D.half, BZ0=D.z0??-D.half, N=NXs, HALF=D.half, r2=v=>Math.round(v*100)/100, rp=p=>[Math.round(p[0]*10)/10,Math.round(p[1]*10)/10];
 const b64=a=>Buffer.from(a.buffer,a.byteOffset,a.byteLength).toString('base64');
 // shared index: block facts, bridges (any sector may draw part of a deck), the landscape around
 const bridges=B.F.bridges.map(b=>({road:b.road,name:b.name,w:b.w,hw:b.hw,depth:b.depth,len:r2(b.len),long:b.long,e0:r2(b.e0),e1:r2(b.e1),raise:r2(b.raise),ab:r2(b.ab),over:b.over,clear:b.clear,
   d:b.d.map(rp),L:b.L.map(r2),piers:b.piers,mid:rp(b.d[Math.floor(b.d.length/2)])}));
-const secOf=(x,z)=>[Math.min(N-1,Math.max(0,Math.floor((x+HALF)/SEC))),Math.min(N-1,Math.max(0,Math.floor((z+HALF)/SEC)))];
-const index={name:D.name,center:D.center,sector:SEC,n:N,half:HALF,base:D.terrain.base,navStep:B.nav.NS,navLabels:C.NAVLABEL,bridges,camps:B.camps,context:D.context,sectors:[]};
+const secOf=(x,z)=>[Math.min(NXs-1,Math.max(0,Math.floor((x-BX0)/SEC))),Math.min(NZs-1,Math.max(0,Math.floor((z-BZ0)/SEC)))];
+const index={name:D.name,center:D.center,sector:SEC,n:N,nx:NXs,nz:NZs,x0:BX0,z0:BZ0,half:HALF,base:D.terrain.base,navStep:B.nav.NS,navLabels:C.NAVLABEL,bridges,camps:B.camps,context:D.context,sectors:[]};
 const sizes=[];
-for(let r=0;r<N;r++) for(let c=0;c<N;c++){
-  const x0=-HALF+c*SEC, z0=-HALF+r*SEC, x1=x0+SEC, z1=z0+SEC, inS=(x,z)=>x>=x0&&x<x1&&z>=z0&&z<z1, M=24;
+for(let r=0;r<NZs;r++) for(let c=0;c<NXs;c++){
+  const x0=BX0+c*SEC, z0=BZ0+r*SEC, x1=x0+SEC, z1=z0+SEC, inS=(x,z)=>x>=x0&&x<x1&&z>=z0&&z<z1, M=24;
   // heights: 153 x 153 samples, one extra on each side so shading has neighbours; the mesh uses the inner 151
   const n=SEC/B.st+3, Hs=new Int16Array(n*n), oi=Math.round((x0-B.st-B.X0)/B.st), oj=Math.round((z0-B.st-B.Z0)/B.st);
   for(let j=0;j<n;j++) for(let i=0;i<n;i++) Hs[j*n+i]=Math.round(B.H[(oj+j)*B.NXg+oi+i]*100);
