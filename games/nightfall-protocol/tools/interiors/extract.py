@@ -7,7 +7,7 @@ Writes sites.json next to this file: each building's footprint, its identity
 walls within 60 m so the generator can find the street and the yard.
 Positions stay in block metres. Data: (c) OpenStreetMap contributors, ODbL.
 """
-import json, math, os
+import json, math, os, base64, struct
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BLOCK = os.path.join(HERE, '..', '..', 'mockups', 'streaming', 'block')
@@ -18,7 +18,48 @@ PICKS = [
     ((2, 2), 31, 'Ranch house, L-shaped, axis aligned'),
     ((2, 2), 14, 'Ranch house, L-shaped, turned about 45 degrees'),
     ((2, 2), 4, 'Lucky Mane Co.: small shop, plain rectangle'),
+    # more houses, picked for spread: lot slope, size, and shape (a 4:1 box reads as a manufactured home)
+    ((3, 0), 0, 'House on a hillside lot, about 2 m of fall across it'),
+    ((3, 0), 1, 'Small house on a hillside lot'),
+    ((3, 1), 3, 'Cabin-sized box, 81 m²'),
+    ((3, 2), 43, 'Long narrow box, 4:1: single-wide shape'),
+    ((3, 2), 52, 'Long narrow box, 4.4:1: single-wide shape'),
+    ((4, 1), 1, 'Wide box, 2.7:1: double-wide shape'),
+    ((3, 2), 11, 'Long rambling house, 3:1'),
+    ((2, 2), 7, 'Large custom house, 12-point footprint'),
+    ((3, 1), 26, 'Large house, 10-point footprint'),
+    ((4, 1), 4, 'Irregular house, U-ish footprint'),
+    ((3, 1), 14, 'Mid-size house, 12-point footprint'),
+    ((3, 2), 56, 'Big plain box, 428 m²'),
+    ((3, 1), 25, 'Plain box, 288 m²'),
 ]
+PATCH = 36  # metres of terrain kept round each footprint
+
+def block_heights(S):
+    n = S['hn']; raw = base64.b64decode(S['H']); H = struct.unpack('<%dh' % (len(raw) // 2), raw)
+    def h(x, z):
+        fx = (x - S['x0'] + 4) / 4; fz = (z - S['z0'] + 4) / 4
+        i = max(0, min(n - 2, int(math.floor(fx)))); j = max(0, min(n - 2, int(math.floor(fz)))); u = fx - i; v = fz - j
+        g = lambda a, b: H[b * n + a] / 100
+        return (g(i, j) * (1 - u) + g(i + 1, j) * u) * (1 - v) + (g(i, j + 1) * (1 - u) + g(i + 1, j + 1) * u) * v
+    return h
+
+def sector_heights(T):
+    nx, nz, st = T['nx'], T['nz'], T['step']; hx, hz = (nx - 1) * st / 2, (nz - 1) * st / 2; H = T['h']
+    def h(x, z):
+        fx = (x + hx) / st; fz = (z + hz) / st
+        i = max(0, min(nx - 2, int(math.floor(fx)))); j = max(0, min(nz - 2, int(math.floor(fz)))); u = fx - i; v = fz - j
+        g = lambda a, b: H[b * nx + a]
+        return (g(i, j) * (1 - u) + g(i + 1, j) * u) * (1 - v) + (g(i, j + 1) * (1 - u) + g(i + 1, j + 1) * u) * v
+    return h
+
+def patch(pts, h):
+    """Heights on a 4 m grid round the footprint, in metres above the lowest sample."""
+    x0 = math.floor((min(p[0] for p in pts) - PATCH) / 4) * 4; z0 = math.floor((min(p[1] for p in pts) - PATCH) / 4) * 4
+    nx = int((max(p[0] for p in pts) + PATCH - x0) // 4) + 2; nz = int((max(p[1] for p in pts) + PATCH - z0) // 4) + 2
+    H = [h(x0 + i * 4, z0 + j * 4) for j in range(nz) for i in range(nx)]; lo = min(H)
+    return {'x0': x0, 'z0': z0, 'step': 4, 'nx': nx, 'nz': nz, 'h': [round(v - lo, 2) for v in H]}
+
 REACH = 60
 
 def seg_dist(p, a, b):
@@ -32,6 +73,7 @@ for (c, r), i, note in PICKS:
     S = json.load(open(os.path.join(BLOCK, f's_{c}_{r}.json')))
     b = S['buildings'][i]
     pts = b['pts']
+    terrain = patch(pts, block_heights(S))
     cx = sum(p[0] for p in pts) / len(pts)
     cz = sum(p[1] for p in pts) / len(pts)
     site = {'id': f'newriver/{c}_{r}/{i}', 'block': 'newriver', 'sector': [c, r], 'index': i, 'note': note,
@@ -53,6 +95,7 @@ for (c, r), i, note in PICKS:
     site['roads'] = roads
     site['walls'] = walls
     site['centre'] = [round(cx, 2), round(cz, 2)]
+    site['terrain'] = terrain
     sites.append(site)
 
 for s in sites:
@@ -87,6 +130,7 @@ def pip(x, y, P):
     return c
 
 A = json.load(open(ANTHEM))
+AH = sector_heights(A['terrain'])
 for i, note in A_PICKS:
     b = A['buildings'][i]
     pts = b['pts']
@@ -111,6 +155,7 @@ for i, note in A_PICKS:
             if math.hypot((a[0] + c[0]) / 2 - cx, (a[1] + c[1]) / 2 - cz) < REACH:
                 walls.append([a[0], a[1], c[0], c[1], 1.8, .2, 0])
     site['roads'] = roads; site['walls'] = walls; site['centre'] = [round(cx, 2), round(cz, 2)]
+    site['terrain'] = patch(pts, AH)
     sites.append(site)
 
 # ---- Buildings outside the baked sector, cached from the OSM API by fetch_osm.py.
@@ -131,7 +176,16 @@ if os.path.exists(EXTRA):
         sites.append({'id': f"anthem/osm/{x['way']}", 'area': 'Anthem', 'block': 'anthem', 'sector': [0, 0], 'index': x['way'], 'note': x['note'] + ' (tagged building=' + t.get('building', '?') + ' in OSM, built here as offices)',
                       'pts': pts, 'type': 'commercial', 'levels': 2, 'levelsAssumed': True, 'height': None,
                       'name': t.get('name') or (t.get('addr:housenumber', '') + ' N Venture Dr offices'), 'loot': None, 'what': '', 'house': False,
-                      'tenants': [], 'roads': roads, 'walls': [], 'water': x['water'], 'centre': [round(cx, 2), round(cz, 2)]})
+                      'tenants': [], 'roads': roads, 'walls': [], 'water': x['water'], 'centre': [round(cx, 2), round(cz, 2)], 'terrain': patch(pts, AH)})
+
+# ---- Imported homes (import_home.py): a hand-made layout from a listing, laid on the real footprint and ground.
+import glob
+for lp in sorted(glob.glob(os.path.join(HERE, 'homes', '*.layout.json'))):
+    L = json.load(open(lp)); sp = lp.replace('.layout.json', '.site.json')
+    if not os.path.exists(sp):
+        print('  (run import_home.py on', os.path.basename(lp), 'first)'); continue
+    site = json.load(open(sp)); site['layout'] = {k: L[k] for k in ('design', 'floors', 'facts') if k in L}; site['layout']['source'] = L['source']['url']
+    sites.append(site)
 
 out = os.path.join(HERE, 'sites.json')
 json.dump(sites, open(out, 'w'), separators=(',', ':'))
