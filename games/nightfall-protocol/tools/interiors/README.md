@@ -71,3 +71,21 @@ Cutaway: walls are cut in the shader (`cutMat`, `CUT`), not swapped for low copi
 - **Motion:** the focus and the lowering ease in. Picking uses the same cut (`cutTop`), so you click what you see.
 
 Moving props: "Move prop" picks up a table, desk or shelf, or any piece a blast has thrown (each thrown chair is its own piece). Click the floor to set it down: it must be clear floor in one room, within 8 m. Click the prop again to shove it to the nearest clear spot in its room that blocks no doorway, against a wall if possible. "Clear doorways" does that for every thrown prop standing in a doorway or breach, and the plan outlines such props in red. Thrown pieces that would land outside the footprint come back to the nearest floor of their room. Window colliders now cover the wall under the sill, so props no longer slide out beneath windows.
+
+
+Building design (`houses.js`; the reference sheet is `mockups/roofs-and-houses.html`, built from the same file):
+- Each house gets a design from its region, era, footprint and lot. The lot comes from real ground: the block heightfield, or Terrarium tiles for imports, sampled into a terrain patch per site by `extract.py`.
+- The panel's Setting select rebuilds the same footprint as built in another region. The Lot select forces a level or steep lot.
+- Floors have their own masks and heights: basement, walk-out lower floor, ground, upper, two-storey wing, rooms in the roof. A straight house stair joins them.
+- Roofs are built over a rectangle cover of the roofed area, per eave height.
+- Footings, steps, porches and the reshaped ground (pads, cuts round walk-outs) are drawn outside the walls.
+
+Importing a real home (`import_home.py`, `homes/`):
+1. Write `homes/<slug>.layout.json` with the listing's location, the OSM building way and the facts.
+2. Run `python3 import_home.py homes/<slug>.layout.json`. This caches the footprint, nearby drives and ground as `<slug>.site.json`; the raw downloads go to `homes/cache`, which is not committed.
+3. Add `design` and `floors` to the layout from the listing and photos:
+   - rooms as zones in the site's metres (`where`: x and z ranges, inside or outside a circle);
+   - doors (between rooms, to outside, to a deck; `w` for double, `kind:"gdoor"` for garage doors);
+   - window walls toward a deck or outside;
+   - the stair cells.
+4. Run `extract.py`, then `build.py`. The site shows under "Imported homes". Listing photos are reference only; do not commit them.
