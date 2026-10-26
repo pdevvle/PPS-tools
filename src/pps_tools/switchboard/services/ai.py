@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import html
 import json
+import math
 import os
 import re
 import threading
@@ -320,7 +321,7 @@ EXTRACT_SYSTEM = """You turn a customer conversation at a print shop into a job 
 - quantity: the number of finished pieces as an integer, or null if it isn't stated.
 - due_at: when the customer needs it, as an ISO 8601 date (2026-11-10) or a date-time with a UTC offset. Resolve relative dates ("Friday", "by the 10th", "next week") against today's date given below. Use null if no date is mentioned.
 - priority: "rush" if they need it within two business days or say rush or ASAP; "high" if within a week or they stress urgency; "low" if they say there's no hurry; otherwise "normal".
-- specs: fill each field from the conversation and use null for anything not mentioned. Don't guess."""
+- specs: fill each field from the conversation, in the type the field asks for (true or false for yes/no fields, a number for numeric fields, one of the listed choices for choice fields, YYYY-MM-DD for dates). Use null for anything not mentioned. Don't guess."""
 
 DEFAULT_SPECS = [
     ("product", "Product (business cards, brochure, banner…)"),
@@ -331,25 +332,34 @@ DEFAULT_SPECS = [
 ]
 
 
-def spec_fields() -> list[tuple[str, str]]:
+def spec_fields() -> list[dict]:
+    """The job spec fields to fill: the jobs module's configured ones, else a basic print set.
+    Each is {key, label, type, options}; type is one of the job field types."""
     rows = db.query("SELECT key, label, type, options_json FROM job_fields ORDER BY position, id")
     if not rows:
-        return DEFAULT_SPECS
-    out = []
-    for r in rows:
-        label = r["label"]
-        options = db.jload(r["options_json"], []) or []
-        if options:
-            label += " (one of: " + ", ".join(str(o) for o in options) + ")"
-        out.append((r["key"], label))
-    return out
+        return [{"key": key, "label": label, "type": "text", "options": []} for key, label in DEFAULT_SPECS]
+    return [{"key": r["key"], "label": r["label"], "type": r["type"] or "text",
+             "options": [str(o) for o in db.jload(r["options_json"], []) or []]} for r in rows]
 
 
 def _nullable(type_: str, description: str) -> dict:
     return {"anyOf": [{"type": type_}, {"type": "null"}], "description": description}
 
 
-def extract_schema(fields: list[tuple[str, str]]) -> dict:
+def _spec_schema(field: dict) -> dict:
+    kind, label = field["type"], field["label"]
+    if kind == "checkbox":
+        return _nullable("boolean", f"{label} (yes or no)")
+    if kind == "number":
+        return _nullable("number", label)
+    if kind == "select" and field["options"]:
+        return {"anyOf": [{"type": "string", "enum": field["options"]}, {"type": "null"}], "description": label}
+    if kind == "date":
+        return _nullable("string", f"{label}, as a date (YYYY-MM-DD)")
+    return _nullable("string", label)
+
+
+def extract_schema(fields: list[dict]) -> dict:
     return {
         "type": "object",
         "properties": {
@@ -360,14 +370,59 @@ def extract_schema(fields: list[tuple[str, str]]) -> dict:
             "priority": {"type": "string", "enum": ["low", "normal", "high", "rush"]},
             "specs": {
                 "type": "object",
-                "properties": {key: _nullable("string", label) for key, label in fields},
-                "required": [key for key, _ in fields],
+                "properties": {f["key"]: _spec_schema(f) for f in fields},
+                "required": [f["key"] for f in fields],
                 "additionalProperties": False,
             },
         },
         "required": ["title", "description", "quantity", "due_at", "priority", "specs"],
         "additionalProperties": False,
     }
+
+
+_YES = {"true", "yes", "y", "1", "on", "required", "needed"}
+_NO = {"false", "no", "n", "0", "off", "none", "not required", "not needed"}
+
+
+def coerce_spec(field: dict, value):
+    """A spec value in the job field's type (bool, number, one of the options,
+    'YYYY-MM-DD' or text), or None when it doesn't fit."""
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    kind = field.get("type") or "text"
+    if kind == "checkbox":
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return bool(value)
+        text = str(value).strip().lower()
+        return True if text in _YES else False if text in _NO else None
+    if kind == "number":
+        if isinstance(value, bool):
+            return None
+        try:
+            number = float(value) if isinstance(value, (int, float)) else float(str(value).strip().replace(",", ""))
+        except ValueError:
+            return None
+        if not math.isfinite(number):
+            return None
+        return int(number) if number.is_integer() else number
+    if kind == "select" and field.get("options"):
+        text = str(value).strip().lower()
+        return next((o for o in field["options"] if o.strip().lower() == text), None)
+    if kind == "date":
+        text = str(value).strip()
+        if not re.match(r"\d{4}-\d{2}-\d{2}(?:$|[T ])", text):
+            return None
+        try:
+            return date.fromisoformat(text[:10]).isoformat()
+        except ValueError:
+            return None
+    if isinstance(value, bool):
+        return "Yes" if value else "No"
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
+    return str(value).strip()[:500]
 
 
 def normalize_due(value, tz) -> str | None:
@@ -406,7 +461,7 @@ def extract_job(user: dict, cid: int) -> dict:
     if quantity is not None and quantity <= 0:
         quantity = None
     raw_specs = data.get("specs") if isinstance(data.get("specs"), dict) else {}
-    specs = {key: (str(raw_specs[key]).strip() if raw_specs.get(key) not in (None, "") else None) for key, _ in fields}
+    specs = {f["key"]: coerce_spec(f, raw_specs.get(f["key"])) for f in fields}
     return {
         "title": str(data.get("title") or conv.get("subject") or "New job").strip()[:200],
         "description": str(data.get("description") or "").strip(),

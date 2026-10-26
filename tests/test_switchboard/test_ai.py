@@ -191,12 +191,54 @@ def test_extract_job_normalizes_the_answer(client, claude):
     res = client.post("/api/ai/extract-job", {"conversation_id": cid})
     assert res["title"] == "250 trifold menus" and res["quantity"] == 250 and res["priority"] == "normal"
     assert res["due_at"] == iso(datetime(2026, 11, 6, 17, 0, tzinfo=PHX))  # a bare date means 5 PM local
-    assert res["specs"] == {"product": "Trifold menu", "paper_stock": "100lb gloss", "finished_size": None, "ink": None,
-                            "finishing": "Fold"}
+    # specs follow the configured job fields (the built-in list when the jobs module has none)
+    keys = [f["key"] for f in ai.spec_fields()]
+    given = {"product": "Trifold menu", "paper_stock": "100lb gloss", "finishing": "Fold"}
+    assert res["specs"] == {key: given.get(key) for key in keys}
     assert res["conversation_id"] == cid and res["contact_id"]
     schema = claude.last[1]["output_config"]["format"]["schema"]
-    assert schema["properties"]["specs"]["required"] == ["product", "paper_stock", "finished_size", "ink", "finishing"]
+    assert schema["properties"]["specs"]["required"] == keys
     assert {"type": "null"} in schema["properties"]["quantity"]["anyOf"]
+
+
+def set_job_fields(*fields):
+    with db.transaction():
+        db.execute("DELETE FROM job_fields")
+        for i, (key, kind, options) in enumerate(fields):
+            db.insert("job_fields", {"key": key, "label": key.replace("_", " ").title(), "type": kind,
+                                     "options_json": db.jdump(options), "position": i, "created_at": now_iso()})
+
+
+def test_extracted_specs_take_each_field_type(client, claude):
+    set_job_fields(("product", "text", []), ("pages", "number", []), ("coating", "select", ["Gloss", "Matte"]),
+                   ("proof_required", "checkbox", []), ("ship_by", "date", []), ("notes", "textarea", []))
+    cid = make_conversation()
+    base = {"title": "Booklets", "description": "", "quantity": 100, "due_at": None, "priority": "normal"}
+    claude.answers = [{**base, "specs": {"product": 250, "pages": "1,000", "coating": "matte", "proof_required": "False",
+                                         "ship_by": "2026-11-06T10:00", "notes": "  Fold before shipping "}}]
+    specs = client.post("/api/ai/extract-job", {"conversation_id": cid})["specs"]
+    assert specs == {"product": "250", "pages": 1000, "coating": "Matte", "proof_required": False,
+                     "ship_by": "2026-11-06", "notes": "Fold before shipping"}
+    props = claude.last[1]["output_config"]["format"]["schema"]["properties"]["specs"]["properties"]
+    assert {"type": "number"} in props["pages"]["anyOf"] and {"type": "boolean"} in props["proof_required"]["anyOf"]
+    assert {"type": "string", "enum": ["Gloss", "Matte"]} in props["coating"]["anyOf"]
+    assert {"type": "string"} in props["notes"]["anyOf"]
+
+    # values that don't fit their field are dropped rather than stored as text
+    claude.answers = [{**base, "specs": {"product": None, "pages": "lots", "coating": "Satin", "proof_required": "maybe",
+                                         "ship_by": "next week", "notes": ""}}]
+    specs = client.post("/api/ai/extract-job", {"conversation_id": cid})["specs"]
+    assert specs == {"product": None, "pages": None, "coating": None, "proof_required": None, "ship_by": None, "notes": None}
+
+
+def test_coerce_spec():
+    number, checkbox = {"type": "number"}, {"type": "checkbox"}
+    assert ai.coerce_spec(number, 3.5) == 3.5 and ai.coerce_spec(number, "12") == 12 and ai.coerce_spec(number, 2.0) == 2
+    assert ai.coerce_spec(number, True) is None and ai.coerce_spec(number, "nan") is None
+    assert ai.coerce_spec(checkbox, True) is True and ai.coerce_spec(checkbox, "yes") is True and ai.coerce_spec(checkbox, 0) is False
+    assert ai.coerce_spec({"type": "select", "options": []}, " Spot UV ") == "Spot UV"  # no choices set: plain text
+    assert ai.coerce_spec({"type": "date"}, "2026-02-30") is None and ai.coerce_spec({"type": "date"}, "2026-02-03") == "2026-02-03"
+    assert ai.coerce_spec({"type": "text"}, True) == "Yes" and ai.coerce_spec({"type": "text"}, 4.0) == "4"
 
 
 def test_normalize_due():
