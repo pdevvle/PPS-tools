@@ -112,7 +112,8 @@ TXN_TYPES: dict[str, TxnType] = {
                 account_lines=True, number_seq="journal_entry"),
         TxnType("inventory_adjustment", "Inventory qty adjustment", "Inventory adjustments",
                 "inventory-adjustments", "inventory", item_lines=True, header_account="Inventory adjustment account",
-                header_account_types=("cogs", "expense", "other_expense", "income", "other_income"),
+                # Equity for starting quantities, offset to Opening Balance Equity as in QBO.
+                header_account_types=("cogs", "expense", "other_expense", "income", "other_income", "equity"),
                 default_header_account="inventory_shrinkage", number_seq="inventory_adjustment"),
         TxnType("sales_tax_payment", "Sales tax payment", "Sales tax payments", "tax-payments", "tax",
                 entity="agency", header_account="Payment account", header_account_types=PAY_FROM_TYPES,

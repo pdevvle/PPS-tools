@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date
 
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
-from sqlalchemy import func, select
+from sqlalchemy import select
 
 from pps_tools.books import money
 from pps_tools.books.models import ACCOUNT_TYPES, DETAIL_TYPES, Account, LedgerEntry, Transaction

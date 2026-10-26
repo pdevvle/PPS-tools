@@ -46,7 +46,8 @@ def index():
     low = sum(1 for it in s.scalars(select(Item).where(Item.type == "inventory", Item.active.is_(True))) if it.low_stock)
     out = s.scalar(select(func.count(Item.id)).where(Item.type == "inventory", Item.active.is_(True))) or 0
     categories = s.scalars(select(ItemCategory).order_by(ItemCategory.name)).all()
-    return render_template("items/index.html", rows=rows, show=show, low=low, inventory_count=out, categories=categories)
+    return render_template("items/index.html", rows=rows, show=show, low=low, inventory_count=out, categories=categories,
+                           types=ITEM_TYPES)
 
 
 @bp.route("/items/new", methods=["GET", "POST"])

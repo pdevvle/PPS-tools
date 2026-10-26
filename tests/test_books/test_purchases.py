@@ -170,3 +170,4 @@ def test_editing_keeps_reconciled_marks(s, b, checking):
     entries = s.query(LedgerEntry).filter(LedgerEntry.txn_id == exp.id,
                                           LedgerEntry.account_id == checking.id).all()
     assert [e.cleared for e in entries] == ["R"]
+

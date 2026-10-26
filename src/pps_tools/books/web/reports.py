@@ -7,8 +7,8 @@ import re
 from flask import Blueprint, Response, abort, flash, redirect, render_template, request, url_for
 from sqlalchemy import select
 
-from pps_tools.books.models import (Account, Budget, Customer, Employee, Item, Location, SavedReport, TaxAgency,
-                                    TrackingClass, Vendor)
+from pps_tools.books.models import (Budget, Customer, Employee, Item, Location, SavedReport, TaxAgency, TrackingClass,
+                                    Vendor)
 from pps_tools.books.services import prefs
 from pps_tools.books.services import reports as report_service
 from pps_tools.books.services.accounts import ordered_accounts

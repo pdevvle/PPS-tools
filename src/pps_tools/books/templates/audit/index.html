@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import pager %}
+{% block title %}Audit log{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="crumbs"><a href="{{ url_for('settings.index') }}">Settings</a></div><h1>Audit log</h1>
+  <div class="muted small">{{ total }} event{{ '' if total == 1 else 's' }}. Entries can't be edited or deleted.</div></div></div>
+<div class="card">
+  <form class="filters" method="get">
+    <div class="field"><label>Dates</label><select name="preset" data-autosubmit>{% for k, v in presets %}<option value="{{ k }}"{% if preset == k %} selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+    {% if preset == 'custom' %}<div class="field"><label>From</label><input type="date" name="start" value="{{ start|date_input if start else '' }}"></div><div class="field"><label>To</label><input type="date" name="end" value="{{ end|date_input if end else '' }}"></div>{% endif %}
+    <div class="field"><label>User</label><select name="user_id" data-autosubmit><option value="">Everyone</option>{% for u in users %}<option value="{{ u.id }}"{% if request.args.get('user_id') == u.id|string %} selected{% endif %}>{{ u.name }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Event</label><select name="action" data-autosubmit><option value="">All</option>{% for a in actions %}<option value="{{ a }}"{% if request.args.get('action') == a %} selected{% endif %}>{{ a.replace('_', ' ')|title }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Object</label><select name="object_type" data-autosubmit><option value="">All</option>{% for t in types %}<option value="{{ t }}"{% if request.args.get('object_type') == t %} selected{% endif %}>{{ t.replace('_', ' ')|title }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Search</label><input name="q" value="{{ request.args.get('q', '') }}"></div>
+    <button type="submit">Apply</button>
+  </form>
+  <div class="table-wrap"><table class="data compact">
+    <thead><tr><th>When</th><th>User</th><th>Event</th><th>Name</th><th>Date</th><th class="num">Amount</th><th>Details</th></tr></thead>
+    <tbody>{% for e in rows %}<tr class="clickable" data-href="{{ url_for('audit.view', entry_id=e.id) }}">
+      <td class="nowrap small">{{ e.ts|date('%m/%d/%Y %I:%M %p') }}</td><td>{{ e.user_name or '' }}</td>
+      <td><span class="badge{% if e.action in ('delete', 'void') %} void{% endif %}">{{ e.action.replace('_', ' ') }}</span></td>
+      <td>{{ e.name or '' }}</td><td class="small">{{ e.txn_date|date if e.txn_date else '' }}</td>
+      <td class="num">{{ e.amount_cents|money if e.amount_cents is not none else '' }}</td><td class="small">{{ e.summary }}</td></tr>
+    {% else %}<tr><td colspan="7" class="muted">No matching events.</td></tr>{% endfor %}</tbody>
+  </table></div>
+  {{ pager(page, pages) }}
+</div>
+{% endblock %}

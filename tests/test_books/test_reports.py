@@ -151,8 +151,20 @@ def test_1099_summary_counts_cash_and_check_payments(s, books):
     r = run(s, "contractor_1099_summary", preset="custom", start=date(2026, 1, 1), end=date(2026, 12, 31))
     paper = row(r, "Paper Supply Co").cells
     assert paper["total"] == 120000 + 250000
-    assert paper["file"] == "Yes"  # over the $2,000 2026 threshold
+    assert paper["file"] == "1099-NEC"  # over the $2,000 2026 threshold
     assert "2026: $2,000" in r.notes[0]
+
+
+def test_1099_forms_use_each_box_threshold():
+    from pps_tools.books.services.reports.other import forms_needed
+
+    assert forms_needed({"NEC-1": 199_999}, 200_000) == []
+    assert forms_needed({"NEC-1": 200_000}, 200_000) == ["NEC"]
+    # Royalties need a 1099-MISC from $10 and attorneys' gross proceeds from $600, whatever the NEC threshold.
+    assert forms_needed({"MISC-2": 1_000}, 200_000) == ["MISC"]
+    assert forms_needed({"MISC-10": 60_000}, 200_000) == ["MISC"]
+    assert forms_needed({"MISC-1": 150_000, "MISC-3": 150_000}, 200_000) == []
+    assert forms_needed({"NEC-1": 250_000, "MISC-1": 250_000}, 200_000) == ["NEC", "MISC"]
 
 
 def test_sales_by_product_includes_margin(s, books):

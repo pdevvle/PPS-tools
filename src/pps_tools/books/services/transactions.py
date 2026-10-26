@@ -657,17 +657,20 @@ def _validate(s: Session, txn: Transaction, data: dict, info: TxnType) -> None:
     if t == "inventory_adjustment":
         if not txn.lines:
             raise ValidationError("Add at least one product to adjust.", "lines")
+    # Without no_autoflush the query would flush a new transaction first and then find itself.
     if t == "check" and txn.number and prefs.get(s, "warn_duplicate_check_numbers") and not data.get("allow_duplicate"):
-        dup = s.scalar(select(Transaction.id).where(
-            Transaction.type.in_(("check", "bill_payment")), Transaction.number == txn.number,
-            Transaction.account_id == txn.account_id, Transaction.id != (txn.id or 0),
-            Transaction.voided.is_(False)).limit(1))
+        with s.no_autoflush:
+            dup = s.scalar(select(Transaction.id).where(
+                Transaction.type.in_(("check", "bill_payment")), Transaction.number == txn.number,
+                Transaction.account_id == txn.account_id, Transaction.id != (txn.id or 0),
+                Transaction.voided.is_(False)).limit(1))
         if dup:
             raise ValidationError(f"Check number {txn.number} is already used for this account.", "number")
     if t == "bill" and txn.number and prefs.get(s, "warn_duplicate_bill_numbers") and not data.get("allow_duplicate"):
-        dup = s.scalar(select(Transaction.id).where(
-            Transaction.type == "bill", Transaction.number == txn.number, Transaction.vendor_id == txn.vendor_id,
-            Transaction.id != (txn.id or 0), Transaction.voided.is_(False)).limit(1))
+        with s.no_autoflush:
+            dup = s.scalar(select(Transaction.id).where(
+                Transaction.type == "bill", Transaction.number == txn.number, Transaction.vendor_id == txn.vendor_id,
+                Transaction.id != (txn.id or 0), Transaction.voided.is_(False)).limit(1))
         if dup:
             raise ValidationError(f"Bill number {txn.number} was already entered for this vendor.", "number")
 

@@ -80,6 +80,130 @@
     });
   });
 
+  // ---------- small page behaviours ----------
+  // Buttons that say what to do after saving, on forms outside the transaction form.
+  $$("form button[data-action]").forEach(function (b) {
+    if (b.closest("#txn-form")) return;
+    b.addEventListener("click", function () {
+      var na = $("#next-action", b.form);
+      if (na) na.value = b.dataset.action;
+    });
+  });
+  // Radios and checkboxes that show a panel: <input data-toggle-show="panel-id">.
+  function syncToggle(input) {
+    var panel = document.getElementById(input.dataset.toggleShow);
+    if (!panel) return;
+    if (input.type === "radio") {
+      $$('input[type=radio][name="' + input.name + '"]', input.form || document).forEach(function (r) {
+        var p = document.getElementById(r.dataset.toggleShow);
+        if (p) p.hidden = !r.checked;
+      });
+    } else {
+      panel.hidden = !input.checked;
+    }
+  }
+  $$("[data-toggle-show]").forEach(function (input) {
+    input.addEventListener("change", function () { syncToggle(input); });
+    if (input.type !== "radio" || input.checked) syncToggle(input);
+  });
+
+  // Recurring template schedule: show only the fields the chosen interval and end use.
+  var schedule = $(".schedule-panel");
+  if (schedule) {
+    var units = { daily: "day(s)", weekly: "week(s)", monthly: "month(s)", yearly: "year(s)" };
+    var syncSchedule = function () {
+      var mode = $("[data-schedule-mode]", schedule).value;
+      var interval = $("[data-schedule-interval]", schedule).value;
+      var end = $("[data-schedule-end]", schedule).value;
+      $$(".when-scheduled", schedule).forEach(function (el) { el.hidden = mode === "unscheduled"; });
+      $$(".for-scheduled", schedule).forEach(function (el) { el.hidden = mode !== "scheduled"; });
+      $$(".for-reminder", schedule).forEach(function (el) { el.hidden = mode !== "reminder"; });
+      $$(".for-weekly, .for-monthly, .for-yearly", schedule).forEach(function (el) {
+        el.hidden = !el.classList.contains("for-" + interval);
+      });
+      $$(".end-date", schedule).forEach(function (el) { el.hidden = end !== "date"; });
+      $$(".end-count", schedule).forEach(function (el) { el.hidden = end !== "count"; });
+      var unit = $("[data-every-unit]", schedule);
+      if (unit) unit.textContent = units[interval] || "";
+    };
+    schedule.addEventListener("change", syncSchedule);
+    syncSchedule();
+  }
+
+  // Budget grid: row totals, net income per month, and "fill across".
+  var grid = $("[data-budget-grid]");
+  if (grid) {
+    var sumGrid = function () {
+      var net = new Array(13).fill(0);
+      $$("tbody tr[data-kind]", grid).forEach(function (tr) {
+        var cells = $$("input.cell", tr), total = 0, sign = tr.dataset.kind === "in" ? 1 : -1;
+        cells.forEach(function (inp, i) { var c = parseCents(inp.value); total += c; net[i] += sign * c; });
+        net[12] += sign * total;
+        $(".row-total", tr).textContent = fmt(total);
+      });
+      $$("[data-col-net]", grid).forEach(function (th) {
+        var k = th.dataset.colNet;
+        th.textContent = fmt(net[k === "total" ? 12 : parseInt(k, 10)]);
+      });
+    };
+    grid.addEventListener("input", sumGrid);
+    grid.addEventListener("click", function (e) {
+      var b = e.target.closest("[data-fill-row]");
+      if (!b) return;
+      var cells = $$("input.cell", b.closest("tr"));
+      cells.forEach(function (inp) { inp.value = cells[0].value; });
+      sumGrid();
+    });
+    sumGrid();
+  }
+
+  // Weekly timesheet: totals per row and day, and adding rows.
+  var sheet = $("[data-timesheet]");
+  if (sheet) {
+    var minutes = function (text) {
+      var s = String(text || "").trim().toLowerCase();
+      if (!s) return 0;
+      if (s.indexOf(":") >= 0) { var p = s.split(":"); return (parseInt(p[0] || "0", 10) || 0) * 60 + (parseInt(p[1] || "0", 10) || 0); }
+      var m = s.match(/^(?:(\d+)\s*h)?\s*(?:(\d+)\s*m)?$/);
+      if (m && (m[1] || m[2])) return (parseInt(m[1] || "0", 10)) * 60 + parseInt(m[2] || "0", 10);
+      var h = parseFloat(s.replace(/h$/, ""));
+      return isNaN(h) ? 0 : Math.round(h * 60);
+    };
+    var hm = function (mins) { return mins ? Math.floor(mins / 60) + ":" + ("0" + (mins % 60)).slice(-2) : ""; };
+    var sumSheet = function () {
+      var days = new Array(7).fill(0), all = 0;
+      $$("[data-rows] tr", sheet).forEach(function (tr) {
+        var total = 0;
+        $$("input.cell", tr).forEach(function (inp, i) { var m = minutes(inp.value); days[i] += m; total += m; });
+        all += total;
+        var cell = $(".row-total", tr);
+        if (cell) cell.textContent = hm(total);
+      });
+      $$("[data-day-total]", sheet).forEach(function (th) {
+        var k = th.dataset.dayTotal;
+        th.textContent = hm(k === "all" ? all : days[parseInt(k, 10)]);
+      });
+    };
+    sheet.addEventListener("input", sumSheet);
+    var addRow = $("[data-add-row]", sheet);
+    if (addRow) addRow.addEventListener("click", function () {
+      var body = $("[data-rows]", sheet), rows = $$("tr", body), last = rows[rows.length - 1];
+      var next = rows.length, copy = last.cloneNode(true);
+      copy.classList.remove("locked");
+      $$("input, select", copy).forEach(function (el) {
+        el.name = el.name.replace(/^r-\d+-/, "r-" + next + "-");
+        if (el.type === "hidden" && /-pos$/.test(el.name)) el.value = next;
+        else if (el.type === "hidden") el.parentNode.removeChild(el);
+        else if (el.type === "checkbox") el.checked = $('input[type=checkbox]', last).checked;
+        else if (el.tagName === "SELECT") el.selectedIndex = 0;
+        else { el.value = ""; el.readOnly = false; el.removeAttribute("title"); }
+      });
+      $(".row-total", copy).textContent = "";
+      body.appendChild(copy);
+    });
+    sumSheet();
+  }
+
   // ---------- transaction form ----------
   var form = document.getElementById("txn-form");
   if (form) initTxnForm(form);

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import smtplib
 import ssl
-from collections import defaultdict
 from dataclasses import dataclass
 from email.message import EmailMessage as MimeMessage
 from email.utils import formataddr, make_msgid

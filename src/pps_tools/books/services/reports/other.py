@@ -114,6 +114,23 @@ def nec_threshold(s: Session, year: int) -> int:
     return round_cents(Decimal(str(table[str(usable[-1])])))
 
 
+# Fixed thresholds outside the NEC/MISC amount that changes by year.
+ROYALTY_THRESHOLD = 1000  # MISC box 2: $10
+ATTORNEY_THRESHOLD = 60000  # MISC box 10: $600
+
+
+def forms_needed(sums: dict[str, int], threshold: int) -> list[str]:
+    """Which forms a vendor's box totals call for: ``["NEC"]``, ``["MISC"]``, both or neither."""
+    forms = []
+    if sums.get("NEC-1", 0) >= threshold:
+        forms.append("NEC")
+    misc = (any(sums.get(b, 0) >= threshold for b in ("MISC-1", "MISC-3", "MISC-6"))
+            or sums.get("MISC-2", 0) >= ROYALTY_THRESHOLD or sums.get("MISC-10", 0) >= ATTORNEY_THRESHOLD)
+    if misc:
+        forms.append("MISC")
+    return forms
+
+
 def payments_1099(s: Session, start: date, end: date) -> dict[int, dict[str, list[tuple]]]:
     """{vendor_id: {box: [(txn, amount_cents, account_name)]}} for 1099 vendors.
 
@@ -197,16 +214,16 @@ def contractor_1099_summary(s: Session, p: Params) -> Report:
         total = sum(sums.values())
         if not total and not p.include_zero:
             continue
-        attorney = sums.get("MISC-10", 0)
-        needed = total - attorney >= threshold or attorney >= 60000
+        forms = forms_needed(sums, threshold)
         r.add({"name": v.display_name, "tin": v.masked_tax_id or "Missing", **sums, "total": total,
-               "file": "Yes" if needed else "No"}, 1, "data",
+               "file": " + ".join(f"1099-{f}" for f in forms) if forms else "No"}, 1, "data",
               link=report_link("contractor_1099_detail", p, vendor_id=vid))
         for b in used_boxes:
             grand[b] += sums[b]
         grand["total"] += total
     r.add({"name": "TOTAL", **grand}, 0, "grand")
-    r.notes.append(f"Reporting threshold for {end.year}: ${threshold / 100:,.0f} (Forms 1099-NEC and 1099-MISC). "
+    r.notes.append(f"Reporting threshold for {end.year}: ${threshold / 100:,.0f} (Forms 1099-NEC and 1099-MISC; "
+                   "royalties $10, gross proceeds to attorneys $600). "
                    "Payments by credit or debit card are excluded; card processors report them on Form 1099-K.")
     if not any(a.form_1099_box for a in s.scalars(select(Account))):
         r.notes.append("No accounts are mapped to 1099 boxes yet, so all expense payments count as "
@@ -346,15 +363,15 @@ def budget_overview(s: Session, p: Params) -> Report:
     budget = _budget(s, p)
     r = Report("budget_overview", "Budget Overview", budget.name if budget else "No budget yet")
     if budget is None:
-        r.notes.append("Create a budget under Settings → Budgeting.")
+        r.notes.append("Create a budget under Accounting → Budgets.")
         return r
     months = _budget_months(company, budget)
     r.columns = [Col("name", "", "text")] + [Col(f"m{i}", lbl) for i, (_, _, lbl) in enumerate(months)] + [
         Col("total", "Total")]
     amounts: dict = defaultdict(lambda: [0] * 12)
+    # A subdivided budget (by customer, class or location) totals across its subdivisions.
     for bl in budget.lines:
-        if bl.subdivision_id is None:
-            amounts[bl.account_id][bl.period - 1] += bl.amount_cents
+        amounts[bl.account_id][bl.period - 1] += bl.amount_cents
     for a in ordered_accounts(s):
         if a.id not in amounts:
             continue
@@ -370,7 +387,7 @@ def budget_vs_actuals(s: Session, p: Params) -> Report:
     budget = _budget(s, p)
     r = Report("budget_vs_actuals", "Budget vs. Actuals", budget.name if budget else "No budget yet", basis=p.basis)
     if budget is None:
-        r.notes.append("Create a budget under Settings → Budgeting.")
+        r.notes.append("Create a budget under Accounting → Budgets.")
         return r
     months = _budget_months(company, budget)
     start, end = months[0][0], months[-1][1]
@@ -378,8 +395,7 @@ def budget_vs_actuals(s: Session, p: Params) -> Report:
     actual = agg.by_account(start, end)
     budgeted: dict = defaultdict(int)
     for bl in budget.lines:
-        if bl.subdivision_id is None:
-            budgeted[bl.account_id] += bl.amount_cents
+        budgeted[bl.account_id] += bl.amount_cents
     r.subtitle = f"{budget.name}: {start:%B %Y} – {end:%B %Y}"
     r.columns = [Col("name", "", "text"), Col("actual", "Actual"), Col("budget", "Budget"),
                  Col("over", "Over budget"), Col("pct", "% of budget", "pct")]
