@@ -42,6 +42,7 @@ NETWORKS: dict[str, Network] = {
         Network("x", "X (Twitter)", 5),
         Network("linkedin", "LinkedIn", 6),
         Network("tiktok", "TikTok", 7),
+        Network("microsoft", "Microsoft Ads", 8),
         Network("other", "Other Meta placements", 0),
     )
 }

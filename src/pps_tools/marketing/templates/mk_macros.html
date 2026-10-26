@@ -32,7 +32,7 @@
 {%- endmacro %}
 
 {% macro platform(key) -%}
-{%- set slots = {"google_ads": 1, "meta": 2, "pinterest": 4, "x": 5, "linkedin": 6, "tiktok": 7} -%}
+{%- set slots = {"google_ads": 1, "meta": 2, "pinterest": 4, "x": 5, "linkedin": 6, "tiktok": 7, "microsoft_ads": 8} -%}
 <span class="net"><span class="swatch s{{ slots.get(key, 0) }}" aria-hidden="true"></span>{{ platform_short.get(key, key) }}</span>
 {%- endmacro %}
 

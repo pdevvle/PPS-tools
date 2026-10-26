@@ -1,8 +1,10 @@
 """Connector tests: each platform's API is mocked with `responses`, so these check
 both how requests are built (URLs, auth, bodies) and how answers are parsed."""
 
+import io
 import json
 import time
+import zipfile
 from datetime import date, timedelta
 from urllib.parse import parse_qs, urlsplit
 
@@ -15,6 +17,7 @@ from pps_tools.marketing.models import ACTIVE, PAUSED, REMOVED, AdAccount, Campa
 from pps_tools.marketing.platforms.google_ads import CAMPAIGNS_QUERY, CLIENTS_QUERY, CUSTOMER_QUERY, GoogleAdsPlatform
 from pps_tools.marketing.platforms.linkedin import LinkedInPlatform, escape_commentary
 from pps_tools.marketing.platforms.meta import MetaPlatform, conversions_from
+from pps_tools.marketing.platforms.microsoft_ads import MicrosoftAdsPlatform, earliest_today, read_report
 from pps_tools.marketing.platforms.pinterest import PinterestPlatform
 from pps_tools.marketing.platforms.tiktok import TikTokPlatform
 from pps_tools.marketing.platforms.x import XPlatform
@@ -518,3 +521,200 @@ class TestTikTok:
         assert (total.status, total.lifetime_budget, total.budget_editable) == (PAUSED, 900.0, False)
         tiktok.set_status(daily, PAUSED)
         assert json.loads(responses.calls[1].request.body) == {"advertiser_id": "700", "campaign_ids": ["1"], "operation_status": "DISABLE"}
+
+
+# -- Microsoft Advertising ----------------------------------------------------------------
+
+MS_LOGIN = "https://login.microsoftonline.com/common/oauth2/v2.0"
+MS_CUSTOMER = "https://clientcenter.api.bingads.microsoft.com/CustomerManagement/v13"
+MS_CAMPAIGN = "https://campaign.api.bingads.microsoft.com/CampaignManagement/v13"
+MS_REPORTING = "https://reporting.api.bingads.microsoft.com/Reporting/v13"
+MS_DOWNLOAD = "https://bingadsappsstorageprod.blob.core.windows.net/download/report.zip?sig=abc"
+MS_ACCOUNT = AdAccount("microsoft_ads", "180436527", "PPS", extra={"customer_id": "254321", "time_zone": "Arizona"})
+
+
+def zipped_csv(text: str) -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as archive:
+        archive.writestr("180436527_report.csv", "﻿" + text)
+    return buf.getvalue()
+
+
+@pytest.fixture
+def microsoft(settings, store, monkeypatch):
+    monkeypatch.setenv("MICROSOFT_ADS_CLIENT_ID", "ms-client")
+    monkeypatch.setenv("MICROSOFT_ADS_CLIENT_SECRET", "ms-secret")
+    monkeypatch.setenv("MICROSOFT_ADS_DEVELOPER_TOKEN", "dev-token")
+    connect(store, "microsoft_ads", refresh_token="ms-refresh")
+    platform = MicrosoftAdsPlatform(store, settings)
+    platform.http.sleep = lambda seconds: None
+    return platform
+
+
+class TestMicrosoftAds:
+    @responses.activate
+    def test_sign_in_uses_pkce_and_saves_the_user(self, microsoft, store):
+        url = microsoft.authorization_url()
+        assert url.startswith(f"{MS_LOGIN}/authorize?")
+        q = parse_qs(urlsplit(url).query)
+        assert q["scope"] == ["https://ads.microsoft.com/msads.manage offline_access"]
+        assert q["code_challenge_method"] == ["S256"] and q["response_mode"] == ["query"]
+        assert q["redirect_uri"] == ["http://localhost:5050/oauth/microsoft_ads/callback"]
+        responses.post(f"{MS_LOGIN}/token", json={"token_type": "Bearer", "expires_in": 3600, "access_token": "ms-new",
+                                                  "refresh_token": "ms-r2", "scope": "https://ads.microsoft.com/msads.manage"})
+        responses.post(f"{MS_CUSTOMER}/User/Query", match=[matchers.json_params_matcher({"UserId": None})],
+                       json={"User": {"Id": "9001", "UserName": "owner@pps.com", "Name": {"FirstName": "Pat", "LastName": "Printer"}},
+                             "CustomerRoles": [{"RoleId": 41, "CustomerId": "254321"}]})
+        microsoft.complete_authorization({"code": "auth-code", "state": q["state"][0]})
+        sent = form(responses.calls[0])
+        assert sent["grant_type"] == "authorization_code" and sent["client_secret"] == "ms-secret"
+        assert sent["scope"] == "https://ads.microsoft.com/msads.manage offline_access" and len(sent["code_verifier"]) >= 43
+        headers = responses.calls[1].request.headers
+        assert headers["Authorization"] == "Bearer ms-new" and headers["DeveloperToken"] == "dev-token"
+        assert "CustomerAccountId" not in headers
+        conn = store.get_connection("microsoft_ads")
+        assert conn["credentials"]["refresh_token"] == "ms-r2"
+        assert conn["profile"] == {"user_id": "9001", "name": "Pat Printer"}
+
+    @responses.activate
+    def test_refresh_keeps_the_newest_refresh_token(self, microsoft, store):
+        connect(store, "microsoft_ads", refresh_token="ms-refresh", expires_at=time.time() - 10)
+        responses.post(f"{MS_LOGIN}/token", json={"access_token": "fresh", "refresh_token": "ms-refresh-2", "expires_in": 3600})
+        assert microsoft.access_token() == "fresh"
+        assert form(responses.calls[0])["grant_type"] == "refresh_token"
+        assert store.get_connection("microsoft_ads")["credentials"]["refresh_token"] == "ms-refresh-2"
+
+    @responses.activate
+    def test_discovers_accounts_with_their_customer(self, microsoft):
+        responses.post(f"{MS_CUSTOMER}/User/Query", json={"User": {"Id": "9001"}})
+        responses.post(f"{MS_CUSTOMER}/Accounts/Search", json={"Accounts": [
+            {"Id": "180436527", "Name": "Priority Print Service", "Number": "F149A2B7", "ParentCustomerId": "254321",
+             "CurrencyCode": "USD", "TimeZone": "Arizona", "AccountLifeCycleStatus": "Active"},
+            {"Id": "180436528", "Name": "Old shop", "ParentCustomerId": "254321", "CurrencyCode": "CAD",
+             "AccountLifeCycleStatus": "Inactive"}]})
+        accounts = {a.account_id: a for a in microsoft.discover_accounts()}
+        body = json.loads(responses.calls[1].request.body)
+        assert body == {"Predicates": [{"Field": "UserId", "Operator": "Equals", "Value": "9001"}], "PageInfo": {"Index": 0, "Size": 1000}}
+        live, closed = accounts["180436527"], accounts["180436528"]
+        assert (live.name, live.currency, live.enabled, live.extra["customer_id"]) == ("Priority Print Service", "USD", True, "254321")
+        assert (closed.currency, closed.enabled) == ("CAD", False)
+
+    @responses.activate
+    def test_campaign_budgets_statuses_and_types(self, microsoft):
+        responses.post(f"{MS_CAMPAIGN}/Campaigns/QueryByAccountId", json={"Campaigns": [
+            {"Id": "1", "Name": "Search — Cards", "Status": "Active", "DailyBudget": 25.0, "BudgetType": "DailyBudgetStandard",
+             "BudgetId": None, "CampaignType": "Search"},
+            {"Id": "2", "Name": "Shared", "Status": "Paused", "DailyBudget": 40.0, "BudgetType": "DailyBudgetStandard",
+             "BudgetId": "777", "CampaignType": "Search"},
+            {"Id": "3", "Name": "PMax", "Status": "BudgetPaused", "DailyBudget": 30.0, "BudgetType": "DailyBudgetStandard",
+             "CampaignType": "PerformanceMax"},
+            {"Id": "4", "Name": "Audience", "Status": "BudgetAndManualPaused", "DailyBudget": 900.0,
+             "BudgetType": "LifetimeBudgetStandard", "CampaignType": "Audience"},
+            {"Id": "5", "Name": "Experiment", "Status": "Active", "DailyBudget": 25.0, "BudgetType": "DailyBudgetStandard",
+             "ExperimentId": "55", "CampaignType": "Search"}]})
+        search, shared, pmax, audience, experiment = microsoft.list_campaigns(MS_ACCOUNT)
+        call = responses.calls[0].request
+        assert json.loads(call.body) == {"AccountId": "180436527", "CampaignType": "Search, Shopping, Audience, PerformanceMax"}
+        assert (call.headers["CustomerId"], call.headers["CustomerAccountId"]) == ("254321", "180436527")
+        assert (search.status, search.daily_budget, search.budget_editable, search.objective) == (ACTIVE, 25.0, True, "SEARCH")
+        assert (shared.status, shared.budget_editable, shared.extra["shared_budget"]) == (PAUSED, False, True)
+        assert (pmax.status, pmax.raw_status, pmax.objective) == ("OTHER", "BudgetPaused", "PERFORMANCE_MAX")
+        assert (audience.status, audience.daily_budget, audience.lifetime_budget, audience.budget_editable) == (PAUSED, None, 900.0, False)
+        assert experiment.budget_editable is False
+
+    @responses.activate
+    def test_updates_are_puts_and_partial_errors_raise(self, microsoft, store):
+        store.replace_accounts("microsoft_ads", [MS_ACCOUNT])
+        responses.put(f"{MS_CAMPAIGN}/Campaigns", json={"PartialErrors": []})
+        responses.put(f"{MS_CAMPAIGN}/Campaigns", json={"PartialErrors": [
+            {"Code": 1100, "ErrorCode": "CampaignServiceInvalidBudgetAmount", "Index": 0, "Message": "The budget amount is not valid."}]})
+        campaign = Campaign("microsoft_ads", "180436527", "1", "Search", ACTIVE, daily_budget=25, budget_editable=True)
+        microsoft.set_status(campaign, PAUSED)
+        call = responses.calls[0].request
+        assert json.loads(call.body) == {"AccountId": "180436527", "Campaigns": [{"Id": "1", "Status": "Paused"}]}
+        assert call.headers["CustomerId"] == "254321"  # looked up from the stored account
+        with pytest.raises(PlatformAPIError, match=r"budget amount is not valid. \[CampaignServiceInvalidBudgetAmount\]"):
+            microsoft.set_daily_budget(campaign, 30.456)
+        assert json.loads(responses.calls[1].request.body)["Campaigns"] == [{"Id": "1", "DailyBudget": 30.46}]
+        shared = Campaign("microsoft_ads", "180436527", "2", "Shared", ACTIVE, extra={"shared_budget": True})
+        with pytest.raises(PlatformAPIError, match="shared budget"):
+            microsoft.set_daily_budget(shared, 50)
+        assert len(responses.calls) == 2
+
+    @responses.activate
+    def test_report_is_submitted_polled_downloaded_and_parsed(self, microsoft):
+        csv_text = ('"TimePeriod","AccountId","CampaignId","CampaignName","Impressions","Clicks","Spend",'
+                    '"ConversionsQualified","Revenue","CurrencyCode"\n'
+                    '"2026-10-01","180436527","1","Search — Cards","1,204","71","118.42","5.50","1,240.00","USD"\n'
+                    '"2026-10-02","180436527","1","Search — Cards","988","64","101.07","4","880.00","USD"\n')
+        responses.post(f"{MS_REPORTING}/GenerateReport/Submit", json={"ReportRequestId": "30000001234_567"})
+        responses.post(f"{MS_REPORTING}/GenerateReport/Poll", json={"ReportRequestStatus": {"Status": "Pending", "ReportDownloadUrl": None}})
+        responses.post(f"{MS_REPORTING}/GenerateReport/Poll", json={"ReportRequestStatus": {"Status": "Success", "ReportDownloadUrl": MS_DOWNLOAD}})
+        responses.get(MS_DOWNLOAD, body=zipped_csv(csv_text), content_type="application/zip")
+        account = AdAccount("microsoft_ads", "180436527", "PPS", extra={"customer_id": "254321", "time_zone": "IslamabadKarachiTashkent"})
+        rows = microsoft.fetch_metrics(account, date(2026, 10, 1), date(2026, 10, 2))
+        request = json.loads(responses.calls[0].request.body)["ReportRequest"]
+        assert request["Type"] == "CampaignPerformanceReportRequest" and request["Aggregation"] == "Daily"
+        assert (request["Format"], request["FormatVersion"], request["ExcludeReportHeader"]) == ("Csv", "2.0", True)
+        assert "ConversionsQualified" in request["Columns"] and request["Scope"] == {"AccountIds": ["180436527"]}
+        assert request["Time"] == {"CustomDateRangeStart": {"Day": 1, "Month": 10, "Year": 2026},
+                                   "CustomDateRangeEnd": {"Day": 2, "Month": 10, "Year": 2026},
+                                   "ReportTimeZone": "IslandamabadKarachiTashkent"}  # the report list's spelling
+        assert json.loads(responses.calls[1].request.body) == {"ReportRequestId": "30000001234_567"}
+        assert "Authorization" not in responses.calls[3].request.headers  # the download link is pre-signed
+        first = rows[0]
+        assert (first.date, first.impressions, first.clicks, first.spend) == ("2026-10-01", 1204, 71, 118.42)
+        assert (first.conversions, first.conversion_value, first.network, first.currency) == (5.5, 1240.0, "microsoft", "USD")
+        assert rows[1].conversions == 4.0 and len(rows) == 2
+
+    @responses.activate
+    def test_report_without_data_and_failed_reports(self, microsoft):
+        responses.post(f"{MS_REPORTING}/GenerateReport/Submit", json={"ReportRequestId": "r1"})
+        responses.post(f"{MS_REPORTING}/GenerateReport/Poll", json={"ReportRequestStatus": {"Status": "Success", "ReportDownloadUrl": None}})
+        assert microsoft.fetch_metrics(MS_ACCOUNT, date(2026, 10, 1), date(2026, 10, 2)) == []
+        responses.post(f"{MS_REPORTING}/GenerateReport/Poll", json={"ReportRequestStatus": {"Status": "Error"}})
+        with pytest.raises(PlatformAPIError, match="couldn't build"):
+            microsoft.fetch_metrics(MS_ACCOUNT, date(2026, 10, 1), date(2026, 10, 2))
+
+    @responses.activate
+    def test_report_gives_up_after_waiting(self, microsoft):
+        responses.post(f"{MS_REPORTING}/GenerateReport/Submit", json={"ReportRequestId": "r1"})
+        responses.post(f"{MS_REPORTING}/GenerateReport/Poll", json={"ReportRequestStatus": {"Status": "Pending"}})
+        with pytest.raises(PlatformAPIError, match="longer than usual"):
+            microsoft.fetch_metrics(MS_ACCOUNT, date(2026, 10, 1), date(2026, 10, 2))
+
+    @responses.activate
+    def test_report_never_asks_for_days_that_have_not_started(self, microsoft):
+        responses.post(f"{MS_REPORTING}/GenerateReport/Submit", json={"ReportRequestId": "r1"})
+        responses.post(f"{MS_REPORTING}/GenerateReport/Poll", json={"ReportRequestStatus": {"Status": "Success"}})
+        microsoft.fetch_metrics(MS_ACCOUNT, earliest_today() - timedelta(days=3), earliest_today() + timedelta(days=1))
+        end = json.loads(responses.calls[0].request.body)["ReportRequest"]["Time"]["CustomDateRangeEnd"]
+        assert date(end["Year"], end["Month"], end["Day"]) == earliest_today()
+        tomorrow = earliest_today() + timedelta(days=1)
+        assert microsoft.fetch_metrics(MS_ACCOUNT, tomorrow, tomorrow) == [] and len(responses.calls) == 2
+
+    def test_read_report_accepts_plain_csv_and_empty_zips(self):
+        assert read_report(b'"TimePeriod","Spend"\n"2026-10-01","3.50"\n') == [{"TimePeriod": "2026-10-01", "Spend": "3.50"}]
+        buf = io.BytesIO()
+        zipfile.ZipFile(buf, "w").close()
+        assert read_report(buf.getvalue()) == []
+
+    @responses.activate
+    def test_errors_are_readable(self, microsoft):
+        responses.post(f"{MS_CAMPAIGN}/Campaigns/QueryByAccountId", status=401, json={
+            "TrackingId": "t", "Type": "AdApiFaultDetail",
+            "Errors": [{"Code": 109, "Detail": None, "ErrorCode": "AuthenticationTokenExpired",
+                        "Message": "Authentication token expired. Please renew it or obtain a new token."}]})
+        with pytest.raises(PlatformAPIError) as exc:
+            microsoft.list_campaigns(MS_ACCOUNT)
+        assert exc.value.message.startswith("Authentication token expired. Please renew it or obtain a new token. [AuthenticationTokenExpired]")
+        responses.post(f"{MS_CUSTOMER}/User/Query", json={"User": {"Id": "9001"}})
+        responses.post(f"{MS_CUSTOMER}/Accounts/Search", status=400, json={"ApplicationFault": {
+            "Type": "ApiFault", "OperationErrors": [{"Code": 106, "Details": None, "Message": "The user is not authorized to perform this action."}]}})
+        with pytest.raises(PlatformAPIError, match="not authorized to perform this action"):
+            microsoft.discover_accounts()
+        responses.post(f"{MS_LOGIN}/token", status=400, json={
+            "error": "invalid_grant", "error_description": "AADSTS70000: The provided grant has expired.\r\nTrace ID: 1\r\nCorrelation ID: 2"})
+        with pytest.raises(PlatformAPIError) as exc:
+            microsoft.refresh_tokens({"refresh_token": "old"})
+        assert exc.value.message == "AADSTS70000: The provided grant has expired. (HTTP 400)"

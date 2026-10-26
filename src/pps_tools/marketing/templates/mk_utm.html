@@ -15,7 +15,7 @@
         <span style="font-size:0.86rem;font-weight:550">Quick fill</span>
         <div class="chips" style="margin-top:6px">
           {% for key, p in presets.items() %}
-            <button class="btn ghost sm preset" type="button" data-source="{{ p.paid[0] }}" data-medium="{{ p.paid[1] }}">{{ network_for(key).label ~ " ads" if key in networks else "Email newsletter" }}</button>
+            <button class="btn ghost sm preset" type="button" data-source="{{ p.paid[0] }}" data-medium="{{ p.paid[1] }}">{% set label = network_for(key).label %}{{ (label if label.endswith(" Ads") else label ~ " ads") if key in networks else "Email newsletter" }}</button>
           {% endfor %}
           <button class="btn ghost sm preset" type="button" data-source="facebook" data-medium="social">Organic social</button>
         </div>
@@ -47,6 +47,10 @@
       <p class="subtle small" style="margin-top:6px">Instead of tagging each ad, paste this into the campaign's <strong>Final URL suffix</strong>. Google fills in the campaign, ad and keyword for you. Auto-tagging (gclid) keeps working alongside it.</p>
       <div class="copy-box"><code>{{ final_url_suffix }}</code>
         <button class="btn ghost sm" type="button" data-copy="{{ final_url_suffix }}">Copy</button></div>
+    </section>
+    <section class="card">
+      <h2>Microsoft Advertising tip</h2>
+      <p class="subtle small" style="margin-top:6px">Turn on <strong>UTM auto-tagging</strong> in your Microsoft Advertising account-level options. Microsoft then tags every click for you (search clicks arrive as <code>bing</code> / <code>cpc</code>), so there's nothing to add to each ad.</p>
     </section>
     <section class="card">
       <h2>Naming tips</h2>

@@ -53,7 +53,7 @@ class MarketingHub:
         settings: MarketingSettings,
         platform_classes: Optional[Iterable[type[Platform]]] = None,
         session_factory: Optional[Callable[[], requests.Session]] = None,
-        max_workers: int = 6,
+        max_workers: int = 8,
     ):
         self.store = store
         self.settings = settings

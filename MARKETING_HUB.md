@@ -1,7 +1,7 @@
 # PPS Marketing Hub
 
 One web app for all of Priority Print Service's online advertising and social posting:
-**Google Ads, Facebook, Instagram, Pinterest, X (Twitter), LinkedIn and TikTok**.
+**Google Ads, Microsoft Advertising (Bing), Facebook, Instagram, Pinterest, X (Twitter), LinkedIn and TikTok**.
 
 - **Dashboard** shows spend, revenue, ROAS, conversions, cost per conversion and CTR across every platform. Each number is compared with the previous period. It also has a daily spend chart by channel, a channel breakdown and your top campaigns. You can export it all to CSV.
 - **Campaigns** lists every campaign from every connected account in one sortable table. You can pause or re-enable a campaign and change its daily budget right in the table.
@@ -12,7 +12,7 @@ One web app for all of Priority Print Service's online advertising and social po
   - have links tagged with UTMs automatically
   - see everything on a content calendar
 - **AI Studio** has Claude write ad copy for each platform in the right format and length:
-  - Google responsive search ads
+  - Responsive search ads for Google and Microsoft Advertising (they share a format)
   - Meta feed ads
   - Instagram captions
   - Pins
@@ -24,7 +24,7 @@ One web app for all of Priority Print Service's online advertising and social po
 - **Insights** runs quick checks on every visit. You can also ask Claude for a full review: what's working, what isn't, and what to change. When Claude suggests pausing a campaign or changing its budget, you can apply it with one click.
 - **Automation** runs rules like "pause a campaign if its cost per conversion is over $60 for 7 days" or "raise the budget 15% when ROAS is above 4". Every rule has a dry-run preview, a minimum-spend guard and a cooldown.
 - **Budgets** holds a monthly budget per platform and shows pacing: on track, under- or overspending, a projected month-end total, and what's left to spend per day.
-- **UTM Builder** makes consistently tagged links. It includes a Google Ads Final URL suffix and keeps a list of your saved links.
+- **UTM Builder** makes consistently tagged links. It includes a Google Ads Final URL suffix, a Microsoft Advertising auto-tagging tip and a list of your saved links.
 - **Activity** logs every change made through the hub: by you, by a rule, or from an AI suggestion.
 
 It runs on your computer like the QuickBooks categorizer. The data stays in one local file, `marketing.db`.
@@ -111,6 +111,19 @@ LinkedIn access lasts 60 days. Approved Marketing partners also get a refresh to
 
 If your app page shows a different "Advertiser authorization URL", put its base in `TIKTOK_AUTH_URL`.
 
+### Microsoft Advertising (ads)
+1. Sign in to the [Microsoft Advertising Developer Portal](https://developers.ads.microsoft.com) with your Microsoft Advertising login and request a **developer token**.
+2. In the [Azure portal](https://portal.azure.com), go to **Microsoft Entra ID → App registrations** and register a new app. Under *Supported account types*, pick **Accounts in any organizational directory and personal Microsoft accounts**.
+3. Under **Authentication**, add a **Web** platform with the redirect URI. Under **Certificates & secrets**, create a client secret and copy its *Value* (not its ID).
+4. Set `MICROSOFT_ADS_CLIENT_ID` (the app's *Application (client) ID*), `MICROSOFT_ADS_CLIENT_SECRET` and `MICROSOFT_ADS_DEVELOPER_TOKEN`.
+5. Optional: if the app only accepts your organization's accounts, set `MICROSOFT_ADS_TENANT` to your tenant ID.
+
+Things to know:
+- Microsoft builds performance reports on request, so a new date range takes a few extra seconds to load.
+- Numbers use each account's own time zone, like the Microsoft Advertising website.
+- Microsoft's sign-in lasts up to 90 days without use. The hub renews it every time it syncs, so you only reconnect if the hub sits unused for about three months.
+- Client secrets expire (the Azure portal shows when). Create a new one before then and update `.env`.
+
 ### Claude (AI Studio + Insights)
 Set `ANTHROPIC_API_KEY` from [console.anthropic.com](https://console.anthropic.com). The model defaults to `claude-opus-5-5`; change it with `MARKETING_CLAUDE_MODEL`.
 
@@ -146,6 +159,7 @@ Always preview a new rule with **Preview (dry run)** first. Rules only touch act
   - X: purchases plus sign-ups.
   - LinkedIn: website conversions.
   - TikTok: the optimization event.
+  - Microsoft Advertising: goals counted in its Conversions column.
 
   Compare each channel with its own history first.
 - **Revenue and ROAS** need conversion values set up on each platform (pixel or tag purchase values). Lead-generation campaigns show "—" for ROAS.
@@ -177,9 +191,8 @@ Everything lives in `src/pps_tools/marketing/`:
 
 Run the tests with `pytest tests/test_marketing`. They mock every platform API, so no credentials are needed.
 
-API versions in use (October 2026): Google Ads v26, Meta Graph/Marketing API v26.0, Pinterest v5, X API v2 + Ads API v12, LinkedIn `202610`, TikTok Business API v1.3. You can override each in `.env`.
+API versions in use (October 2026): Google Ads v26, Meta Graph/Marketing API v26.0, Pinterest v5, X API v2 + Ads API v12, LinkedIn `202610`, TikTok Business API v1.3, Microsoft Advertising API v13 (REST). You can override the Google Ads, Meta, X Ads and LinkedIn versions in `.env`.
 
 Possible next steps:
-- Microsoft Advertising (Bing). Its reporting is asynchronous: submit a report, poll, then download a zipped file.
 - TikTok organic posting. This needs TikTok's Content Posting API audit.
 - Uploading images straight from your computer through the WordPress media library.
