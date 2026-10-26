@@ -3,18 +3,14 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import date
 from decimal import Decimal
-from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from pps_tools.books.models import (ACCOUNT_TYPES, Account, Customer, Item, LedgerEntry, PaymentMethod,
-                                    TimeActivity, Transaction, TransactionLine, TransactionLink, Vendor)
-from pps_tools.books.money import fmt_qty
-from pps_tools.books.services import dates as D
-from pps_tools.books.services.reports.engine import (Aggregator, Col, ColumnSpec, Params, Report,
+from pps_tools.books.models import (ACCOUNT_TYPES, Account, Customer, Item, LedgerEntry, PaymentMethod, Transaction,
+                                    TransactionLine, Vendor)
+from pps_tools.books.services.reports.engine import (Aggregator, Col, Params, Report,
                                                      company_info, customer_scope, entity_name_maps, pct,
                                                      period_columns, period_label, register, report_link,
                                                      txn_link)
@@ -174,8 +170,6 @@ def sales_by_product_summary(s: Session, p: Params) -> Report:
         agg[key][0] += _sign(t) * (line.qty or Decimal(0))
         agg[key][1] += _sign(t) * line.amount_cents
     cogs: dict = defaultdict(int)
-    from pps_tools.books.services.accounts import system_account_id
-
     cogs_q = select(LedgerEntry.item_id, LedgerEntry.amount_cents, Account.type).join(
         Account, Account.id == LedgerEntry.account_id).where(LedgerEntry.auto == "cogs", Account.type == "cogs")
     if p.start:
@@ -279,7 +273,6 @@ def deposit_detail(s: Session, p: Params) -> Report:
         q = q.where(Transaction.date <= p.end)
     if p.account_id:
         q = q.where(Transaction.account_id == p.account_id)
-    names = entity_name_maps(s)
     r = Report("deposit_detail", "Deposit Detail", period_label(p))
     r.columns = [Col("date", "Date", "date"), Col("type", "Transaction type", "text"), Col("num", "Num", "text"),
                  Col("name", "Customer/Name", "text"), Col("memo", "Memo", "text"), Col("account", "Account", "text"),

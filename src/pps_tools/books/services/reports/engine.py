@@ -19,10 +19,10 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from pps_tools.books.models import (Account, Company, Customer, Employee, Item, LedgerEntry, Location,
-                                    TrackingClass, Transaction, Vendor)
+                                    TrackingClass, Vendor)
 from pps_tools.books.services import cash_basis
 from pps_tools.books.services import dates as D
-from pps_tools.books.services.accounts import descendant_ids, ordered_accounts
+from pps_tools.books.services.accounts import ordered_accounts
 
 
 @dataclass
