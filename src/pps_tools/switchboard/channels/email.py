@@ -346,8 +346,8 @@ def send_simple(channel: dict, to: str, subject: str, html: str, text: str | Non
     """Operational mail (invites, password resets) from this account."""
     cfg = _cfg(channel)
     if cfg.get("demo"):
-        logger.info("Demo channel %s: not sending '%s' to %s", channel["id"], subject, to)
-        return
+        # Report failure so callers fall back to showing a copyable link.
+        raise SendError("Demo channels don't send email")
     em = mime.simple(settings.get("org.name"), channel["address"], to, subject, html, text)
     _smtp_send(cfg, em, channel["address"], [to])
 

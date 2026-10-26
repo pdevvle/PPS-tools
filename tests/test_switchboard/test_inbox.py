@@ -493,3 +493,12 @@ def test_label_counts_ignore_closed_and_respect_privacy(client, make_user):
     mine = other.post("/api/labels", {"name": "Secret", "visibility": "personal"})["label"]
     other.post("/api/conversations/actions", {"ids": [a], "action": "label", "add": [mine["id"]]})
     assert mine["id"] not in client.get(f"/api/conversations/{a}")["conversation"]["label_ids"]
+
+
+def test_parse_address_list_handles_phones_and_quoted_names():
+    from pps_tools.switchboard.util import parse_address_list
+
+    assert parse_address_list("(602) 555-0100") == [{"name": None, "handle": "(602) 555-0100"}]
+    assert parse_address_list('"Lee, Jo" <jo@z.test>; ann@x.test') == [
+        {"name": "Lee, Jo", "handle": "jo@z.test"}, {"name": None, "handle": "ann@x.test"},
+    ]

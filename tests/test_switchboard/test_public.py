@@ -213,8 +213,9 @@ def test_chat_agent_typing_and_unknown_visitor(client, anon, chat, owner):
     cid = db.one("SELECT conversation_id FROM chat_visitors WHERE token = ?", tok)["conversation_id"]
     client.post("/api/presence", {"target": f"conversation:{cid}", "state": "composing"})
     assert anon.get(f"/public/chat/{key}/messages", query_string={"token": tok})["agent_typing"] is True
-    err = anon.get(f"/public/chat/{key}/messages", query_string={"token": "bogus"}, expect=404)
-    assert err["error"]["code"] == "unknown_visitor"
+    resp = anon.raw("get", f"/public/chat/{key}/messages", query_string={"token": "bogus"})
+    assert resp.status_code == 404 and resp.get_json()["error"]["code"] == "unknown_visitor"
+    assert resp.headers["Access-Control-Allow-Origin"] == "*"  # the widget can read errors cross-origin
     other = client.post("/api/channels", {"type": "chat", "name": "Other site"}, expect=201)["channel"]
     anon.get(f"/public/chat/{other['public_key']}/messages", query_string={"token": tok}, expect=404)
     anon.post(f"/public/chat/{key}/messages", {"token": tok, "body": "   "}, expect=400)

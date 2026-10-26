@@ -127,6 +127,7 @@
 
   var style = el('style', { text: [
     ':host{all:initial}',
+    '[hidden]{display:none!important}',
     '*{box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}',
     '.launcher{position:fixed;right:20px;bottom:20px;z-index:2147483000;width:58px;height:58px;border-radius:50%;border:0;cursor:pointer;',
     'background:' + COLOR + ';color:#fff;box-shadow:0 6px 24px rgba(0,0,0,.22);display:flex;align-items:center;justify-content:center;transition:transform .15s}',
@@ -144,7 +145,7 @@
     '.status:before{content:"";width:8px;height:8px;border-radius:50%;background:#9be7a8}',
     '.status.away:before{background:#ffd43b}',
     '.agents{display:flex;margin-top:8px}',
-    '.agent{width:26px;height:26px;border-radius:50%;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid ' + COLOR + ';margin-right:-6px}',
+    '.agent{width:26px;height:26px;border-radius:50%;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid rgba(255,255,255,.9);margin-right:-6px}',
     '.close{background:rgba(255,255,255,.18);border:0;color:#fff;width:30px;height:30px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:none}',
     '.close:hover{background:rgba(255,255,255,.3)}',
     '.body{flex:1;overflow-y:auto;padding:16px;background:#f6f7f9;display:flex;flex-direction:column;gap:8px}',

@@ -5,6 +5,10 @@ Inbound: POST /api/channels/<id>/messages (API token) or /hooks/form/<public_key
 with HMAC-SHA256 over the body using config.secret:
 
     X-Switchboard-Signature: sha256=<hex digest>
+
+Without a reply URL, replies to someone who left an email address (a website form,
+say) are emailed to them from the workspace's system email account, with a real
+Message-ID so their answer threads back into the same conversation.
 """
 
 from __future__ import annotations
@@ -15,9 +19,10 @@ import json
 
 import requests
 
+from pps_tools.switchboard import channels as registry
 from pps_tools.switchboard import db
 from pps_tools.switchboard.channels import Adapter, SendError, SendResult, register
-from pps_tools.switchboard.util import now_iso, token
+from pps_tools.switchboard.util import norm_email, normalize_subject, now_iso, token
 
 TIMEOUT = 15
 
@@ -34,7 +39,7 @@ class ApiAdapter(Adapter):
         cfg = db.jload(channel.get("config_json"), {}) or {}
         url = (cfg.get("outbound_url") or "").strip()
         if not url:
-            return SendResult(external_id=f"api-{token(9)}", status="sent")
+            return self._email_fallback(message, attachments, ctx)
         conv = ctx.get("conversation") or {}
         payload = {
             "event": "message.outbound",
@@ -66,6 +71,24 @@ class ApiAdapter(Adapter):
         except ValueError:
             pass
         return SendResult(external_id=str(external) if external else f"api-{token(9)}", status="sent")
+
+    def _email_fallback(self, message, attachments, ctx):
+        """Email the reply when every recipient is an email address and a system
+        email account exists; otherwise the reply just stays in the conversation."""
+        from pps_tools.switchboard.services import mailer
+
+        recipients = db.jload(message.get("to_json"), []) or []
+        if not recipients or not all(norm_email(p.get("handle")) for p in recipients):
+            return SendResult(external_id=f"api-{token(9)}", status="sent")
+        system = mailer.system_channel()
+        if not system:
+            raise SendError("Add an email account (Settings → Channels) to email replies to form submissions")
+        conv = ctx.get("conversation") or {}
+        subject = message.get("subject") or (f"Re: {normalize_subject(conv.get('subject'))}" if conv.get("subject") else None)
+        domain = (system.get("address") or "switchboard.local").rsplit("@", 1)[-1]
+        as_email = {**message, "subject": subject, "external_id": message.get("external_id") or f"<sb.{message['id']}.{token(9)}@{domain}>"}
+        result = registry.adapter_for(system).send(system, as_email, attachments, ctx)
+        return SendResult(external_id=as_email["external_id"], status=result.status, headers=result.headers)
 
     def test(self, cfg):
         url = (cfg.get("outbound_url") or "").strip()

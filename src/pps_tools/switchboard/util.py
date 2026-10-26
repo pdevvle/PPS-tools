@@ -150,15 +150,23 @@ def parse_address_list(value) -> list[dict]:
     """'Ann <ann@x.com>, bob@y.com' or [{"name","handle"}] / ['a@b'] -> [{"name","handle"}]."""
     if not value:
         return []
+
+    def parse_text(text: str) -> list[tuple[str, str]]:
+        # Email syntax treats "(602)" as a comment, so lists without any "@"
+        # (phone numbers, chat handles) are split on separators and kept verbatim.
+        if "@" in text:
+            return getaddresses([text.replace(";", ",")])
+        return [("", part.strip()) for part in re.split(r"[;,\n]+", text) if part.strip()]
+
     if isinstance(value, str):
-        pairs = getaddresses([value])
+        pairs = parse_text(value)
     else:
         pairs = []
         for item in value:
             if isinstance(item, dict):
                 pairs.append((item.get("name") or "", item.get("handle") or item.get("email") or ""))
             else:
-                pairs.extend(getaddresses([str(item)]))
+                pairs.extend(parse_text(str(item)))
     out, seen = [], set()
     for name, handle in pairs:
         handle = (handle or "").strip()

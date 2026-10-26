@@ -300,6 +300,13 @@ const EVENT_ICONS = {
   rule_applied: 'zap', task_created: 'square-check-big',
 };
 
+const RULE_ACTIONS = {
+  assign: 'assigned', unassign: 'unassigned', add_label: 'labeled', remove_label: 'removed a label', move_team: 'moved team',
+  close: 'closed', snooze: 'snoozed', priority: 'set priority', spam: 'marked spam', trash: 'trashed',
+  auto_reply: 'sent an auto-reply', add_comment: 'added a note', forward: 'forwarded', notify: 'notified people',
+  webhook: 'called a webhook', stop: '',
+};
+
 function eventText(e, teams) {
   const who = e.user_id ? lookupUser(e.user_id).name : null;
   const d = e.data || {};
@@ -326,7 +333,10 @@ function eventText(e, teams) {
     case 'reminder_set': return html`<b>${who}</b> set a reminder for ${fmtDateTime(d.at)}${d.condition === 'no_reply' ? ' if no one replies' : ''}`;
     case 'reminder': return html`Reminder for <b>${who}</b>${d.note ? `: ${d.note}` : ''}`;
     case 'discussion_started': return html`<b>${who}</b> started this discussion`;
-    case 'rule_applied': return html`Rule <b>${d.name || ''}</b> ran`;
+    case 'rule_applied': {
+      const did = (d.actions || []).map((a) => RULE_ACTIONS[a] || a.replace(/_/g, ' ')).filter(Boolean);
+      return html`Rule <b>${d.name || ''}</b> ran${did.length ? `: ${[...new Set(did)].join(', ')}` : ''}`;
+    }
     case 'task_created': return html`<b>${who}</b> added a task: ${d.title || ''}`;
     default: return html`${who ? html`<b>${who}</b> ` : ''}${String(e.event).replace(/_/g, ' ')}`;
   }

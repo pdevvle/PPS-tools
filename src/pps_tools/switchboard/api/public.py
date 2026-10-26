@@ -427,7 +427,8 @@ def chat_messages(key: str):
         v["conversation_id"], ch["id"], after,
     )
     typing = any(x["state"] == "composing" for x in realtime.presence.viewers(f"conversation:{v['conversation_id']}"))
-    return ok({"messages": [_visible_message(m, ch) for m in rows], "agent_typing": typing})
+    return ok({"messages": [_visible_message(m, ch) for m in rows], "agent_typing": typing,
+               "online": chat_public_config(ch)["online"]})
 
 
 def _chat_post(ch: dict):
