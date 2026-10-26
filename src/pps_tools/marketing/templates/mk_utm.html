@@ -1,0 +1,116 @@
+{% extends "mk_base.html" %}
+{% from "mk_macros.html" import icon, net with context %}
+{% block title %}UTM Builder{% endblock %}
+{% block heading %}UTM Builder{% endblock %}
+{% block intro %}Tag every link so Google Analytics can tell which network and campaign sent each visitor. Links posted from the Publish page can be tagged automatically.{% endblock %}
+
+{% block content %}
+<div class="grid grid-main">
+  <section class="card">
+    <form method="post" action="{{ url_for('utm') }}" class="form-grid" id="utm-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="field full"><label for="u-url">Website URL</label>
+        <input id="u-url" name="url" type="url" required placeholder="https://priorityprintservice.com/business-cards"></div>
+      <div class="field full">
+        <span style="font-size:0.86rem;font-weight:550">Quick fill</span>
+        <div class="chips" style="margin-top:6px">
+          {% for key, p in presets.items() %}
+            <button class="btn ghost sm preset" type="button" data-source="{{ p.paid[0] }}" data-medium="{{ p.paid[1] }}">{{ network_for(key).label ~ " ads" if key in networks else "Email newsletter" }}</button>
+          {% endfor %}
+          <button class="btn ghost sm preset" type="button" data-source="facebook" data-medium="social">Organic social</button>
+        </div>
+      </div>
+      <div class="field"><label for="u-source">Source <span class="hint">utm_source · where: google, facebook, newsletter</span></label>
+        <input id="u-source" name="source" type="text" required></div>
+      <div class="field"><label for="u-medium">Medium <span class="hint">utm_medium · how: cpc, paid_social, email</span></label>
+        <input id="u-medium" name="medium" type="text" required></div>
+      <div class="field"><label for="u-campaign">Campaign <span class="hint">utm_campaign</span></label>
+        <input id="u-campaign" name="campaign" type="text" required placeholder="fall-business-cards"></div>
+      <div class="field"><label for="u-content">Content <span class="hint">utm_content · optional, to tell ads apart</span></label>
+        <input id="u-content" name="content" type="text" placeholder="video-a"></div>
+      <div class="field"><label for="u-term">Term <span class="hint">utm_term · optional, paid keyword</span></label>
+        <input id="u-term" name="term" type="text"></div>
+      <div class="field"><label for="u-label">Label <span class="hint">optional, for your saved list</span></label>
+        <input id="u-label" name="label" type="text"></div>
+      <div class="field full">
+        <label for="u-result">Tagged link</label>
+        <div class="copy-box"><code id="u-result" aria-live="polite">Fill in the fields above</code>
+          <button class="btn ghost sm" type="button" id="u-copy">Copy</button></div>
+      </div>
+      <div class="full"><button class="btn" type="submit">Save link</button></div>
+    </form>
+  </section>
+
+  <aside class="stack">
+    <section class="card">
+      <h2>Google Ads tip</h2>
+      <p class="subtle small" style="margin-top:6px">Instead of tagging each ad, paste this into the campaign's <strong>Final URL suffix</strong>. Google fills in the campaign, ad and keyword for you. Auto-tagging (gclid) keeps working alongside it.</p>
+      <div class="copy-box"><code>{{ final_url_suffix }}</code>
+        <button class="btn ghost sm" type="button" data-copy="{{ final_url_suffix }}">Copy</button></div>
+    </section>
+    <section class="card">
+      <h2>Naming tips</h2>
+      <ul class="tight small" style="margin-top:8px">
+        <li>Use lowercase and dashes: <code>fall-business-cards</code>, not <code>Fall Business Cards</code>.</li>
+        <li>Keep source and medium consistent. Analytics treats <code>Facebook</code> and <code>facebook</code> as two sources.</li>
+        <li>Use content to tell apart creatives in the same campaign.</li>
+      </ul>
+    </section>
+  </aside>
+</div>
+
+<section class="card section-gap">
+  <h2>Saved links</h2>
+  <div class="table-wrap">
+  <table class="data" style="margin-top:8px">
+    <thead><tr><th>Label</th><th>Link</th><th>Saved</th><th><span class="sr-only">Actions</span></th></tr></thead>
+    <tbody>
+    {% for l in links %}
+      <tr>
+        <td>{{ l.label or "—" }}</td>
+        <td class="mono small" style="max-width:520px;overflow-wrap:anywhere">{{ l.url }}</td>
+        <td class="small muted nowrap">{{ l.created_at|local_time }}</td>
+        <td class="right nowrap"><button class="btn ghost sm" type="button" data-copy="{{ l.url }}">Copy</button>
+          <form class="inline" method="post" action="{{ url_for('utm_delete', link_id=l.id) }}" data-confirm="Delete this saved link?">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn danger sm" type="submit">Delete</button></form></td>
+      </tr>
+    {% else %}
+      <tr><td colspan="4" class="empty">No saved links yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  var form = document.getElementById("utm-form");
+  var out = document.getElementById("u-result");
+  var KEYS = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "utm_id"];
+  function build() {
+    var raw = form.url.value.trim();
+    var url;
+    try { url = new URL(raw); } catch (e) { out.textContent = raw ? "Enter a full address starting with https://" : "Fill in the fields above"; return ""; }
+    if (!/^https?:$/.test(url.protocol)) { out.textContent = "Enter a full address starting with https://"; return ""; }
+    KEYS.forEach(function (k) { url.searchParams.delete(k); });
+    [["utm_source", form.source.value], ["utm_medium", form.medium.value], ["utm_campaign", form.campaign.value],
+     ["utm_term", form.term.value], ["utm_content", form.content.value]].forEach(function (p) {
+      if (p[1].trim()) url.searchParams.set(p[0], p[1].trim());
+    });
+    out.textContent = url.toString();
+    return url.toString();
+  }
+  form.addEventListener("input", build);
+  document.querySelectorAll(".preset").forEach(function (b) {
+    b.addEventListener("click", function () { form.source.value = b.dataset.source; form.medium.value = b.dataset.medium; build(); });
+  });
+  document.getElementById("u-copy").addEventListener("click", function () { var v = build(); if (v) MK.copy(v); });
+  form.campaign.addEventListener("blur", function () {
+    form.campaign.value = form.campaign.value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    build();
+  });
+});
+</script>
+{% endblock %}

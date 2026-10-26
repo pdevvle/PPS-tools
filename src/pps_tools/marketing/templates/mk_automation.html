@@ -1,0 +1,159 @@
+{% extends "mk_base.html" %}
+{% from "mk_macros.html" import icon, platform with context %}
+{% block title %}Automation{% endblock %}
+{% block heading %}Automation{% endblock %}
+{% block intro %}Rules watch every active campaign and act when the numbers cross a line: pause what's wasting money, scale what's working, or flag something for a look. Always preview with a dry run first.{% endblock %}
+
+{% block content %}
+{% set labels = {"spend": "Spend", "cpa": "Cost per conversion", "roas": "ROAS", "conversions": "Conversions", "conversion_value": "Revenue", "ctr": "CTR (%)", "cpc": "Cost per click", "cpm": "Cost per 1,000 impressions", "clicks": "Clicks", "impressions": "Impressions"} %}
+<section class="card">
+  <div class="card-head">
+    <div><h2>Your rules</h2><p>Rules only touch campaigns that are currently active.</p></div>
+    <div class="row">
+      <button class="btn ghost sm run-rules" type="button" data-dry="1">Preview all (dry run)</button>
+      <button class="btn sm run-rules" type="button" data-dry="0">Run all now</button>
+    </div>
+  </div>
+  <div class="table-wrap">
+  <table class="data">
+    <thead><tr><th>Rule</th><th>Platform</th><th>Status</th><th>Last run</th><th><span class="sr-only">Actions</span></th></tr></thead>
+    <tbody>
+    {% for r in rules %}
+      <tr>
+        <td class="name">{{ r.name }}<small>{{ r.description }}{% if r.name_contains %} · campaigns containing “{{ r.name_contains }}”{% endif %}{% if r.min_spend %} · min. spend {{ r.min_spend|money }}{% endif %}</small></td>
+        <td>{% if r.platform == "any" %}All platforms{% else %}{{ platform(r.platform) }}{% endif %}</td>
+        <td>
+          <form class="inline" method="post" action="{{ url_for('automation_toggle', rule_id=r.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="pill {{ 'tone-good' if r.enabled else '' }}" type="submit" style="cursor:pointer" title="Click to {{ 'turn off' if r.enabled else 'turn on' }}"><span class="dot"></span>{{ "On" if r.enabled else "Off" }}</button>
+          </form>
+        </td>
+        <td class="small muted">{{ r.last_run_at|local_time if r.last_run_at else "Never" }}</td>
+        <td class="right nowrap">
+          <button class="btn ghost sm run-rules" type="button" data-dry="1" data-rule="{{ r.id }}">Preview</button>
+          <a class="btn ghost sm" href="{{ url_for('automation', edit=r.id) }}">Edit</a>
+          <form class="inline" method="post" action="{{ url_for('automation_delete', rule_id=r.id) }}" data-confirm="Delete this rule?">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn danger sm" type="submit">Delete</button></form>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" class="empty">No rules yet. Start from a template below.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <div id="outcomes" aria-live="polite"></div>
+  <p class="subtle small" style="margin-top:12px">To run rules on a schedule, add <code>pps marketing run-rules</code> to cron (e.g. hourly) or Windows Task Scheduler. Every action is written to the <a href="{{ url_for('activity') }}">Activity</a> log.</p>
+</section>
+
+<div class="grid grid-main section-gap">
+  <section class="card">
+    <h2>{{ "Edit rule" if rule and rule.get("id") else "New rule" }}</h2>
+    <form method="post" action="{{ url_for('automation_save') }}" class="form-grid" style="margin-top:12px" id="rule-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% if rule and rule.get("id") %}<input type="hidden" name="rule_id" value="{{ rule.id }}">{% endif %}
+      {% set r = rule or {} %}
+      <div class="field full"><label for="r-name">Name</label>
+        <input id="r-name" name="name" type="text" required value="{{ r.get('name', '') }}" placeholder="e.g. Pause expensive campaigns"></div>
+      <div class="field"><label for="r-platform">Platform</label>
+        <select id="r-platform" name="platform">
+          <option value="any">All platforms</option>
+          {% for key, name in platform_names.items() %}<option value="{{ key }}" {% if r.get('platform') == key %}selected{% endif %}>{{ name }}</option>{% endfor %}
+        </select></div>
+      <div class="field"><label for="r-contains">Only campaigns whose name contains <span class="hint">optional</span></label>
+        <input id="r-contains" name="name_contains" type="text" value="{{ r.get('name_contains', '') }}" placeholder="e.g. Search"></div>
+      <div class="field"><label for="r-metric">When</label>
+        <select id="r-metric" name="metric">{% for m in metrics %}<option value="{{ m }}" {% if r.get('metric', 'cpa') == m %}selected{% endif %}>{{ labels[m] }}</option>{% endfor %}</select></div>
+      <div class="field"><label for="r-lookback">Over</label>
+        <select id="r-lookback" name="lookback_days">{% for d in lookbacks %}<option value="{{ d }}" {% if r.get('lookback_days', 7) == d %}selected{% endif %}>{{ "Today" if d == 1 else "The last " ~ d ~ " days" }}</option>{% endfor %}</select></div>
+      <div class="field"><label for="r-op">Is</label>
+        <select id="r-op" name="operator">{% for o in operators %}<option value="{{ o }}" {% if r.get('operator', '>') == o %}selected{% endif %}>{{ {">": "greater than", ">=": "at least", "<": "less than", "<=": "at most"}[o] }}</option>{% endfor %}</select></div>
+      <div class="field"><label for="r-threshold">Value <span class="hint" id="unit-hint"></span></label>
+        <input id="r-threshold" name="threshold" type="number" step="any" required value="{{ r.get('threshold', 50) }}"></div>
+      <div class="field"><label for="r-action">Then</label>
+        <select id="r-action" name="action">{% for key, label in actions.items() %}<option value="{{ key }}" {% if r.get('action', 'notify') == key %}selected{% endif %}>{{ label|replace(" by %", "") }}</option>{% endfor %}</select></div>
+      <div class="field" id="pct-field"><label for="r-pct">By (%) <span class="hint">max {{ max_change|round|int }}%</span></label>
+        <input id="r-pct" name="action_value" type="number" step="1" min="1" max="{{ max_change }}" value="{{ r.get('action_value', 15) }}"></div>
+      <div class="field"><label for="r-minspend">Only if it spent at least <span class="hint">guards against acting on thin data</span></label>
+        <input id="r-minspend" name="min_spend" type="number" step="any" min="0" value="{{ r.get('min_spend', 0) }}"></div>
+      <div class="field"><label for="r-minimp">…and had at least this many impressions</label>
+        <input id="r-minimp" name="min_impressions" type="number" step="1" min="0" value="{{ r.get('min_impressions', 0) }}"></div>
+      <div class="field"><label for="r-cool">Wait before acting on the same campaign again (hours)</label>
+        <input id="r-cool" name="cooldown_hours" type="number" step="1" min="0" value="{{ r.get('cooldown_hours', 24) }}"></div>
+      <div class="field" style="align-self:end"><label class="check"><input type="checkbox" name="enabled" {% if r.get('enabled', True) %}checked{% endif %}> Rule is on</label></div>
+      <div class="full row"><button class="btn" type="submit">Save rule</button>
+        {% if rule and rule.get("id") %}<a class="btn ghost" href="{{ url_for('automation') }}">Cancel</a>{% endif %}</div>
+    </form>
+  </section>
+
+  <aside class="card">
+    <h2>Templates</h2>
+    <p class="subtle small" style="margin:4px 0 10px">Start from a proven rule, then adjust the numbers to your business.</p>
+    {% for t in templates %}
+      <div class="toggle-row"><span>{{ t.name }}</span><a class="btn ghost sm" href="{{ url_for('automation', template=loop.index0) }}">Use</a></div>
+    {% endfor %}
+  </aside>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  var PERCENT = {{ percent_metrics|list|tojson }};
+  var MONEY = ["spend", "cpa", "cpc", "cpm", "conversion_value"];
+  var metric = document.getElementById("r-metric");
+  var action = document.getElementById("r-action");
+  function sync() {
+    var m = metric.value;
+    document.getElementById("unit-hint").textContent = PERCENT.indexOf(m) !== -1 ? "in %" : MONEY.indexOf(m) !== -1 ? "in your currency" : m === "roas" ? "e.g. 3 for 3×" : "";
+    document.getElementById("pct-field").hidden = ["budget_up", "budget_down"].indexOf(action.value) === -1;
+  }
+  if (metric) { metric.addEventListener("change", sync); action.addEventListener("change", sync); sync(); }
+
+  var out = document.getElementById("outcomes");
+  var STATUS = { would_apply: ["", "Would act"], applied: ["tone-good", "Done"], alerted: ["tone-warning", "Alert logged"], cooldown: ["", "Cooling down"], failed: ["tone-critical", "Failed"], skipped: ["", "Skipped"] };
+  document.querySelectorAll(".run-rules").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var dry = b.dataset.dry === "1";
+      if (!dry && !window.confirm("Run all enabled rules now? Matching campaigns may be paused or have budgets changed.")) return;
+      b.disabled = true;
+      MK.post("{{ url_for('api_automation_run') }}", { dry_run: dry, rule_id: b.dataset.rule || null }).then(function (res) {
+        out.textContent = "";
+        var card = MK.el("div", { class: "banner " + (dry ? "info" : "success"), style: "margin-top:14px;display:block" });
+        var title = res.outcomes.length ? (dry ? "Dry run: " : "") + res.outcomes.length + " campaign match" + (res.outcomes.length === 1 ? "" : "es") : (dry ? "Dry run: no campaign matches right now." : "No campaign matched, so nothing changed.");
+        card.appendChild(MK.el("p", {}, title));
+        if (res.outcomes.length) {
+          var table = MK.el("table", { class: "data", style: "margin-top:8px" });
+          var thead = MK.el("thead"); var hr = MK.el("tr");
+          ["Rule", "Campaign", "Platform", "Value", "Result"].forEach(function (h) { hr.appendChild(MK.el("th", {}, h)); });
+          thead.appendChild(hr); table.appendChild(thead);
+          var tb = MK.el("tbody");
+          res.outcomes.forEach(function (o) {
+            var tr = MK.el("tr");
+            tr.appendChild(MK.el("td", {}, o.rule_name));
+            tr.appendChild(MK.el("td", {}, o.campaign_name));
+            tr.appendChild(MK.el("td", {}, res.platforms[o.platform] || o.platform));
+            var v = o.value_text || (o.value === null ? "—" :
+              PERCENT.indexOf(o.metric) !== -1 ? o.value.toFixed(2) + "%" :
+              MONEY.indexOf(o.metric) !== -1 ? MK.fmt.money(o.value) :
+              o.metric === "roas" ? o.value.toFixed(2) + "×" : MK.fmt.num(o.value, o.value % 1 ? 1 : 0));
+            tr.appendChild(MK.el("td", { class: "num" }, v));
+            var td = MK.el("td");
+            var st = STATUS[o.status] || ["", o.status];
+            var pill = MK.el("span", { class: "pill " + st[0] }); pill.appendChild(MK.el("span", { class: "dot" })); pill.appendChild(document.createTextNode(st[1]));
+            td.appendChild(pill);
+            td.appendChild(MK.el("div", { class: "small muted" }, o.message));
+            tr.appendChild(td);
+            tb.appendChild(tr);
+          });
+          table.appendChild(tb);
+          var wrap = MK.el("div", { class: "table-wrap" }); wrap.appendChild(table);
+          card.appendChild(wrap);
+        }
+        out.appendChild(card);
+      }).catch(function (e) { MK.toast(e.message, "error"); }).finally(function () { b.disabled = false; });
+    });
+  });
+});
+</script>
+{% endblock %}

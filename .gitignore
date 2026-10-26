@@ -13,6 +13,9 @@ env/
 .env
 .qbo_tokens.json
 *.db
+*.db-wal
+*.db-shm
+*.db-journal
 *.sqlite
 *.sqlite3
 reports/*.html

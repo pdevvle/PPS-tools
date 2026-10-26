@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pps-tools"
 version = "0.1.0"
-description = "Competitor pricing analysis tool for Priority Print Service"
+description = "Competitor pricing analysis, QuickBooks categorizing and a cross-platform Marketing Hub for Priority Print Service"
 requires-python = ">=3.10"
 dependencies = [
     "click>=8.1",
@@ -17,7 +17,7 @@ dependencies = [
     "jinja2>=3.1",
     "matplotlib>=3.8",
     "flask>=3.0",
-    "anthropic>=0.39",
+    "anthropic>=2.3",
     "python-dotenv>=1.0",
 ]
 
@@ -34,6 +34,11 @@ pps = "pps_tools.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"pps_tools" = ["templates/*.j2"]
+"pps_tools.quickbooks" = ["templates/*.html"]
+"pps_tools.marketing" = ["templates/*.html", "static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,0 +1,147 @@
+{% extends "mk_base.html" %}
+{% from "mk_macros.html" import icon, period_filters with context %}
+{% block title %}Insights{% endblock %}
+{% block heading %}Insights{% endblock %}
+{% block intro %}Quick checks run on every visit. For a full review, Claude reads the same numbers as the dashboard and suggests what to pause, scale or test. Campaign changes it suggests can be applied with one click.{% endblock %}
+
+{% block content %}
+{{ period_filters(period, "insights", show_refresh=false) }}
+
+<div class="grid grid-main">
+  <section class="card">
+    <div class="card-head"><div><h2>{{ icon("sparkle") }}Ask Claude</h2><p>{{ period.label }} vs. the period before, across every connected platform.</p></div></div>
+    {% if not ai_ready %}
+      <div class="banner warning">{{ icon("alert") }}<p>Add your <code>ANTHROPIC_API_KEY</code> to the <code>.env</code> file and restart the hub to use AI insights.</p></div>
+    {% endif %}
+    <form id="ask" class="row">
+      <label class="sr-only" for="question">Your question</label>
+      <input id="question" type="text" placeholder="Optional: what do you want to know? e.g. Where should the next $500 go?" style="flex:1;min-width:240px">
+      <button class="btn" type="submit" id="analyze">Analyze performance</button>
+    </form>
+    <p class="subtle small" style="margin-top:8px">A review takes about a minute. Model: <code>{{ model }}</code>.</p>
+  </section>
+
+  <section class="card">
+    <h2>Quick checks</h2>
+    {% if checks %}
+    <ul class="tight checklist" style="margin-top:10px">
+      {% for c in checks %}<li><span class="dot {{ c.tone }}" aria-hidden="true"></span><span>{{ c.text }}</span></li>{% endfor %}
+    </ul>
+    {% else %}
+      <p class="subtle" style="margin-top:8px">Nothing stands out in this period.</p>
+    {% endif %}
+  </section>
+</div>
+
+<section id="report" class="section-gap" aria-live="polite"></section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  var form = document.getElementById("ask");
+  var out = document.getElementById("report");
+  var btn = document.getElementById("analyze");
+  var period = {{ {"range": period.preset, "start": period.start.isoformat(), "end": period.end.isoformat()}|tojson }};
+  var ACTION_LABELS = { pause: "Pause campaign", enable: "Enable campaign", increase_budget: "Raise budget", decrease_budget: "Lower budget" };
+
+  function list(title, items) {
+    var card = MK.el("section", { class: "card" });
+    card.appendChild(MK.el("h2", {}, title));
+    if (!items || !items.length) { card.appendChild(MK.el("p", { class: "subtle", style: "margin-top:8px" }, "Nothing to note.")); return card; }
+    var ul = MK.el("ul", { class: "tight" });
+    items.forEach(function (t) { ul.appendChild(MK.el("li", {}, t)); });
+    card.appendChild(ul);
+    return card;
+  }
+
+  function render(data) {
+    var r = data.report, names = data.platforms || {};
+    out.textContent = "";
+    var top = MK.el("section", { class: "card" });
+    top.appendChild(MK.el("h2", { style: "font-size:1.2rem" }, r.headline));
+    top.appendChild(MK.el("p", { style: "margin-top:8px" }, r.summary));
+    out.appendChild(top);
+
+    var two = MK.el("div", { class: "grid grid-2 section-gap" });
+    two.appendChild(list("What's working", r.wins));
+    two.appendChild(list("What needs attention", r.concerns));
+    out.appendChild(two);
+
+    var recs = MK.el("section", { class: "card section-gap" });
+    recs.appendChild(MK.el("h2", {}, "Recommendations"));
+    var holder = MK.el("div", { style: "margin-top:10px" });
+    (r.recommendations || []).forEach(function (rec) {
+      var box = MK.el("div", { class: "rec" });
+      var head = MK.el("div", { class: "rec-head" });
+      var left = MK.el("div", { class: "row" });
+      left.appendChild(MK.el("span", { class: "prio " + rec.priority }, rec.priority));
+      left.appendChild(MK.el("h3", {}, rec.title));
+      head.appendChild(left);
+      if (rec.applicable) {
+        var label = ACTION_LABELS[rec.action] || "Apply";
+        if (rec.new_budget) label += " to " + MK.fmt.money(rec.new_budget);
+        var apply = MK.el("button", { class: "btn sm", type: "button" }, label);
+        apply.addEventListener("click", function () {
+          var what = rec.campaign_name ? "“" + rec.campaign_name + "”" : "this campaign";
+          if (!window.confirm(label + " for " + what + "?")) return;
+          apply.disabled = true;
+          MK.post("{{ url_for('api_insights_apply') }}", rec).then(function (res) {
+            apply.textContent = "✓ Done"; MK.toast(res.message);
+          }).catch(function (e) { apply.disabled = false; MK.toast(e.message, "error"); });
+        });
+        head.appendChild(apply);
+      }
+      box.appendChild(head);
+      var meta = [names[rec.platform] || rec.platform];
+      if (rec.campaign_name) meta.push(rec.campaign_name);
+      if (rec.new_budget) meta.push(MK.fmt.money(rec.current_budget) + " → " + MK.fmt.money(rec.new_budget) + " per day");
+      box.appendChild(MK.el("div", { class: "meta" }, meta.filter(Boolean).join(" · ")));
+      box.appendChild(MK.el("p", { style: "margin:6px 0 0" }, rec.detail));
+      if (rec.expected_impact) box.appendChild(MK.el("p", { class: "small muted", style: "margin:4px 0 0" }, "Expected impact: " + rec.expected_impact));
+      holder.appendChild(box);
+    });
+    if (!(r.recommendations || []).length) holder.appendChild(MK.el("p", { class: "subtle" }, "No changes recommended right now."));
+    recs.appendChild(holder);
+    out.appendChild(recs);
+
+    if ((r.budget_shifts || []).length) {
+      var shifts = MK.el("section", { class: "card section-gap" });
+      shifts.appendChild(MK.el("h2", {}, "Suggested budget moves"));
+      var table = MK.el("table", { class: "data", style: "margin-top:8px" });
+      var thead = MK.el("thead"); var hr = MK.el("tr");
+      ["From", "To", "Per month", "Why"].forEach(function (h, i) { hr.appendChild(MK.el("th", { class: i === 2 ? "num" : "" }, h)); });
+      thead.appendChild(hr); table.appendChild(thead);
+      var tb = MK.el("tbody");
+      r.budget_shifts.forEach(function (s) {
+        var tr = MK.el("tr");
+        tr.appendChild(MK.el("td", {}, names[s.from_platform] || s.from_platform));
+        tr.appendChild(MK.el("td", {}, names[s.to_platform] || s.to_platform));
+        tr.appendChild(MK.el("td", { class: "num" }, MK.fmt.money(s.monthly_amount)));
+        tr.appendChild(MK.el("td", {}, s.rationale));
+        tb.appendChild(tr);
+      });
+      table.appendChild(tb);
+      var wrap = MK.el("div", { class: "table-wrap" }); wrap.appendChild(table);
+      shifts.appendChild(wrap);
+      shifts.appendChild(MK.el("p", { class: "small muted", style: "margin-top:8px" }, "Update monthly budgets on the Budgets page if you agree."));
+      out.appendChild(shifts);
+    }
+    out.appendChild(list("Keep an eye on", r.watch_next));
+    out.lastChild.classList.add("section-gap");
+    out.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    btn.disabled = true;
+    var original = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner" aria-hidden="true"></span> Analyzing…';
+    MK.post("{{ url_for('api_insights') }}", Object.assign({ question: document.getElementById("question").value }, period))
+      .then(render)
+      .catch(function (err) { MK.toast(err.message, "error"); })
+      .finally(function () { btn.disabled = false; btn.innerHTML = original; });
+  });
+});
+</script>
+{% endblock %}

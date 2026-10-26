@@ -1,0 +1,55 @@
+{% extends "mk_base.html" %}
+{% from "mk_macros.html" import icon, platform with context %}
+{% block title %}Budgets{% endblock %}
+{% block heading %}Budgets{% endblock %}
+{% block intro %}Plan how much to spend each month, per platform and in total. Pacing compares what you've spent so far with where you should be, and projects the month-end total from the days completed.{% endblock %}
+
+{% block content %}
+<div class="grid grid-main">
+  <section class="card">
+    <div class="card-head"><div><h2>Pacing this month</h2><p>Projections use finished days only, so today's partial spend doesn't skew them.</p></div></div>
+    {% for p in pacing %}
+      <div class="meter-row">
+        <div><strong>{{ p.label }}</strong><div class="small muted">{{ p.budget|money }} budget</div></div>
+        <div>
+          <div class="meter tone-{{ p.tone }}" role="meter" aria-valuemin="0" aria-valuemax="{{ p.budget }}" aria-valuenow="{{ p.spent }}" aria-label="{{ p.label }} spend against budget">
+            <div class="fill" style="width: {{ [p.used_pct * 100, 100]|min }}%"></div>
+            <div class="mark" style="left: calc({{ [p.expected_to_date / p.budget * 100, 100]|min }}% - 1px)" title="Where spend should be by today: {{ p.expected_to_date|money }}"></div>
+          </div>
+          <div class="meter-meta">
+            <span>Spent {{ p.spent|money }} ({{ (p.used_pct * 100)|round|int }}%)</span>
+            <span>{% if p.projected is not none %}On course for {{ p.projected|money }}{% else %}Projection starts on day 3{% endif %}</span>
+            <span>{% if p.daily_allowance is not none %}{{ p.daily_allowance|money }}/day left to spend{% endif %}</span>
+          </div>
+        </div>
+        <span class="pill tone-{{ p.tone }}"><span class="dot"></span>{{ p.status_label }}</span>
+      </div>
+    {% else %}
+      <p class="subtle">{% if month == months[0] %}Set budgets on the right to start tracking pacing.{% else %}Pacing is shown for the current month.{% endif %}</p>
+    {% endfor %}
+  </section>
+
+  <section class="card">
+    <h2>Monthly budgets</h2>
+    <form method="get" class="row" style="margin:10px 0 4px">
+      <label class="sr-only" for="b-month">Month</label>
+      <select id="b-month" name="month" onchange="this.form.submit()">
+        {% for m in months %}<option value="{{ m }}" {% if m == month %}selected{% endif %}>{{ m }}{{ " (this month)" if loop.first else " (next month)" }}</option>{% endfor %}
+      </select>
+      <noscript><button class="btn ghost sm" type="submit">Show</button></noscript>
+    </form>
+    <form method="post" action="{{ url_for('budgets') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="month" value="{{ month }}">
+      {% for key in keys %}
+        <div class="toggle-row">
+          <label for="budget-{{ key }}">{% if key == "total" %}<strong>All platforms</strong>{% else %}{{ platform(key) }}{% endif %}</label>
+          <input id="budget-{{ key }}" name="budget_{{ key }}" type="number" min="0" step="1" inputmode="decimal" style="max-width:140px" placeholder="—" value="{{ budgets.get(key, '')|round|int if budgets.get(key) else '' }}">
+        </div>
+      {% endfor %}
+      <button class="btn" type="submit" style="margin-top:12px">Save budgets</button>
+    </form>
+    <p class="subtle small" style="margin-top:10px">Leave a box empty for no budget. These are planning numbers for pacing; they don't change anything on the platforms.</p>
+  </section>
+</div>
+{% endblock %}
