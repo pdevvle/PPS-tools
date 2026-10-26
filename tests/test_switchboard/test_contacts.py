@@ -166,6 +166,20 @@ def test_csv_import_and_export(client):
     client.post("/api/contacts/import", {"csv": "foo,bar\n1,2\n"}, expect=400)
 
 
+def test_export_defuses_spreadsheet_formulas_from_senders(client):
+    import csv
+
+    # A stranger controls their own display name, and it becomes the contact's name.
+    receive(make_channel(), sender="evil@cust.test", name='=HYPERLINK("https://x.test","Click")')
+    create(client, name="Pat Plain", phone="+1 (602) 555-0123", notes="-2+3+cmd|' /C calc'!A0")
+    rows = list(csv.reader(io.StringIO(client.raw("get", "/api/contacts/export.csv").get_data(as_text=True))))
+    by_email = {r[1]: r for r in rows[1:]}
+    assert by_email["evil@cust.test"][0] == '\'=HYPERLINK("https://x.test","Click")'
+    pat = next(r for r in rows[1:] if r[0] == "Pat Plain")
+    assert pat[2] == "+16025550123"           # phone numbers stay usable
+    assert pat[6].startswith("'-2+3+cmd")
+
+
 def test_delete_contact_keeps_conversation(client):
     ch = make_channel()
     msg = receive(ch, sender="x@y.test")

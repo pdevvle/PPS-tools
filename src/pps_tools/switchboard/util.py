@@ -309,6 +309,20 @@ def normalize_subject(subject: str | None) -> str:
         s = new
 
 
+_PLAIN_NUMBER = re.compile(r"^[+-]?[\d\s().-]*\d[\d\s().-]*$")
+
+
+def csv_cell(value):
+    """A CSV value that is safe to open in a spreadsheet: None becomes "", and text that
+    would run as a formula (=, +, -, @, tab, CR) gets a leading apostrophe. Plain numbers
+    and phone numbers such as +1 (602) 555-0100 are left alone."""
+    if value is None:
+        return ""
+    if isinstance(value, str) and value[:1] in ("=", "+", "-", "@", "\t", "\r") and not _PLAIN_NUMBER.match(value):
+        return "'" + value
+    return value
+
+
 def render_template(text: str | None, context: dict) -> str:
     """Replace {{ dotted.keys }} from a nested dict; unknown keys become ''."""
     if not text:

@@ -18,7 +18,7 @@ from pps_tools.switchboard import db, realtime
 from pps_tools.switchboard.services import hooks, notify, settings, staff_status
 from pps_tools.switchboard.services import staffing as st
 from pps_tools.switchboard.services import users as users_svc
-from pps_tools.switchboard.util import iso, now, now_iso, parse_iso, pick_color
+from pps_tools.switchboard.util import csv_cell, iso, now, now_iso, parse_iso, pick_color
 from pps_tools.switchboard.web import (
     ApiError, as_bool, as_int, audit, bad_request, body, can, client_ip, conflict, current_user, forbidden, login_required,
     not_found, ok, public_user, require, require_fields,
@@ -1196,12 +1196,12 @@ def export_timesheets():
         for e in person["entries"]:
             clock_in = st.local_dt(e["clock_in"])
             clock_out = st.local_dt(e["clock_out"]) if e["clock_out"] else None
-            writer.writerow([
+            writer.writerow([csv_cell(v) for v in (
                 name, number, clock_in.date().isoformat(), clock_in.strftime("%H:%M"),
                 clock_out.strftime("%H:%M") if clock_out else "", int(round(e["break_minutes"])),
                 f"{e['regular_minutes'] / 60:.2f}", f"{e['overtime_minutes'] / 60:.2f}", e["job_id"] or "",
                 e["status"], (e["notes"] or "").replace("\n", " "),
-            ])
+            )])
     filename = f"timesheets-{first.isoformat()}-to-{(last - timedelta(days=1)).isoformat()}.csv"
     return Response(out.getvalue(), mimetype="text/csv",
                     headers={"Content-Disposition": f'attachment; filename="{filename}"'})

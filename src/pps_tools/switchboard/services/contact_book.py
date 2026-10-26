@@ -10,7 +10,7 @@ import io
 from pps_tools.switchboard import db
 from pps_tools.switchboard.services import contacts as contacts_svc
 from pps_tools.switchboard.services import search
-from pps_tools.switchboard.util import now_iso, norm_email, norm_phone, pick_color
+from pps_tools.switchboard.util import csv_cell, now_iso, norm_email, norm_phone, pick_color
 from pps_tools.switchboard.web import bad_request, conflict, not_found
 
 CONTACT_FIELDS = ("name", "title", "address", "notes")
@@ -546,14 +546,14 @@ def export_csv(rows: list[dict]) -> str:
     writer.writerow(EXPORT_COLUMNS)
     for r in rows:
         hs = handles.get(r["id"], [])
-        writer.writerow([
-            r["name"] or "", r["email"] or "", r["phone"] or "", orgs.get(r["organization_id"], ""),
-            r["title"] or "", r["address"] or "", r["notes"] or "",
+        writer.writerow([csv_cell(v) for v in (
+            r["name"], r["email"], r["phone"], orgs.get(r["organization_id"]),
+            r["title"], r["address"], r["notes"],
             ";".join(h["value"] for h in hs if h["kind"] == "email" and h["value"] != r["email"]),
             ";".join(h["value"] for h in hs if h["kind"] == "phone" and h["value"] != r["phone"]),
             ";".join(group_names[g] for g in groups.get(r["id"], []) if g in group_names),
             r["created_at"],
-        ])
+        )])
     return buf.getvalue()
 
 

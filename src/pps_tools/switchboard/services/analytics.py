@@ -20,7 +20,7 @@ from datetime import date, datetime, time, timedelta, tzinfo
 from pps_tools.switchboard import db
 from pps_tools.switchboard.services import contacts as contacts_svc
 from pps_tools.switchboard.services import settings
-from pps_tools.switchboard.util import iso, now, now_iso, parse_date, parse_iso
+from pps_tools.switchboard.util import csv_cell, iso, now, now_iso, parse_date, parse_iso
 from pps_tools.switchboard.web import PERMISSIONS, bad_request
 
 MAX_DAYS = 366
@@ -938,20 +938,11 @@ TABLES = {
 }
 
 
-def _cell(value):
-    """Blank for None; text that a spreadsheet would run as a formula gets a leading quote."""
-    if value is None:
-        return ""
-    if isinstance(value, str) and value[:1] in ("=", "+", "-", "@", "\t", "\r"):
-        return "'" + value
-    return value
-
-
 def to_csv(report: str, table: str, data: dict) -> str:
     headers, rows = TABLES[report][table]
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow(headers)
     for row in rows(data):
-        writer.writerow([_cell(v) for v in row])
+        writer.writerow([csv_cell(v) for v in row])
     return buf.getvalue()
