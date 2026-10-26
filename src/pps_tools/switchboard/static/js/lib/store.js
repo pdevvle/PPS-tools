@@ -129,6 +129,12 @@ export function can(perm) {
   return !!state.me && (state.me.permissions || []).includes(perm);
 }
 
+// Whether a server module (api/<name>.py) is running; see SWITCHBOARD_MODULES.
+export function hasModule(name) {
+  const mods = state.boot && state.boot.modules;
+  return !name || !mods || mods.includes(name);
+}
+
 export function setting(key, fallback) {
   const v = state.settings[key];
   return v === undefined ? fallback : v;

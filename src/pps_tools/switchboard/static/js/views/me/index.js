@@ -3,20 +3,20 @@
 // A widget is a named export of a module file; missing files are skipped.
 
 import { html, useEffect, useState } from '../../lib/preact.js';
-import { useStore, can } from '../../lib/store.js';
+import { useStore, can, hasModule } from '../../lib/store.js';
 import { fmtDateLong, firstName } from '../../lib/format.js';
 import { ModuleLayout } from '../../ui/layout.js';
 import { PageHeader } from '../../ui/components.js';
 
 export const WIDGETS = [
-  { id: 'clock', load: () => import('../staffing/widgets.js'), name: 'ClockWidget', size: 'sm' },
-  { id: 'shifts', load: () => import('../staffing/widgets.js'), name: 'MyShiftsWidget', size: 'sm' },
-  { id: 'inbox', load: () => import('../inbox/widgets.js'), name: 'InboxWidget', perm: 'inbox', size: 'sm' },
-  { id: 'jobs', load: () => import('../jobs/widgets.js'), name: 'MyJobsWidget', size: 'md' },
-  { id: 'tasks', load: () => import('../tasks/widgets.js'), name: 'MyTasksWidget', size: 'md' },
-  { id: 'agenda', load: () => import('../calendar/widgets.js'), name: 'AgendaWidget', size: 'md' },
-  { id: 'timeoff', load: () => import('../staffing/widgets.js'), name: 'TimeOffWidget', size: 'sm' },
-  { id: 'approvals', load: () => import('../staffing/widgets.js'), name: 'ApprovalsWidget', perm: 'manage_staff', size: 'sm' },
+  { id: 'clock', module: 'staffing', load: () => import('../staffing/widgets.js'), name: 'ClockWidget', size: 'sm' },
+  { id: 'shifts', module: 'staffing', load: () => import('../staffing/widgets.js'), name: 'MyShiftsWidget', size: 'sm' },
+  { id: 'inbox', module: 'inbox', load: () => import('../inbox/widgets.js'), name: 'InboxWidget', perm: 'inbox', size: 'sm' },
+  { id: 'jobs', module: 'jobs', load: () => import('../jobs/widgets.js'), name: 'MyJobsWidget', size: 'md' },
+  { id: 'tasks', module: 'tasks', load: () => import('../tasks/widgets.js'), name: 'MyTasksWidget', size: 'md' },
+  { id: 'agenda', module: 'calendar', load: () => import('../calendar/widgets.js'), name: 'AgendaWidget', size: 'md' },
+  { id: 'timeoff', module: 'staffing', load: () => import('../staffing/widgets.js'), name: 'TimeOffWidget', size: 'sm' },
+  { id: 'approvals', module: 'staffing', load: () => import('../staffing/widgets.js'), name: 'ApprovalsWidget', perm: 'manage_staff', size: 'sm' },
 ];
 
 function greeting() {
@@ -39,7 +39,7 @@ export function useWidgets(list) {
 
 export default function MyDay() {
   const me = useStore((s) => s.me);
-  const widgets = useWidgets(WIDGETS.filter((w) => !w.perm || can(w.perm)));
+  const widgets = useWidgets(WIDGETS.filter((w) => (!w.perm || can(w.perm)) && hasModule(w.module)));
   return html`<${ModuleLayout}>
     <${PageHeader} title=${`${greeting()}, ${firstName(me.name)}`} subtitle=${fmtDateLong(new Date())} icon="house" />
     <div class="page-body">

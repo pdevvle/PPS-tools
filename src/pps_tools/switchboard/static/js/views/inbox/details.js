@@ -3,7 +3,7 @@
 
 import { html, useEffect, useState } from '../../lib/preact.js';
 import { api } from '../../lib/api.js';
-import { useStore, user as lookupUser } from '../../lib/store.js';
+import { useStore, hasModule, user as lookupUser } from '../../lib/store.js';
 import { fmtDateTime, fmtDuration, fmtUntil } from '../../lib/format.js';
 import { minutesBetween } from '../../lib/dates.js';
 import { AvatarStack, Button, Chip, Icon, IconButton, KeyValue, SidePanel, Spinner } from '../../ui/components.js';
@@ -17,7 +17,7 @@ function usePanels() {
   const [panels, setPanels] = useState(panelCache);
   useEffect(() => {
     if (panelCache) return;
-    Promise.all(PANELS.map((p) => p.load().then((m) => (m[p.name] ? { ...p, Component: m[p.name] } : null)).catch(() => null)))
+    Promise.all(PANELS.filter((p) => hasModule(p.module)).map((p) => p.load().then((m) => (m[p.name] ? { ...p, Component: m[p.name] } : null)).catch(() => null)))
       .then((list) => { panelCache = list.filter(Boolean); setPanels(panelCache); });
   }, []);
   return panels; // null while loading

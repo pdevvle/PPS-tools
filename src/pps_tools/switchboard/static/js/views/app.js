@@ -4,7 +4,7 @@
 import { html, useEffect, useState } from '../lib/preact.js';
 import { api, setUnauthorizedHandler } from '../lib/api.js';
 import { connect, disconnect, onStatus } from '../lib/events.js';
-import { loadBootstrap, reloadBadgesSoon, setState, useStore, can, getState } from '../lib/store.js';
+import { loadBootstrap, reloadBadgesSoon, setState, useStore, can, getState, hasModule } from '../lib/store.js';
 import { navigate, useRoute } from '../lib/router.js';
 import { useHotkeys, keyLabel } from '../lib/shortcuts.js';
 import { useIsMobile } from '../lib/hooks.js';
@@ -62,12 +62,12 @@ function ModuleOutlet({ route }) {
   const me = useStore((s) => s.me);
   const id = route.segments[0];
   const mod = ALL_MODULES.find((m) => m.id === id);
-  const allowed = mod && (!mod.perm || (me.permissions || []).includes(mod.perm));
+  const allowed = mod && (!mod.perm || (me.permissions || []).includes(mod.perm)) && hasModule(mod.server);
   const { component: Component, loading, error } = useModule(allowed ? mod : null);
   if (!mod || !allowed) {
     return html`<div class="module-placeholder"><${Empty} icon="search" title="Nothing here"
       action=${html`<${Button} variant="primary" onClick=${() => navigate(homePath(me))}>Go home</${Button}>`}>
-      ${mod ? "You don't have access to this area." : "This page doesn't exist."}</${Empty}></div>`;
+      ${!mod ? "This page doesn't exist." : hasModule(mod.server) ? "You don't have access to this area." : "This feature isn't turned on."}</${Empty}></div>`;
   }
   if (error) {
     return html`<div class="module-placeholder"><${Empty} icon="triangle-alert" title=${`${mod.label} couldn't load`}
@@ -153,7 +153,7 @@ function Rail({ route }) {
   const unread = useStore((s) => s.unreadNotifications);
   const phone = useIsMobile();
   const active = route.segments[0];
-  const visible = (m) => !m.perm || (me.permissions || []).includes(m.perm);
+  const visible = (m) => (!m.perm || (me.permissions || []).includes(m.perm)) && hasModule(m.server);
   if (phone) return html`<${PhoneTabs} me=${me} active=${active} badges=${badges} unread=${unread} visible=${visible} />`;
   return html`<nav class="rail" aria-label="Main">
     <a href=${homePath(me)} class="rail-logo" aria-label="Switchboard home"><span class="logo-mark"></span></a>
@@ -227,7 +227,7 @@ function Shell() {
     applyTheme(me.prefs?.theme || localStorage.getItem('sb.theme') || 'system');
     const offs = [
       registerCommands(() => ALL_MODULES
-        .filter((m) => !m.perm || can(m.perm))
+        .filter((m) => (!m.perm || can(m.perm)) && hasModule(m.server))
         .map((m) => ({ id: 'go-' + m.id, label: `Go to ${m.label}`, icon: m.icon, group: 'Navigate', shortcut: m.shortcut && keyLabel(m.shortcut), run: () => navigate('/' + m.id) }))),
       registerCommands(() => [
         { id: 'theme-dark', label: 'Switch to dark theme', icon: 'moon', run: () => setTheme('dark') },
@@ -252,7 +252,7 @@ function Shell() {
     'mod+k': openPalette,
     '?': showShortcuts,
   };
-  for (const m of ALL_MODULES) if (m.shortcut && (!m.perm || can(m.perm))) shortcuts[m.shortcut] = go('/' + m.id);
+  for (const m of ALL_MODULES) if (m.shortcut && (!m.perm || can(m.perm)) && hasModule(m.server)) shortcuts[m.shortcut] = go('/' + m.id);
   useHotkeys(shortcuts);
 
   return html`<div class="app">

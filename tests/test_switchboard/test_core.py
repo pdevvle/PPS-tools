@@ -197,3 +197,12 @@ def test_forwarded_for_is_ignored_unless_a_proxy_is_configured(app, client):
         assert set(codes) == {401}
     finally:
         auth_api._failures.clear()
+
+
+def test_bootstrap_lists_running_modules(client):
+    from pps_tools.switchboard import modules
+
+    names = client.get("/api/bootstrap")["modules"]
+    assert names[:2] == ["core", "auth"]
+    assert set(names) <= set(modules.MODULE_NAMES)
+    assert set(names) == set(modules.enabled_names())
