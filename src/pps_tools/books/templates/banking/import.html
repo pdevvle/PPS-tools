@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import account_options %}
+{% block title %}Upload bank transactions{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="crumbs"><a href="{{ url_for('banking.feed') }}">Banking</a></div><h1>Upload bank transactions</h1></div></div>
+<div class="grid cols-2">
+<form method="post" enctype="multipart/form-data" class="card"><div class="card-body">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <div class="field"><label class="required">Account</label><select name="account_id" required>{{ account_options(accounts, account_id) }}</select></div>
+  <div class="field"><label class="required">Statement file</label><input type="file" name="file" accept=".csv,.ofx,.qfx,.qbo,.txt" required>
+    <div class="hint">CSV, OFX, QFX or QBO (Web Connect) — download it from your bank's website.</div></div>
+  <div class="field"><label>Skip transactions before</label><input type="date" name="start"><div class="hint">Useful when the file overlaps transactions you entered by hand.</div></div>
+  <details{% if mapping %} open{% endif %}><summary class="small">CSV column options</summary>
+    <p class="small muted" style="margin-top:.5rem">Columns are detected from the header row. If yours aren't, number them from 0 (the first column).</p>
+    <div class="form-row narrow">
+      <div class="field"><label>Date column</label><input name="date_col" inputmode="numeric"></div>
+      <div class="field"><label>Description column</label><input name="desc_col" inputmode="numeric"></div>
+      <div class="field"><label>Amount column</label><input name="amount_col" inputmode="numeric"></div>
+    </div>
+    <div class="form-row narrow">
+      <div class="field"><label>…or money out column</label><input name="debit_col" inputmode="numeric"></div>
+      <div class="field"><label>…and money in column</label><input name="credit_col" inputmode="numeric"></div>
+      <div class="field"><label>Date format</label><select name="date_format"><option value="">Detect</option><option value="%m/%d/%Y">MM/DD/YYYY</option><option value="%d/%m/%Y">DD/MM/YYYY</option><option value="%Y-%m-%d">YYYY-MM-DD</option><option value="%m/%d/%y">MM/DD/YY</option></select></div>
+      <div class="field"><label>Signs</label><select name="flip_sign"><option value="">Detect</option><option value="0">Negative = money out</option><option value="1">Positive = money out (most card exports)</option></select></div>
+    </div>
+  </details>
+  <button type="submit" class="primary" style="margin-top:1rem">Upload</button>
+</div></form>
+<div class="card"><div class="card-head"><h3>How it works</h3></div><div class="card-body small">
+  <ol>
+    <li>Transactions land in <strong>For review</strong> — nothing hits your books until you add them.</li>
+    <li>Each one gets a suggestion: a match to something you already entered (an invoice payment, a check), one of your <a href="{{ url_for('banking.rules') }}">bank rules</a>, or the category you used last time for that payee.</li>
+    <li>Uploading the same file twice is safe: transactions already imported are skipped.</li>
+    <li>Payouts from Stripe arrive as transfers from your Stripe balance and match automatically.</li>
+  </ol>
+</div></div>
+</div>
+{% endblock %}

@@ -11,6 +11,7 @@ build/
 venv/
 env/
 .env
+.qbo_tokens.json
 *.db
 *.sqlite
 *.sqlite3
@@ -28,3 +29,7 @@ htmlcov/
 *.swp
 *.swo
 *~
+
+# PPS Books data (database, attachments, session key)
+books-data/
+books-demo/

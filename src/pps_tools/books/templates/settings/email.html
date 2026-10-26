@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Email settings{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="crumbs"><a href="{{ url_for('settings.index') }}">Settings</a></div><h1>Email</h1></div></div>
+<div class="grid cols-2">
+<form method="post" class="card"><div class="card-body">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <h3>Outgoing mail server (SMTP)</h3>
+  {% if env %}<div class="flash info">Using SMTP_* settings from the environment ({{ smtp.host }}).</div>{% endif %}
+  <div class="form-row"><div class="field"><label>Server</label><input name="host" value="{{ stored.host or '' }}" placeholder="smtp.gmail.com"{% if env %} disabled{% endif %}></div>
+    <div class="field"><label>Port</label><input name="port" value="{{ stored.port or 587 }}"{% if env %} disabled{% endif %}></div></div>
+  <div class="form-row"><div class="field"><label>Username</label><input name="user" value="{{ stored.user or '' }}"{% if env %} disabled{% endif %}></div>
+    <div class="field"><label>Password</label><input type="password" name="password" value="{{ '••••••••' if stored.password else '' }}" autocomplete="new-password"{% if env %} disabled{% endif %}></div></div>
+  <div class="form-row"><div class="field"><label>Send as</label><input name="sender" value="{{ stored.sender or '' }}" placeholder="billing@yourcompany.com"{% if env %} disabled{% endif %}></div>
+    <div class="field"><label>&nbsp;</label><label class="inline"><input type="checkbox" name="tls" value="1"{% if stored.tls is not defined or stored.tls %} checked{% endif %}> Use STARTTLS</label></div></div>
+  <div class="toolbar"><button type="submit" class="primary"{% if env %} disabled{% endif %}>Save</button>
+    <input name="test_to" placeholder="test@example.com" style="max-width:220px"><button type="submit" name="action" value="test">Send test</button></div>
+  {% if not smtp.configured %}<p class="small muted" style="margin-top:.75rem">Until a server is set, emails are kept in the outbox below instead of being sent.</p>{% endif %}
+</div></form>
+<div class="card"><div class="card-head"><h3>Outbox</h3></div>
+  <table class="data compact"><thead><tr><th>When</th><th>To</th><th>Subject</th><th>Status</th></tr></thead><tbody>
+    {% for m in outbox %}<tr class="clickable" data-href="{{ url_for('settings.email_view', msg_id=m.id) }}"><td class="small nowrap">{{ m.created_at|date('%m/%d %I:%M %p') }}</td><td class="small">{{ m.to_addr }}</td><td class="small">{{ m.subject }}</td>
+      <td><span class="badge {{ 'sent' if m.status == 'sent' else ('failed' if m.status == 'failed' else '') }}">{{ m.status }}</span></td></tr>
+    {% else %}<tr><td colspan="4" class="muted">Nothing sent yet.</td></tr>{% endfor %}
+  </tbody></table></div>
+</div>
+{% endblock %}

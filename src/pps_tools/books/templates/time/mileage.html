@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import icon %}
+{% block title %}Mileage{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="crumbs">Time</div><h1>Mileage</h1>
+  <div class="muted small">Standard rate today: {{ ('$' ~ current_rate ~ ' a mile') if current_rate is not none else 'not set' }} · <a href="{{ url_for('settings.advanced') }}">Rates by year</a> · <a href="{{ url_for('lists.show', kind='vehicles') }}">Vehicles</a></div></div>
+  <div class="actions"><a class="btn" href="{{ url_for('time.mileage_csv', year=(start.year if start else today.year)) }}">Download log (CSV)</a>
+    {% if can('time.edit') %}<a class="btn primary" href="{{ url_for('time.trip_new') }}">{{ icon('plus') }} Add trip</a>{% endif %}</div></div>
+<div class="kpis">
+  <div class="kpi"><div class="label">Business miles</div><div class="value">{{ '{:,.1f}'.format(business) }}</div></div>
+  <div class="kpi"><div class="label">Deduction at the standard rate</div><div class="value">{{ deduction|money }}</div><div class="sub">Each trip uses the rate in effect on its date</div></div>
+  <div class="kpi"><div class="label">Personal miles</div><div class="value">{{ '{:,.1f}'.format(personal) }}</div></div>
+</div>
+<div class="card">
+  <form class="filters" method="get">
+    <div class="field"><label>Dates</label><select name="preset" data-autosubmit>{% for k, v in presets %}<option value="{{ k }}"{% if preset == k %} selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+    {% if preset == 'custom' %}<div class="field"><label>From</label><input type="date" name="start" value="{{ start|date_input if start else '' }}"></div><div class="field"><label>To</label><input type="date" name="end" value="{{ end|date_input if end else '' }}"></div><button type="submit">Apply</button>{% endif %}
+    <div class="field"><label>Vehicle</label><select name="vehicle_id" data-autosubmit><option value="">All</option>{% for v in vehicles %}<option value="{{ v.id }}"{% if request.args.get('vehicle_id') == v.id|string %} selected{% endif %}>{{ v.name }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Purpose</label><select name="purpose" data-autosubmit><option value="">All</option><option value="business"{% if purpose == 'business' %} selected{% endif %}>Business</option><option value="personal"{% if purpose == 'personal' %} selected{% endif %}>Personal</option></select></div>
+  </form>
+  <div class="table-wrap"><table class="data">
+    <thead><tr><th>Date</th><th>Vehicle</th><th>From</th><th>To</th><th>Purpose</th><th>Customer</th><th class="num">Miles</th><th class="num">Rate</th><th class="num">Deduction</th></tr></thead>
+    <tbody>{% for r in rows %}{% set t = r.trip %}<tr class="clickable" data-href="{{ url_for('time.trip_edit', trip_id=t.id) }}">
+      <td class="nowrap">{{ t.date|date }}</td><td>{{ t.vehicle.name if t.vehicle else '' }}</td><td>{{ t.start_location or '' }}</td><td>{{ t.end_location or '' }}</td>
+      <td>{{ t.purpose|title }}</td><td>{{ t.customer.display_name if t.customer else '' }}</td><td class="num">{{ t.miles }}</td>
+      <td class="num">{{ r.rate if r.rate is not none else '' }}</td><td class="num">{{ r.value|money if r.value else '' }}</td></tr>
+    {% else %}<tr><td colspan="9"><div class="empty"><h3>No trips logged</h3><p>Log business driving as it happens; the IRS expects the date, miles, places and purpose.</p></div></td></tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+{% endblock %}

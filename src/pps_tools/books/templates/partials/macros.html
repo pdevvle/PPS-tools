@@ -1,0 +1,106 @@
+{# Shared form and display macros. #}
+
+{% macro icon(name) -%}
+{%- set paths = {
+  'home': 'M3 11l9-8 9 8v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z',
+  'bank': 'M3 10h18M5 10v8M9 10v8M15 10v8M19 10v8M3 20h18M12 3l9 5H3z',
+  'sales': 'M3 3h18v4H3zM5 7v13h14V7M9 12h6',
+  'expenses': 'M4 4h16v16H4zM8 9h8M8 13h8M8 17h5',
+  'projects': 'M3 7h18v13H3zM8 7V4h8v3',
+  'time': 'M12 7v5l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z',
+  'reports': 'M4 20V10M10 20V4M16 20v-7M22 20H2',
+  'taxes': 'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6',
+  'accounting': 'M4 4h16v4H4zM4 12h7v8H4zM14 12h6v8h-6z',
+  'payments': 'M2 6h20v12H2zM2 10h20M6 15h4',
+  'settings': 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z',
+  'plus': 'M12 5v14M5 12h14',
+  'search': 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.3-4.3',
+  'inventory': 'M21 8l-9-5-9 5 9 5 9-5zM3 8v8l9 5 9-5V8',
+  'trash': 'M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14',
+  'grip': 'M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01',
+  'paperclip': 'M21 12l-8.5 8.5a5 5 0 0 1-7-7L14 5a3.5 3.5 0 0 1 5 5l-8.6 8.5a2 2 0 0 1-2.8-2.8L15 8',
+  'print': 'M6 9V3h12v6M6 18H4v-7h16v7h-2M8 14h8v7H8z',
+  'mail': 'M3 5h18v14H3zM3 6l9 7 9-7',
+  'download': 'M12 3v12M7 10l5 5 5-5M4 21h16',
+  'chevron': 'M6 9l6 6 6-6',
+  'user': 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0',
+  'help': 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17h.01',
+  'check': 'M5 12l5 5L20 7',
+  'x': 'M6 6l12 12M18 6L6 18',
+  'card': 'M2 6h20v12H2zM2 10h20',
+} -%}
+<svg viewBox="0 0 24 24" aria-hidden="true"><path d="{{ paths.get(name, paths['home']) }}" stroke-linecap="round" stroke-linejoin="round"/></svg>
+{%- endmacro %}
+
+{% macro field(name, label, value='', type='text', required=False, hint='', attrs='', cls='') -%}
+<div class="field {{ cls }}">
+  <label for="f-{{ name }}"{% if required %} class="required"{% endif %}>{{ label }}</label>
+  <input type="{{ type }}" id="f-{{ name }}" name="{{ name }}" value="{{ value if value is not none else '' }}"{% if required %} required{% endif %} {{ attrs|safe }}>
+  {% if hint %}<div class="hint">{{ hint }}</div>{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro money_field(name, label, cents=None, required=False, hint='', attrs='') -%}
+<div class="field">
+  <label for="f-{{ name }}"{% if required %} class="required"{% endif %}>{{ label }}</label>
+  <input type="text" inputmode="decimal" class="num" id="f-{{ name }}" name="{{ name }}" value="{{ cents|money_plain if cents is not none else '' }}"{% if required %} required{% endif %} {{ attrs|safe }}>
+  {% if hint %}<div class="hint">{{ hint }}</div>{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro textarea(name, label, value='', rows=3, hint='') -%}
+<div class="field">
+  <label for="f-{{ name }}">{{ label }}</label>
+  <textarea id="f-{{ name }}" name="{{ name }}" rows="{{ rows }}">{{ value or '' }}</textarea>
+  {% if hint %}<div class="hint">{{ hint }}</div>{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro select(name, label, options, value=None, blank='', required=False, hint='', attrs='') -%}
+{# options: list of (value, label) pairs #}
+<div class="field">
+  <label for="f-{{ name }}"{% if required %} class="required"{% endif %}>{{ label }}</label>
+  <select id="f-{{ name }}" name="{{ name }}"{% if required %} required{% endif %} {{ attrs|safe }}>
+    {% if blank is not none %}<option value="">{{ blank }}</option>{% endif %}
+    {% for v, l in options %}
+      <option value="{{ v }}"{% if value is not none and v|string == value|string %} selected{% endif %}>{{ l }}</option>
+    {% endfor %}
+  </select>
+  {% if hint %}<div class="hint">{{ hint }}</div>{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro checkbox(name, label, checked=False, hint='') -%}
+<div class="field">
+  <label class="inline"><input type="checkbox" name="{{ name }}" value="1"{% if checked %} checked{% endif %}> {{ label }}</label>
+  {% if hint %}<div class="hint">{{ hint }}</div>{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro status_badge(txn) -%}
+{%- set st = txn_status(txn) -%}
+{% if st[1] %}<span class="badge {{ st[0] }}">{{ st[1] }}</span>{% endif %}
+{%- endmacro %}
+
+{% macro pager(page, pages) -%}
+{% if pages > 1 %}
+<div class="pager">
+  {% if page > 1 %}<a class="btn small" href="{{ url_with(page=page-1) }}">‹ Prev</a>{% endif %}
+  <span class="muted small">Page {{ page }} of {{ pages }}</span>
+  {% if page < pages %}<a class="btn small" href="{{ url_with(page=page+1) }}">Next ›</a>{% endif %}
+</div>
+{% endif %}
+{%- endmacro %}
+
+{% macro csrf() -%}<input type="hidden" name="_csrf" value="{{ csrf_token() }}">{%- endmacro %}
+
+{% macro post_button(action, label, cls='', confirm='', extra='') -%}
+<form method="post" action="{{ action }}" style="display:inline"{% if confirm %} onsubmit="return confirm({{ confirm|tojson }})"{% endif %}>
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">{{ extra|safe }}
+  <button type="submit" class="{{ cls }}">{{ label }}</button>
+</form>
+{%- endmacro %}
+
+{% macro account_options(accounts, selected=None) -%}
+{% for a in accounts %}<option value="{{ a.id }}"{% if selected is not none and a.id|string == selected|string %} selected{% endif %} data-type="{{ a.type }}">{{ '  ' * a.depth }}{{ a.display_name if a.depth == 0 else a.name }}{% if a.depth == 0 %} · {{ a.type_label }}{% endif %}</option>{% endfor %}
+{%- endmacro %}

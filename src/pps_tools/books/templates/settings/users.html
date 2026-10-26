@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Users{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="crumbs"><a href="{{ url_for('settings.index') }}">Settings</a></div><h1>Users and roles</h1></div></div>
+<div class="grid main-side">
+<div class="card"><table class="data">
+  <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Last sign-in</th><th></th></tr></thead>
+  <tbody>{% for u in rows %}
+    <tr><td><strong>{{ u.name }}</strong>{% if not u.active %} <span class="badge">Inactive</span>{% endif %}</td><td>{{ u.email }}</td>
+      <td><form method="post" action="{{ url_for('settings.user_update', uid=u.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="action" value="role">
+        <select name="role" data-autosubmit>{% for k, v in roles.items() %}<option value="{{ k }}"{% if u.role == k %} selected{% endif %}>{{ v }}</option>{% endfor %}</select></form></td>
+      <td class="small">{{ u.last_login_at|date('%m/%d/%Y %I:%M %p') if u.last_login_at else 'Never' }}</td>
+      <td class="actions"><form method="post" action="{{ url_for('settings.user_update', uid=u.id) }}" style="display:inline"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <button class="small" name="action" value="reset" type="submit" onclick="return confirm('Reset this password?')">Reset password</button>
+        {% if u.active %}<button class="small danger" name="action" value="deactivate" type="submit">Deactivate</button>{% else %}<button class="small" name="action" value="activate" type="submit">Reactivate</button>{% endif %}</form></td></tr>
+  {% endfor %}</tbody></table></div>
+<form method="post" class="card"><div class="card-body">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <h3>Add a user</h3>
+  <div class="field"><label class="required">Name</label><input name="name" required></div>
+  <div class="field"><label class="required">Email</label><input type="email" name="email" required></div>
+  <div class="field"><label>Role</label><select name="role">{% for k, v in roles.items() %}<option value="{{ k }}"{% if k == 'standard' %} selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+  <div class="field"><label>Temporary password</label><input name="password" placeholder="Leave blank to generate one"></div>
+  <button type="submit" class="primary">Add user</button>
+</div></form>
+</div>
+<div class="card" style="margin-top:1rem"><div class="card-head"><h3>What each role can do</h3></div>
+  <div class="table-wrap"><table class="data compact"><thead><tr><th>Permission</th>{% for k, v in roles.items() %}<th class="center">{{ v.replace('Standard ', '') }}</th>{% endfor %}</tr></thead>
+    <tbody>{% for perm, allowed in permissions.items() %}<tr><td>{{ perm.replace('.', ': ').replace('_', ' ') }}</td>{% for k in roles %}<td class="center">{{ '✓' if k in allowed else '' }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div></div>
+{% endblock %}

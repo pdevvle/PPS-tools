@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import icon %}
+{% block title %}Vendors{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="crumbs">Expenses</div><h1>Vendors</h1></div>
+  <div class="actions">{% if can('lists.edit') %}<a class="btn" href="{{ url_for('settings.import_data', kind='vendors') }}">Import</a>
+    <a class="btn primary" href="{{ url_for('names.vendor_new') }}">{{ icon('plus') }} New vendor</a>{% endif %}</div>
+</div>
+<div class="kpis">
+  <a class="kpi" href="{{ url_for('names.vendors', filter='open') }}"><div class="label">Unpaid</div><div class="value">{{ totals.open|money }}</div></a>
+  <a class="kpi" href="{{ url_for('names.vendors', filter='overdue') }}"><div class="label">Overdue</div><div class="value">{{ totals.overdue|money }}</div></a>
+  <a class="kpi" href="{{ url_for('names.vendors', filter='1099') }}"><div class="label">1099 contractors</div><div class="value">{{ rows|selectattr('track_1099')|list|length }}</div></a>
+</div>
+<div class="card">
+  <form class="filters" method="get">
+    <div class="field"><label>Search</label><input type="search" name="q" value="{{ request.args.get('q', '') }}" placeholder="Name, company, email"></div>
+    <div class="field"><label>Show</label><select name="show" data-autosubmit><option value="active"{% if show == 'active' %} selected{% endif %}>Active</option><option value="inactive"{% if show == 'inactive' %} selected{% endif %}>Inactive</option><option value="all"{% if show == 'all' %} selected{% endif %}>All</option></select></div>
+    <button type="submit">Search</button>
+  </form>
+  <div class="table-wrap"><table class="data">
+    <thead><tr><th>Vendor</th><th>Company</th><th>Phone</th><th>Email</th><th>1099</th><th class="num">Open balance</th><th></th></tr></thead>
+    <tbody>
+      {% for v in rows %}
+      <tr class="clickable" data-href="{{ url_for('names.vendor', vid=v.id) }}">
+        <td><strong>{{ v.display_name }}</strong>{% if not v.active %} <span class="badge">Inactive</span>{% endif %}</td><td>{{ v.company_name or '' }}</td>
+        <td class="nowrap">{{ v.phone or '' }}</td><td>{{ v.email or '' }}</td><td>{{ 'Yes' if v.track_1099 else '' }}</td>
+        <td class="num">{{ bals.get(v.id, 0)|money }}{% if overdue.get(v.id) %}<div class="small neg">{{ overdue[v.id]|money }} overdue</div>{% endif %}</td>
+        <td class="actions">{% if can('purchases.edit') %}{% if bals.get(v.id, 0) > 0 %}<a class="btn small" href="{{ url_for('expenses.pay_bills', vendor_id=v.id) }}">Make payment</a>{% else %}<a class="btn small" href="{{ url_for('txn.new', slug='bills', vendor_id=v.id) }}">Create bill</a>{% endif %}{% endif %}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7"><div class="empty"><h3>No vendors yet</h3><p><a href="{{ url_for('names.vendor_new') }}">Add a vendor</a> you buy from.</p></div></td></tr>
+      {% endfor %}
+    </tbody></table></div>
+</div>
+{% endblock %}

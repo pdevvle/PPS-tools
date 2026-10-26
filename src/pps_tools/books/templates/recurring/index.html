@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import icon, post_button %}
+{% block title %}Recurring transactions{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="crumbs">Accounting</div><h1>Recurring transactions</h1></div>
+  <div class="actions">
+    {% if can('settings.edit') %}{{ post_button(url_for('recurring.run_now'), 'Run what’s due now') }}{% endif %}
+    {% if types %}<details class="menu"><summary class="btn primary">{{ icon('plus') }} New template</summary>
+      <div class="menu-panel">{% for code, label in types %}<a href="{{ url_for('recurring.new', type=code) }}">{{ label }}</a>{% endfor %}</div></details>{% endif %}</div></div>
+
+{% if due %}
+<div class="card" style="margin-bottom:1rem"><div class="card-head"><h3>Reminders due</h3></div>
+  <table class="data compact"><tbody>{% for t in due %}<tr><td><strong>{{ t.name }}</strong> <span class="muted small">{{ txn_types[t.txn_type].label }}</span></td>
+    <td>{{ t.next_date|date }}</td><td class="num">{{ t.amount_cents|money }}</td>
+    <td class="actions nowrap"><a class="btn small primary" href="{{ url_for('recurring.use', tpl_id=t.id) }}">Create</a> {{ post_button(url_for('recurring.skip', tpl_id=t.id), 'Skip', 'small') }}</td></tr>{% endfor %}</tbody></table></div>
+{% endif %}
+
+<div class="card">
+  <form class="filters" method="get">
+    <div class="field"><label>Type</label><select name="mode" data-autosubmit><option value="">All</option>{% for k, v in modes.items() %}<option value="{{ k }}"{% if request.args.get('mode') == k %} selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Transaction</label><select name="type" data-autosubmit><option value="">All</option>{% for code, label in types %}<option value="{{ code }}"{% if request.args.get('type') == code %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Show</label><select name="show" data-autosubmit><option value="active"{% if show == 'active' %} selected{% endif %}>Active</option><option value="all"{% if show == 'all' %} selected{% endif %}>All</option></select></div>
+  </form>
+  <div class="table-wrap"><table class="data">
+    <thead><tr><th>Template</th><th>Type</th><th>Transaction</th><th>Schedule</th><th>Previous</th><th>Next</th><th>Customer / vendor</th><th class="num">Amount</th><th></th></tr></thead>
+    <tbody>{% for t in rows %}<tr>
+      <td><a href="{{ url_for('recurring.edit', tpl_id=t.id) }}"><strong>{{ t.name }}</strong></a>{% if not t.active %} <span class="badge">Paused</span>{% endif %}
+        {% if t.last_error %}<div class="small" style="color:var(--danger)">{{ t.last_error }}</div>{% endif %}</td>
+      <td>{{ modes[t.mode] }}</td><td>{{ txn_types[t.txn_type].label }}</td>
+      <td class="small">{{ t|schedule_text }}{% if t.auto_send %}<div class="faint">Emailed automatically</div>{% endif %}{% if t.autopay %}<div class="faint">Autopay</div>{% endif %}</td>
+      <td class="small">{% if last.get(t.id) %}<a href="{{ url_for('recurring.history', tpl_id=t.id) }}">{{ last[t.id]|date }}</a> <span class="faint">({{ counts.get(t.id, 0) }})</span>{% endif %}</td>
+      <td class="small">{{ t.next_date|date if t.next_date and t.mode != 'unscheduled' else '' }}</td>
+      <td>{{ (t.customer.display_name if t.customer else (t.vendor.display_name if t.vendor else '')) }}</td>
+      <td class="num">{{ t.amount_cents|money }}</td>
+      <td class="actions nowrap">
+        <details class="menu"><summary class="btn small">Actions {{ icon('chevron') }}</summary><div class="menu-panel">
+          <a href="{{ url_for('recurring.use', tpl_id=t.id) }}">Use (open a filled-in form)</a>
+          <a href="{{ url_for('recurring.edit', tpl_id=t.id) }}">Edit</a>
+          {% if t.mode != 'unscheduled' and t.active %}{{ post_button(url_for('recurring.create_now', tpl_id=t.id), 'Create next one now') }}
+          {{ post_button(url_for('recurring.skip', tpl_id=t.id), 'Skip next date') }}{% endif %}
+          {{ post_button(url_for('recurring.toggle', tpl_id=t.id), 'Resume' if not t.active else 'Pause') }}
+          {{ post_button(url_for('recurring.duplicate', tpl_id=t.id), 'Duplicate') }}
+          <a href="{{ url_for('recurring.history', tpl_id=t.id) }}">Transactions it created</a>
+          {{ post_button(url_for('recurring.delete', tpl_id=t.id), 'Delete', 'danger', 'Delete this template? Transactions it already created stay.') }}
+        </div></details></td></tr>
+    {% else %}<tr><td colspan="9"><div class="empty"><h3>No recurring templates</h3>
+      <p>Open any invoice, bill or expense and choose <em>More → Make recurring</em>, or start one from <em>New template</em>.</p></div></td></tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+<p class="muted small" style="margin-top:1rem">Scheduled templates run when someone uses the app (at most hourly) or from <code>pps books run-scheduled</code> in cron.</p>
+{% endblock %}

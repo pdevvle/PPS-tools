@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import account_options %}
+{% macro cb(name, label) %}<label class="inline"><input type="checkbox" name="{{ name }}" value="1"{% if p[name] %} checked{% endif %}> {{ label }}</label>{% endmacro %}
+{% block title %}Payments settings{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="crumbs"><a href="{{ url_for('settings.index') }}">Settings</a></div><h1>Payments (Stripe)</h1></div>
+  <div class="actions"><a class="btn" href="{{ url_for('payments.index') }}">Payments dashboard</a></div></div>
+<form method="post" class="card" style="max-width:900px"><div class="card-body">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <fieldset><legend>Stripe keys</legend>
+    <p class="small muted">Environment variables (<code>STRIPE_SECRET_KEY</code>, <code>STRIPE_WEBHOOK_SECRET</code>, <code>STRIPE_PUBLISHABLE_KEY</code>) take precedence over keys saved here.
+      Keys saved here are stored in your database; prefer the environment on a shared server.</p>
+    {% for field, label, ph in [('secret_key', 'Secret key', 'sk_live_… or rk_live_…'), ('webhook_secret', 'Webhook signing secret', 'whsec_…'), ('publishable_key', 'Publishable key (optional)', 'pk_live_…')] %}
+    <div class="field"><label>{{ label }}{% if env[field] %} <span class="badge success">from environment</span>{% endif %}</label>
+      <input name="{{ field }}" value="{{ mask(st[field]) if st[field] and not env[field] else '' }}" placeholder="{{ ph }}" autocomplete="off"{% if env[field] %} disabled{% endif %}>
+      {% if st[field] and not env[field] %}<label class="inline small"><input type="checkbox" name="clear_{{ field }}" value="1"> Remove</label>{% endif %}</div>
+    {% endfor %}
+    <div class="hint">Webhook endpoint URL: <code>{{ webhook_url }}</code></div>
+  </fieldset>
+  <fieldset><legend>Online payments</legend>
+    <div class="check-list">
+      {{ cb('stripe_enabled', 'Let customers pay invoices online') }}
+      {{ cb('stripe_card', 'Accept cards (Visa, Mastercard, Amex, Discover, Apple Pay, Google Pay)') }}
+      {{ cb('stripe_ach', 'Accept ACH bank transfers (US)') }}
+      {{ cb('stripe_allow_partial', 'Customers can pay part of an invoice') }}
+      {{ cb('stripe_save_cards', 'Offer to save cards for autopay on recurring invoices') }}
+    </div>
+    <div class="form-row">
+      <div class="field"><label>Stripe pays out to</label><select name="stripe_payout_account_id"><option value="">First bank account</option>{{ account_options(banks|rejectattr('system_key', 'equalto', 'stripe_clearing')|list, p.stripe_payout_account_id) }}</select></div>
+      <div class="field"><label>Record Stripe fees in</label><select name="stripe_fee_account"><option value="merchant_fees">Merchant Processing Fees</option>{% for a in expense_accounts %}<option value="{{ a.id }}"{% if p.stripe_fee_account|string == a.id|string %} selected{% endif %}>{{ a.full_name }}</option>{% endfor %}</select></div>
+      <div class="field"><label>Statement descriptor suffix</label><input name="stripe_statement_descriptor" value="{{ p.stripe_statement_descriptor }}" maxlength="22"><div class="hint">Appears on the customer's card statement.</div></div>
+    </div>
+  </fieldset>
+  <button type="submit" class="primary">Save</button>
+</div></form>
+{% endblock %}

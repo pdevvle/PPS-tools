@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import icon %}
+{% block title %}Customers{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="crumbs">Sales</div><h1>Customers</h1></div>
+  <div class="actions">
+    {% if can('lists.edit') %}<a class="btn" href="{{ url_for('settings.import_data', kind='customers') }}">Import</a>
+    <a class="btn primary" href="{{ url_for('names.customer_new') }}">{{ icon('plus') }} New customer</a>{% endif %}
+  </div>
+</div>
+<div class="kpis">
+  <a class="kpi" href="{{ url_for('names.customers', filter='open') }}"><div class="label">Open balance</div><div class="value">{{ totals.open|money }}</div><div class="sub">{{ totals.count_open }} customers</div></a>
+  <a class="kpi" href="{{ url_for('names.customers', filter='overdue') }}"><div class="label">Overdue</div><div class="value">{{ totals.overdue|money }}</div><div class="sub"><span class="status-dot serious"></span>{{ totals.count_overdue }} customers</div></a>
+</div>
+<div class="card">
+  <form class="filters" method="get">
+    <div class="field"><label>Search</label><input type="search" name="q" value="{{ request.args.get('q', '') }}" placeholder="Name, company, email, phone"></div>
+    <div class="field"><label>Show</label><select name="show" data-autosubmit><option value="active"{% if show == 'active' %} selected{% endif %}>Active</option><option value="inactive"{% if show == 'inactive' %} selected{% endif %}>Inactive</option><option value="all"{% if show == 'all' %} selected{% endif %}>All</option></select></div>
+    <button type="submit">Search</button>
+    {% if request.args.get('filter') %}<a class="btn ghost" href="{{ url_for('names.customers') }}">Clear filter</a>{% endif %}
+  </form>
+  <div class="table-wrap"><table class="data">
+    <thead><tr><th>Customer</th><th>Company</th><th>Phone</th><th>Email</th><th class="num">Open balance</th><th></th></tr></thead>
+    <tbody>
+      {% for c in rows %}
+      <tr class="clickable" data-href="{{ url_for('names.customer', cid=c.id) }}">
+        <td><strong>{{ c.full_name }}</strong>{% if c.is_project %} <span class="badge">Project</span>{% endif %}{% if not c.active %} <span class="badge">Inactive</span>{% endif %}</td>
+        <td>{{ c.company_name or '' }}</td><td class="nowrap">{{ c.phone or c.mobile or '' }}</td><td>{{ c.email or '' }}</td>
+        <td class="num">{{ bals.get(c.id, 0)|money }}{% if overdue.get(c.id) %}<div class="small neg">{{ overdue[c.id]|money }} overdue</div>{% endif %}</td>
+        <td class="actions">{% if can('sales.edit') %}{% if bals.get(c.id, 0) > 0 %}<a class="btn small" href="{{ url_for('txn.new', slug='payments', customer_id=c.id) }}">Receive payment</a>{% else %}<a class="btn small" href="{{ url_for('txn.new', slug='invoices', customer_id=c.id) }}">Create invoice</a>{% endif %}{% endif %}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6"><div class="empty"><h3>No customers yet</h3><p><a href="{{ url_for('names.customer_new') }}">Add your first customer</a> or import a list.</p></div></td></tr>
+      {% endfor %}
+    </tbody></table></div>
+</div>
+{% endblock %}

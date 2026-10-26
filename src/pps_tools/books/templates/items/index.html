@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import icon, post_button %}
+{% block title %}Products and services{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="crumbs">Sales</div><h1>Products and services</h1></div>
+  <div class="actions">
+    {% if can('lists.edit') %}
+    <a class="btn" href="{{ url_for('items.categories') }}">Categories</a>
+    <a class="btn" href="{{ url_for('settings.import_data', kind='items') }}">Import</a>
+    <details class="menu"><summary class="btn primary">{{ icon('plus') }} New</summary><div class="menu-panel">
+      {% for t, label in types.items() %}<a href="{{ url_for('items.new', type=t) }}">{{ label }}</a>{% endfor %}</div></details>
+    {% endif %}
+  </div>
+</div>
+{% if inventory_count %}
+<div class="kpis">
+  <a class="kpi" href="{{ url_for('items.index', stock='low') }}"><div class="label">Low stock</div><div class="value">{{ low }}</div></a>
+  <a class="kpi" href="{{ url_for('items.index', stock='out') }}"><div class="label">Out of stock</div><div class="value">{{ rows|selectattr('is_inventory')|selectattr('qty_on_hand', 'le', 0)|list|length }}</div></a>
+  <a class="kpi" href="{{ url_for('reports.view', key='inventory_valuation_summary') }}"><div class="label">Inventory value</div><div class="value">{{ rows|selectattr('is_inventory')|sum(attribute='inventory_value_cents')|money }}</div></a>
+</div>
+{% endif %}
+<div class="card">
+  <form class="filters" method="get">
+    <div class="field"><label>Search</label><input type="search" name="q" value="{{ request.args.get('q', '') }}" placeholder="Name, SKU, description"></div>
+    <div class="field"><label>Type</label><select name="type" data-autosubmit><option value="">All types</option>{% for t, label in types.items() %}<option value="{{ t }}"{% if request.args.get('type') == t %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Category</label><select name="category_id" data-autosubmit><option value="">All</option>{% for c in categories %}<option value="{{ c.id }}"{% if request.args.get('category_id')|string == c.id|string %} selected{% endif %}>{{ c.full_name }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Show</label><select name="show" data-autosubmit><option value="active"{% if show == 'active' %} selected{% endif %}>Active</option><option value="inactive"{% if show == 'inactive' %} selected{% endif %}>Inactive</option><option value="all"{% if show == 'all' %} selected{% endif %}>All</option></select></div>
+    <button type="submit">Search</button>
+    {% if request.args.get('stock') == 'low' and can('purchases.edit') %}{{ post_button(url_for('items.reorder'), 'Draft reorder POs') }}{% endif %}
+  </form>
+  <div class="table-wrap"><table class="data">
+    <thead><tr><th>Name</th><th>SKU</th><th>Type</th><th>Category</th><th>Description</th><th class="num">Price</th><th class="num">Cost</th><th class="num">Qty on hand</th><th class="num">Reorder point</th></tr></thead>
+    <tbody>
+      {% for it in rows %}
+      <tr class="clickable" data-href="{{ url_for('items.edit', item_id=it.id) }}">
+        <td><strong>{{ it.name }}</strong>{% if not it.active %} <span class="badge">Inactive</span>{% endif %}</td><td>{{ it.sku or '' }}</td><td>{{ it.type_label }}</td>
+        <td>{{ it.category.full_name if it.category else '' }}</td><td class="muted small">{{ (it.description or '')[:70] }}</td>
+        <td class="num">{{ it.sales_price|rate if it.sales_price is not none else '' }}</td><td class="num">{{ it.cost|rate if it.cost is not none else '' }}</td>
+        <td class="num">{% if it.is_inventory %}<span class="{{ 'neg' if it.low_stock }}">{{ it.qty_on_hand|qty }}</span>{% if it.low_stock %} <span class="badge warning">Low</span>{% endif %}{% endif %}</td>
+        <td class="num">{{ it.reorder_point|qty if it.reorder_point is not none else '' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="9"><div class="empty"><h3>No products or services yet</h3><p>Add what you sell so invoices fill in prices and accounts for you.</p></div></td></tr>
+      {% endfor %}
+    </tbody></table></div>
+</div>
+{% endblock %}

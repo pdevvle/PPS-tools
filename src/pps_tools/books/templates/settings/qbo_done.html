@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}QuickBooks import{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="crumbs"><a href="{{ url_for('settings.import_data') }}">Import data</a></div><h1>Imported from QuickBooks Online</h1>
+  <div class="muted small">Conversion date {{ when|date }}</div></div></div>
+<div class="grid cols-2">
+<div class="card"><div class="card-head"><h3>What came over</h3></div>
+  <table class="data compact"><tbody>{% for what, n in report.counts.items() %}<tr><td>{{ what|capitalize }}</td><td class="num">{{ n }}</td></tr>{% else %}<tr><td class="muted">Nothing new.</td></tr>{% endfor %}
+  {% for what, n in report.skipped.items() %}<tr><td class="muted">{{ what|capitalize }} already here</td><td class="num muted">{{ n }}</td></tr>{% endfor %}</tbody></table></div>
+<div class="card"><div class="card-head"><h3>Check before you carry on</h3></div><div class="card-body">
+  <ul class="small">
+    <li>Compare the <a href="{{ url_for('reports.view', key='balance_sheet', preset='custom', end=when|date_input) }}">balance sheet as of {{ when|date }}</a> with QuickBooks' balance sheet for the same date.</li>
+    <li>Compare <a href="{{ url_for('reports.view', key='ar_aging_summary', preset='custom', end=when|date_input) }}">A/R aging</a> and <a href="{{ url_for('reports.view', key='ap_aging_summary', preset='custom', end=when|date_input) }}">A/P aging</a>.</li>
+    <li>Set your <a href="{{ url_for('accounting.close_books') }}">closing date</a> to {{ when|date }} so nothing before it changes by accident.</li>
+    {% for note in report.notes %}<li>{{ note }}</li>{% endfor %}
+  </ul>
+  {% if report.errors %}<h4>Problems</h4><ul class="small">{% for e in report.errors %}<li style="color:var(--danger)">{{ e }}</li>{% endfor %}</ul>{% endif %}
+</div></div>
+</div>
+{% endblock %}

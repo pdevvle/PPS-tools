@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Reconcile {{ acct.name }}{% endblock %}
+{% block content_class %} wide{% endblock %}
+{% block content %}
+<form method="post" id="reconcile-form" data-ending="{{ rec.ending_balance_cents }}" data-beginning="{{ rec.beginning_balance_cents }}">
+<input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+<div class="page-head">
+  <div><div class="crumbs"><a href="{{ url_for('banking.reconcile_start') }}">Reconcile</a></div>
+    <h1>{{ acct.name }}</h1><div class="muted">Statement ending {{ rec.statement_date|date }}</div></div>
+  <div class="actions">
+    <a class="btn" href="{{ url_for('banking.reconcile_start', account_id=acct.id) }}">Edit statement info</a>
+    <button type="submit" name="save" value="later">Save for later</button>
+    <button type="submit" id="rec-finish" name="save" value="finish">Finish now</button>
+  </div>
+</div>
+<div class="kpis sticky-top" style="background:var(--bg);padding:.5rem 0">
+  <div class="kpi"><div class="label">Statement ending balance</div><div class="value">{{ rec.ending_balance_cents|money }}</div></div>
+  <div class="kpi"><div class="label">Beginning balance</div><div class="value">{{ rec.beginning_balance_cents|money }}</div></div>
+  <div class="kpi"><div class="label">{{ 'Charges' if acct.type == 'credit_card' else 'Payments' }}</div><div class="value" id="rec-payments">$0.00</div></div>
+  <div class="kpi"><div class="label">{{ 'Payments' if acct.type == 'credit_card' else 'Deposits' }}</div><div class="value" id="rec-deposits">$0.00</div></div>
+  <div class="kpi"><div class="label">Cleared balance</div><div class="value" id="rec-cleared">$0.00</div></div>
+  <div class="kpi"><div class="label">Difference</div><div class="value" id="rec-diff">$0.00</div>
+    <div class="sub"><label class="inline small"><input type="checkbox" name="adjust" value="1"> Finish with an adjustment if not zero</label></div></div>
+</div>
+<div class="card">
+  <div class="filters">
+    <div class="pill-tabs"><a href="#" class="active" data-rec-filter="all">All</a><a href="#" data-rec-filter="out">{{ 'Charges' if acct.type == 'credit_card' else 'Payments' }}</a><a href="#" data-rec-filter="in">{{ 'Payments' if acct.type == 'credit_card' else 'Deposits' }}</a></div>
+    {% if rec.service_charge_cents or rec.interest_earned_cents %}<span class="small muted">Service charge {{ rec.service_charge_cents|money }} and interest {{ rec.interest_earned_cents|money }} are added and checked off when you finish.</span>{% endif %}
+  </div>
+  <div class="table-wrap"><table class="data">
+    <thead><tr><th>Date</th><th>Type</th><th>Ref no.</th><th>Payee</th><th>Memo</th><th class="num">{{ 'Charge' if acct.type == 'credit_card' else 'Payment' }}</th><th class="num">{{ 'Payment' if acct.type == 'credit_card' else 'Deposit' }}</th><th class="center"><input type="checkbox" data-rec-all title="Check all"></th></tr></thead>
+    <tbody>
+      {% for e in entries %}{% set t = txns[e.txn_id] %}{% set signed = e.amount_cents * acct.normal %}
+      <tr data-sign="{{ 'in' if signed > 0 else 'out' }}">
+        <td class="nowrap">{{ e.date|date }}</td><td>{{ t.info.label }}</td><td>{{ t.number or t.ref_no or '' }}</td><td>{{ t.entity_name }}</td><td class="small muted">{{ (e.memo or t.memo or '')[:60] }}</td>
+        <td class="num">{{ (-signed)|money if signed < 0 else '' }}</td><td class="num">{{ signed|money if signed > 0 else '' }}</td>
+        <td class="center"><input type="checkbox" name="cleared" value="{{ e.id }}" data-amount="{{ signed }}"{% if e.cleared == 'C' %} checked{% endif %}></td>
+      </tr>
+      {% else %}<tr><td colspan="8" class="muted">No unreconciled transactions on or before {{ rec.statement_date|date }}.</td></tr>{% endfor %}
+    </tbody></table></div>
+</div>
+</form>
+{% endblock %}

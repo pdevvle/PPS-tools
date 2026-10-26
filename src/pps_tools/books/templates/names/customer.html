@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import status_badge, pager, icon, post_button %}
+{% block title %}{{ c.display_name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="crumbs"><a href="{{ url_for('names.customers') }}">Customers</a>{% if c.parent %} · <a href="{{ url_for('names.customer', cid=c.parent.id) }}">{{ c.parent.display_name }}</a>{% endif %}</div>
+    <h1>{{ c.display_name }} {% if not c.active %}<span class="badge">Inactive</span>{% endif %}{% if c.is_project %}<span class="badge">Project</span>{% endif %}</h1>
+    <div class="muted">{{ c.company_name or '' }}{% if c.email %} · {{ c.email }}{% endif %}{% if c.phone %} · {{ c.phone }}{% endif %}</div>
+  </div>
+  <div class="actions">
+    {% if can('lists.edit') %}<a class="btn" href="{{ url_for('names.customer_edit', cid=c.id) }}">Edit</a>{% endif %}
+    {% if can('sales.edit') %}
+    <details class="menu"><summary class="btn primary">{{ icon('plus') }} New transaction</summary><div class="menu-panel">
+      {% for slug, label in [('invoices', 'Invoice'), ('payments', 'Payment'), ('estimates', 'Estimate'), ('sales-receipts', 'Sales receipt'), ('credit-memos', 'Credit memo'), ('refunds', 'Refund receipt'), ('delayed-charges', 'Delayed charge'), ('customer-refunds', 'Refund customer credit')] %}
+      <a href="{{ url_for('txn.new', slug=slug, customer_id=c.id) }}">{{ label }}</a>{% endfor %}
+      <a href="{{ url_for('sales.statements', who='all') }}">Statement</a>
+      <a href="{{ url_for('time.new', customer_id=c.id) }}">Time activity</a>
+    </div></details>
+    {% endif %}
+  </div>
+</div>
+<div class="kpis">
+  <div class="kpi"><div class="label">Open balance</div><div class="value">{{ balance|money }}</div></div>
+  <div class="kpi"><div class="label">Overdue</div><div class="value">{{ overdue|money }}</div>{% if overdue %}<div class="sub"><span class="status-dot serious"></span>Past due</div>{% endif %}</div>
+  {% if unbilled_time %}<div class="kpi"><div class="label">Unbilled time</div><a class="value" href="{{ url_for('reports.view', key='unbilled_time', customer_id=c.id) }}">{{ unbilled_time }}</a><div class="sub">entries</div></div>{% endif %}
+  {% if c.card_last4 %}<div class="kpi"><div class="label">Saved card</div><div class="value">{{ c.card_brand|title }} ••{{ c.card_last4 }}</div><div class="sub">{{ 'Autopay on' if c.autopay else 'Autopay off' }}</div></div>{% endif %}
+</div>
+<div class="tabs">
+  <a href="{{ url_for('names.customer', cid=c.id) }}" class="{{ 'active' if tab == 'transactions' }}">Transactions</a>
+  <a href="{{ url_for('names.customer', cid=c.id, tab='details') }}" class="{{ 'active' if tab == 'details' }}">Details</a>
+  <a href="{{ url_for('names.customer', cid=c.id, tab='statements') }}" class="{{ 'active' if tab == 'statements' }}">Statements</a>
+</div>
+{% if tab == 'details' %}
+<div class="grid cols-2">
+  <div class="card"><div class="card-body"><dl class="dl">
+    <dt>Contact</dt><dd>{{ c.contact_name or '—' }}</dd>
+    <dt>Email</dt><dd>{{ c.email or '—' }}{% if c.cc_email %}<div class="small muted">cc {{ c.cc_email }}</div>{% endif %}</dd>
+    <dt>Phone</dt><dd>{{ c.phone or '—' }}{% if c.mobile %} · mobile {{ c.mobile }}{% endif %}</dd>
+    <dt>Billing address</dt><dd>{{ c.billing_address()|nl2br or '—' }}</dd>
+    <dt>Shipping address</dt><dd>{{ c.shipping_address()|nl2br or '—' }}</dd>
+    <dt>Terms</dt><dd>{{ c.terms.name if c.terms else 'Company default' }}</dd>
+    <dt>Tax</dt><dd>{{ 'Taxable' if c.taxable else 'Exempt' ~ (': ' ~ c.tax_exemption_reason if c.tax_exemption_reason else '') }}{% if c.default_tax_rate %} · {{ c.default_tax_rate.name }}{% endif %}</dd>
+    <dt>Customer since</dt><dd>{{ c.created_at|date }}</dd>
+  </dl>
+  {% if c.notes %}<hr><p>{{ c.notes|nl2br }}</p>{% endif %}
+  </div></div>
+  <div class="card"><div class="card-head"><h3>Customer portal & payments</h3></div><div class="card-body stack">
+    <p class="muted small">The portal lets this customer see every open invoice and pay them together by card or bank.</p>
+    {% if c.portal_token %}<div class="row"><input id="portal-link" readonly class="grow" value="{{ public_base }}{{ url_for('public.portal', token=c.portal_token) }}"><button type="button" data-copy="portal-link">Copy</button></div>
+    {% else %}{{ post_button(url_for('names.customer_portal', cid=c.id), 'Create portal link') }}{% endif %}
+    {% if children %}<hr><h3>Sub-customers and projects</h3><ul>{% for k in children %}<li><a href="{{ url_for('names.customer', cid=k.id) }}">{{ k.display_name }}</a></li>{% endfor %}</ul>{% endif %}
+    <hr>
+    {% if can('lists.edit') %}{{ post_button(url_for('names.customer_active', cid=c.id), 'Make inactive' if c.active else 'Make active', cls='danger' if c.active else '', extra='<input type="hidden" name="active" value="' ~ ('0' if c.active else '1') ~ '">') }}{% endif %}
+  </div></div>
+</div>
+{% elif tab == 'statements' %}
+<div class="card"><table class="data"><thead><tr><th>Date</th><th>Type</th><th>Period</th><th class="num">Balance</th><th>Sent</th></tr></thead><tbody>
+  {% for st in statements %}<tr><td>{{ st.statement_date|date }}</td><td>{{ st.kind.replace('_', ' ')|title }}</td><td>{{ st.start_date|date }} – {{ st.end_date|date }}</td><td class="num">{{ st.balance_cents|money }}</td><td>{{ st.sent_at|date if st.sent_at else '' }}</td></tr>
+  {% else %}<tr><td colspan="5" class="muted">No statements yet. <a href="{{ url_for('sales.statements', who='all') }}">Create one</a>.</td></tr>{% endfor %}
+</tbody></table></div>
+{% else %}
+<div class="card">
+  <form class="filters" method="get"><input type="hidden" name="tab" value="transactions">
+    <div class="field"><label>Type</label><select name="type" data-autosubmit><option value="">All</option>{% for t in ['invoice', 'payment', 'estimate', 'sales_receipt', 'credit_memo', 'refund_receipt', 'customer_refund', 'delayed_charge'] %}<option value="{{ t }}"{% if request.args.get('type') == t %} selected{% endif %}>{{ txn_types[t].plural }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Status</label><select name="status" data-autosubmit><option value="">All</option><option value="open"{% if request.args.get('status') == 'open' %} selected{% endif %}>Open</option></select></div>
+  </form>
+  <div class="table-wrap"><table class="data">
+    <thead><tr><th>Date</th><th>Type</th><th>No.</th><th>Due date</th><th class="num">Balance</th><th class="num">Total</th><th>Status</th></tr></thead>
+    <tbody>
+      {% for t in txns %}<tr class="clickable" data-href="{{ url_for('txn.edit', slug=t.info.slug, txn_id=t.id) }}"><td>{{ t.date|date }}</td><td>{{ t.info.label }}</td><td>{{ t.number or '' }}</td>
+        <td>{{ t.due_date|date if t.type == 'invoice' else '' }}</td><td class="num">{{ t.balance_cents|money if t.info.open_item else '' }}</td><td class="num">{{ (0 if t.voided else t.total_cents)|money }}</td><td>{{ status_badge(t) }}</td></tr>
+      {% else %}<tr><td colspan="7" class="muted">No transactions yet.</td></tr>{% endfor %}
+    </tbody></table></div>
+  {{ pager(page, pages) }}
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import account_options %}
+{% block title %}{{ 'Edit ' ~ v.display_name if v.id else 'New vendor' }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="crumbs"><a href="{{ url_for('names.vendors') }}">Vendors</a></div><h1>{{ v.display_name if v.id else 'New vendor' }}</h1></div></div>
+<form method="post" class="card"><div class="card-body">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <fieldset><legend>Name and contact</legend>
+    <div class="form-row narrow">
+      <div class="field"><label>Title</label><input name="title" value="{{ v.title or '' }}"></div>
+      <div class="field"><label>First name</label><input name="first_name" value="{{ v.first_name or '' }}"></div>
+      <div class="field"><label>Middle</label><input name="middle_name" value="{{ v.middle_name or '' }}"></div>
+      <div class="field"><label>Last name</label><input name="last_name" value="{{ v.last_name or '' }}"></div>
+      <div class="field"><label>Suffix</label><input name="suffix" value="{{ v.suffix or '' }}"></div>
+    </div>
+    <div class="form-row">
+      <div class="field"><label>Company name</label><input name="company_name" value="{{ v.company_name or '' }}"></div>
+      <div class="field"><label class="required">Display name</label><input name="display_name" value="{{ v.display_name or '' }}" required></div>
+    </div>
+    <div class="form-row">
+      <div class="field"><label>Email</label><input type="email" name="email" value="{{ v.email or '' }}"></div>
+      <div class="field"><label>Cc</label><input name="cc_email" value="{{ v.cc_email or '' }}"></div>
+      <div class="field"><label>Phone</label><input name="phone" value="{{ v.phone or '' }}"></div>
+      <div class="field"><label>Mobile</label><input name="mobile" value="{{ v.mobile or '' }}"></div>
+      <div class="field"><label>Website</label><input name="website" value="{{ v.website or '' }}"></div>
+    </div>
+  </fieldset>
+  <fieldset><legend>Address</legend>
+    <div class="form-row"><div class="field"><label>Street</label><input name="bill_line1" value="{{ v.bill_line1 or '' }}"></div><div class="field"><label>&nbsp;</label><input name="bill_line2" value="{{ v.bill_line2 or '' }}"></div></div>
+    <div class="form-row narrow"><div class="field"><label>City</label><input name="bill_city" value="{{ v.bill_city or '' }}"></div><div class="field"><label>State</label><input name="bill_state" value="{{ v.bill_state or '' }}"></div>
+      <div class="field"><label>ZIP</label><input name="bill_postal" value="{{ v.bill_postal or '' }}"></div><div class="field"><label>Country</label><input name="bill_country" value="{{ v.bill_country or '' }}"></div></div>
+  </fieldset>
+  <fieldset><legend>Payments, categories and 1099</legend>
+    <div class="form-row">
+      <div class="field"><label>Terms</label><select name="terms_id"><option value="">Company default</option>{% for t in terms %}<option value="{{ t.id }}"{% if v.terms_id == t.id %} selected{% endif %}>{{ t.name }}</option>{% endfor %}</select></div>
+      <div class="field"><label>Your account no. with them</label><input name="account_number" value="{{ v.account_number or '' }}"></div>
+      <div class="field"><label>Default expense category</label><select name="default_expense_account_id"><option value="">—</option>{{ account_options(accounts, v.default_expense_account_id) }}</select></div>
+    </div>
+    <div class="form-row">
+      <div class="field"><label>Business ID / SSN (for 1099)</label><input name="tax_id" value="{{ v.masked_tax_id }}" autocomplete="off"><div class="hint">Stored for the 1099 report and shown masked.</div></div>
+      <div class="field"><label>&nbsp;</label><label class="inline"><input type="checkbox" name="track_1099" value="1"{% if v.track_1099 %} checked{% endif %}> Track payments for 1099</label>
+        <label class="inline"><input type="checkbox" name="w9_on_file" value="1"{% if v.w9_on_file %} checked{% endif %}> W-9 on file</label></div>
+    </div>
+  </fieldset>
+  {% if not v.id %}
+  <fieldset><legend>Opening balance</legend>
+    <div class="form-row narrow"><div class="field"><label>Amount you owe them</label><input class="num" name="opening_balance"></div>
+      <div class="field"><label>As of</label><input type="date" name="opening_balance_date" value="{{ today|date_input }}"></div></div>
+  </fieldset>
+  {% endif %}
+  <div class="field"><label>Notes</label><textarea name="notes" rows="3">{{ v.notes or '' }}</textarea></div>
+  <div class="toolbar"><button type="submit" class="primary">Save</button><a class="btn" href="{{ url_for('names.vendor', vid=v.id) if v.id else url_for('names.vendors') }}">Cancel</a></div>
+</div></form>
+{% endblock %}

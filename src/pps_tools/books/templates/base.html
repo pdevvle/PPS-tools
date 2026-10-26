@@ -1,0 +1,188 @@
+{% from "partials/macros.html" import icon %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ page_title|default('PPS Books') }}{% endblock %} · {{ company.name if company else 'PPS Books' }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='books.css') }}">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231d7f3a'/%3E%3Ctext x='16' y='22' font-size='17' font-family='Arial' font-weight='700' fill='white' text-anchor='middle'%3EB%3C/text%3E%3C/svg%3E">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+{% set path = request.path %}
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand"><span class="logo">B</span> PPS Books</div>
+    <div class="company">{{ company.name if company else '' }}</div>
+    <nav>
+      {% macro navlink(href, label, ico, prefixes) -%}
+        {%- set on = namespace(v=false) -%}
+        {%- for p in prefixes %}{% if path == p or (p != '/' and path.startswith(p)) %}{% set on.v = true %}{% endif %}{% endfor -%}
+        <a class="nav-head{% if on.v %} active{% endif %}" href="{{ href }}">{{ icon(ico) }} {{ label }}</a>
+      {%- endmacro %}
+      {% macro sub(href, label) -%}<a href="{{ href }}"{% if path == href.split('?')[0] %} class="active"{% endif %}>{{ label }}</a>{%- endmacro %}
+      <div class="nav-group">{{ navlink(url_for('dashboard.home'), 'Dashboard', 'home', ['/', '/dashboard']) }}</div>
+      {% if can('banking.view') %}
+      <div class="nav-group">{{ navlink(url_for('banking.feed'), 'Banking', 'bank', ['/banking', '/receipts']) }}
+        {% if path.startswith('/banking') or path.startswith('/receipts') %}<div class="nav-sub">
+          {{ sub(url_for('banking.feed'), 'Bank transactions') }}
+          {{ sub(url_for('banking.rules'), 'Rules') }}
+          {{ sub(url_for('banking.receipts'), 'Receipts') }}
+          {{ sub(url_for('banking.reconcile_start'), 'Reconcile') }}
+          {{ sub(url_for('banking.import_file'), 'Upload transactions') }}
+        </div>{% endif %}</div>
+      {% endif %}
+      {% if can('sales.view') %}
+      <div class="nav-group">{{ navlink(url_for('sales.overview'), 'Sales', 'sales', ['/sales', '/customers', '/items', '/t/invoices', '/t/estimates', '/t/payments', '/t/sales-receipts', '/t/credit-memos', '/t/refunds', '/t/delayed', '/t/customer-refunds', '/statements']) }}
+        {% if path.startswith('/sales') or path.startswith('/customers') or path.startswith('/items') or path.startswith('/statements') %}<div class="nav-sub">
+          {{ sub(url_for('sales.overview'), 'Overview') }}
+          {{ sub(url_for('sales.all_sales'), 'All sales') }}
+          {{ sub(url_for('sales.invoices'), 'Invoices') }}
+          {{ sub(url_for('sales.estimates'), 'Estimates') }}
+          {{ sub(url_for('names.customers'), 'Customers') }}
+          {{ sub(url_for('items.index'), 'Products & services') }}
+        </div>{% endif %}</div>
+      {% endif %}
+      {% if can('purchases.view') %}
+      <div class="nav-group">{{ navlink(url_for('expenses.index'), 'Expenses', 'expenses', ['/expenses', '/bills', '/vendors', '/purchase-orders', '/t/bills', '/t/expenses', '/t/checks', '/t/purchase-orders', '/t/vendor-credits', '/t/bill-payments', '/t/card-credits']) }}
+        {% if path.startswith('/expenses') or path.startswith('/bills') or path.startswith('/vendors') or path.startswith('/purchase-orders') %}<div class="nav-sub">
+          {{ sub(url_for('expenses.index'), 'Expenses') }}
+          {{ sub(url_for('expenses.bills'), 'Bills') }}
+          {{ sub(url_for('expenses.pay_bills'), 'Pay bills') }}
+          {{ sub(url_for('expenses.purchase_orders'), 'Purchase orders') }}
+          {{ sub(url_for('names.vendors'), 'Vendors') }}
+        </div>{% endif %}</div>
+      {% endif %}
+      {% if prefs.track_projects and can('sales.view') %}
+      <div class="nav-group">{{ navlink(url_for('projects.index'), 'Projects', 'projects', ['/projects']) }}</div>
+      {% endif %}
+      {% if prefs.track_time and can('time.view') %}
+      <div class="nav-group">{{ navlink(url_for('time.index'), 'Time', 'time', ['/time', '/employees', '/mileage']) }}
+        {% if path.startswith('/time') or path.startswith('/employees') or path.startswith('/mileage') %}<div class="nav-sub">
+          {{ sub(url_for('time.index'), 'Time entries') }}
+          {{ sub(url_for('time.timesheet'), 'Weekly timesheet') }}
+          {{ sub(url_for('names.employees'), 'Employees') }}
+          {{ sub(url_for('time.mileage'), 'Mileage') }}
+        </div>{% endif %}</div>
+      {% endif %}
+      {% if can('reports.view') %}
+      <div class="nav-group">{{ navlink(url_for('reports.index'), 'Reports', 'reports', ['/reports']) }}</div>
+      {% endif %}
+      {% if can('accounting.view') %}
+      <div class="nav-group">{{ navlink(url_for('tax.index'), 'Taxes', 'taxes', ['/taxes']) }}
+        {% if path.startswith('/taxes') %}<div class="nav-sub">
+          {{ sub(url_for('tax.index'), 'Sales tax') }}
+          {{ sub(url_for('tax.rates'), 'Rates & agencies') }}
+          {{ sub(url_for('tax.form_1099'), '1099 filings') }}
+        </div>{% endif %}</div>
+      <div class="nav-group">{{ navlink(url_for('accounting.chart'), 'Accounting', 'accounting', ['/accounts', '/accounting', '/t/journal-entries', '/recurring', '/budgets']) }}
+        {% if path.startswith('/accounts') or path.startswith('/accounting') or path.startswith('/recurring') or path.startswith('/budgets') %}<div class="nav-sub">
+          {{ sub(url_for('accounting.chart'), 'Chart of accounts') }}
+          {{ sub(url_for('banking.reconcile_start'), 'Reconcile') }}
+          {{ sub(url_for('accounting.journal_entries'), 'Journal entries') }}
+          {{ sub(url_for('recurring.index'), 'Recurring transactions') }}
+          {{ sub(url_for('budgets.index'), 'Budgets') }}
+          {{ sub(url_for('accounting.close_books'), 'Close the books') }}
+        </div>{% endif %}</div>
+      {% endif %}
+      {% if can('sales.view') %}
+      <div class="nav-group">{{ navlink(url_for('payments.index'), 'Payments', 'payments', ['/payments']) }}</div>
+      {% endif %}
+      <div class="nav-group">{{ navlink(url_for('settings.index'), 'Settings', 'settings', ['/settings', '/lists', '/audit']) }}</div>
+    </nav>
+  </aside>
+  <div class="main">
+    <header class="topbar">
+      {% if can('sales.edit') or can('purchases.edit') or can('banking.edit') or can('time.edit') %}
+      <details class="menu left new-menu">
+        <summary class="btn primary">{{ icon('plus') }} New</summary>
+        <div class="menu-panel">
+          <div>
+            <div class="menu-head">Customers</div>
+            {% if can('sales.edit') %}
+            <a href="{{ url_for('txn.new', slug='invoices') }}">Invoice</a>
+            <a href="{{ url_for('txn.new', slug='payments') }}">Receive payment</a>
+            <a href="{{ url_for('txn.new', slug='estimates') }}">Estimate</a>
+            <a href="{{ url_for('txn.new', slug='credit-memos') }}">Credit memo</a>
+            <a href="{{ url_for('txn.new', slug='sales-receipts') }}">Sales receipt</a>
+            <a href="{{ url_for('txn.new', slug='refunds') }}">Refund receipt</a>
+            <a href="{{ url_for('txn.new', slug='customer-refunds') }}">Refund customer credit</a>
+            <a href="{{ url_for('txn.new', slug='delayed-credits') }}">Delayed credit</a>
+            <a href="{{ url_for('txn.new', slug='delayed-charges') }}">Delayed charge</a>
+            <a href="{{ url_for('sales.statements') }}">Statement</a>
+            <a href="{{ url_for('names.customer_new') }}">Add customer</a>
+            {% endif %}
+          </div>
+          <div>
+            <div class="menu-head">Vendors</div>
+            {% if can('purchases.edit') %}
+            <a href="{{ url_for('txn.new', slug='expenses') }}">Expense</a>
+            <a href="{{ url_for('txn.new', slug='checks') }}">Check</a>
+            <a href="{{ url_for('txn.new', slug='bills') }}">Bill</a>
+            <a href="{{ url_for('expenses.pay_bills') }}">Pay bills</a>
+            <a href="{{ url_for('txn.new', slug='purchase-orders') }}">Purchase order</a>
+            <a href="{{ url_for('txn.new', slug='vendor-credits') }}">Vendor credit</a>
+            <a href="{{ url_for('txn.new', slug='card-credits') }}">Credit card credit</a>
+            <a href="{{ url_for('names.vendor_new') }}">Add vendor</a>
+            {% endif %}
+          </div>
+          <div>
+            <div class="menu-head">Team</div>
+            {% if can('time.edit') %}
+            <a href="{{ url_for('time.new') }}">Single time activity</a>
+            <a href="{{ url_for('time.timesheet') }}">Weekly timesheet</a>
+            <a href="{{ url_for('time.trip_new') }}">Mileage trip</a>
+            <a href="{{ url_for('names.employee_new') }}">Add employee</a>
+            {% endif %}
+          </div>
+          <div>
+            <div class="menu-head">Other</div>
+            {% if can('banking.edit') %}
+            <a href="{{ url_for('txn.new', slug='deposits') }}">Bank deposit</a>
+            <a href="{{ url_for('txn.new', slug='transfers') }}">Transfer</a>
+            <a href="{{ url_for('txn.new', slug='card-payments') }}">Pay down credit card</a>
+            {% endif %}
+            {% if can('accounting.edit') %}
+            <a href="{{ url_for('txn.new', slug='journal-entries') }}">Journal entry</a>
+            <a href="{{ url_for('txn.new', slug='tax-payments') }}">Sales tax payment</a>
+            {% endif %}
+            {% if can('lists.edit') %}
+            <a href="{{ url_for('txn.new', slug='inventory-adjustments') }}">Inventory qty adjustment</a>
+            <a href="{{ url_for('items.new') }}">Add product/service</a>
+            {% endif %}
+            {% if can('banking.edit') %}<a href="{{ url_for('banking.receipts') }}">Upload receipt</a>{% endif %}
+          </div>
+        </div>
+      </details>
+      {% endif %}
+      <form class="search" action="{{ url_for('search.index') }}" method="get" role="search">
+        {{ icon('search') }}
+        <input type="search" name="q" placeholder="Search transactions, customers, vendors, amounts…" value="{{ request.args.get('q', '') if request.endpoint == 'search.index' else '' }}" aria-label="Search">
+      </form>
+      <span class="spacer"></span>
+      <details class="menu">
+        <summary class="btn ghost">{{ icon('user') }} {{ user.name if user else '' }}</summary>
+        <div class="menu-panel">
+          <div class="menu-head">{{ user.role_label if user else '' }}</div>
+          <a href="{{ url_for('settings.profile') }}">Your profile</a>
+          {% if can('settings.edit') %}<a href="{{ url_for('settings.index') }}">Company settings</a>{% endif %}
+          {% if can('users.manage') %}<a href="{{ url_for('settings.users') }}">Manage users</a>{% endif %}
+          <a href="{{ url_for('lists.index') }}">All lists</a>
+          {% if can('audit.view') %}<a href="{{ url_for('audit.index') }}">Audit log</a>{% endif %}
+          <form method="post" action="{{ url_for('auth.logout') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button type="submit">Sign out</button></form>
+        </div>
+      </details>
+    </header>
+    <main class="content{% block content_class %}{% endblock %}">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}<div class="flashes">{% for cat, msg in messages %}<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}</div>{% endif %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+<script src="{{ url_for('static', filename='books.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

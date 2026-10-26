@@ -1,0 +1,94 @@
+{% extends "public/base.html" %}
+{% block title %}{{ txn.info.label }} {{ txn.number or '' }} from {{ company.name }}{% endblock %}
+{% block content %}
+<div class="grid main-side narrow-side">
+<div class="doc-paper">
+  <div class="doc-head">
+    <div>
+      <div style="font-weight:700;font-size:1.15rem">{{ company.name }}</div>
+      <div class="muted small">{% for l in company.address_lines() %}{{ l }}<br>{% endfor %}{{ company.phone or '' }}</div>
+    </div>
+    <div class="right">
+      <div class="doc-title">{{ txn.info.label }}</div>
+      <div class="muted">{{ txn.info.label }} #{{ txn.number or txn.id }}</div>
+      {% if txn.voided %}<div class="void-stamp" style="margin-top:.5rem">VOID</div>{% endif %}
+    </div>
+  </div>
+  <div class="row between" style="margin-bottom:1.25rem">
+    <div><div class="muted small">{{ 'Bill to' if txn.type in ('invoice', 'estimate') else 'Customer' }}</div><div>{{ txn.billing_address|nl2br if txn.billing_address else txn.entity_name }}</div></div>
+    {% if txn.shipping_address %}<div><div class="muted small">Ship to</div><div>{{ txn.shipping_address|nl2br }}</div></div>{% endif %}
+    <dl class="dl small">
+      <dt>Date</dt><dd>{{ txn.date|date }}</dd>
+      {% if txn.type == 'invoice' %}<dt>Due</dt><dd>{{ txn.due_date|date }}</dd>{% if txn.terms %}<dt>Terms</dt><dd>{{ txn.terms.name }}</dd>{% endif %}{% endif %}
+      {% if txn.type == 'estimate' and txn.expiration_date %}<dt>Expires</dt><dd>{{ txn.expiration_date|date }}</dd>{% endif %}
+    </dl>
+  </div>
+  <table class="data">
+    <thead><tr><th>Description</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th></tr></thead>
+    <tbody>
+      {% for ln in txn.lines %}
+        {% if ln.kind == 'description' %}<tr><td colspan="4"><strong>{{ ln.description }}</strong></td></tr>
+        {% elif ln.kind in ('item', 'account') %}
+        <tr><td>{% if ln.item %}<strong>{{ ln.item.name }}</strong><br>{% endif %}<span class="muted">{{ ln.description or '' }}</span>{% if ln.service_date %} <span class="faint small">({{ ln.service_date|date }})</span>{% endif %}</td>
+          <td class="num">{{ ln.qty|qty if ln.qty is not none else '' }}</td><td class="num">{{ ln.rate|rate if ln.rate is not none else '' }}</td><td class="num">{{ ln.amount_cents|money }}</td></tr>
+        {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="totals" style="margin-top:1rem"><table>
+    <tr><td>Subtotal</td><td>{{ txn.subtotal_cents|money }}</td></tr>
+    {% if txn.discount_cents %}<tr><td>Discount</td><td>-{{ txn.discount_cents|money }}</td></tr>{% endif %}
+    {% if txn.tax_cents or txn.tax_rate %}<tr><td>Sales tax{% if txn.tax_rate %} ({{ txn.tax_rate.name }}){% endif %}</td><td>{{ txn.tax_cents|money }}</td></tr>{% endif %}
+    {% if txn.shipping_cents %}<tr><td>Shipping</td><td>{{ txn.shipping_cents|money }}</td></tr>{% endif %}
+    <tr class="total"><td>Total</td><td>{{ txn.total_cents|money }}</td></tr>
+    {% if txn.type == 'invoice' %}
+      {% if txn.total_cents != txn.balance_cents %}<tr><td>Paid</td><td>-{{ (txn.total_cents - txn.balance_cents)|money }}</td></tr>{% endif %}
+      <tr class="balance"><td>Balance due</td><td>{{ txn.balance_cents|money }}</td></tr>
+    {% endif %}
+  </table></div>
+  {% if txn.message %}<p style="margin-top:1.5rem">{{ txn.message|nl2br }}</p>{% endif %}
+  {% if prefs.invoice_footer %}<p class="small muted" style="margin-top:1rem">{{ prefs.invoice_footer|nl2br }}</p>{% endif %}
+</div>
+<div class="pay-box stack">
+  <div class="card"><div class="card-body">
+    {% if txn.type == 'invoice' %}
+      {% if txn.voided %}<p>This invoice was voided.</p>
+      {% elif txn.balance_cents <= 0 %}<h2>Paid in full</h2><p class="muted">Thank you!</p>
+      {% else %}
+        <div class="muted small">Amount due</div>
+        <div style="font-size:2rem;font-weight:750">{{ txn.balance_cents|money }}</div>
+        <div class="muted small" style="margin-bottom:1rem">Due {{ txn.due_date|date }}</div>
+        {% if can_pay %}
+        <form method="post" action="{{ url_for('public.pay', token=txn.public_token) }}">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          {% if allow_partial %}<div class="field"><label>Amount to pay</label><input class="num" name="amount" value="{{ txn.balance_cents|money_plain }}"></div>{% endif %}
+          {% if save_cards %}<label class="inline small" style="margin-bottom:.75rem"><input type="checkbox" name="save_card" value="1"> Save my card and pay future invoices automatically</label>{% endif %}
+          <button type="submit" class="primary" style="width:100%">Pay {{ 'by card or bank' if txn.allow_online_card and txn.allow_online_ach else ('by card' if txn.allow_online_card else 'by bank transfer') }}</button>
+        </form>
+        <p class="small faint" style="margin-top:.5rem">Secure payment by Stripe.</p>
+        {% else %}<p class="small muted">Contact {{ company.name }} to arrange payment.</p>{% endif %}
+      {% endif %}
+    {% elif txn.type == 'estimate' %}
+      <div class="muted small">Estimate total</div>
+      <div style="font-size:2rem;font-weight:750">{{ txn.total_cents|money }}</div>
+      {% if txn.status == 'pending' and not txn.voided %}
+      <form method="post" action="{{ url_for('public.accept', token=txn.public_token) }}" style="margin-top:1rem">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <div class="field"><label>Type your name to accept</label><input name="name" required autocomplete="name"></div>
+        <button type="submit" class="primary" style="width:100%">Accept estimate</button>
+      </form>
+      <form method="post" action="{{ url_for('public.decline', token=txn.public_token) }}" style="margin-top:.5rem">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <details><summary class="small">Decline</summary><div class="field"><label>Anything we should know?</label><textarea name="reason" rows="2"></textarea></div><button type="submit" style="width:100%">Decline estimate</button></details>
+      </form>
+      {% elif txn.status == 'accepted' %}<p class="badge accepted">Accepted{% if txn.accepted_by %} by {{ txn.accepted_by }}{% endif %}</p>
+      {% elif txn.status == 'rejected' %}<p class="badge rejected">Declined</p>
+      {% else %}<p class="muted">{{ txn.status|title }}</p>{% endif %}
+    {% else %}
+      <div class="muted small">{{ txn.info.label }} total</div><div style="font-size:2rem;font-weight:750">{{ txn.total_cents|money }}</div>
+    {% endif %}
+  </div></div>
+  <a class="btn" style="width:100%" href="{{ url_for('public.pdf', token=txn.public_token) }}" target="_blank">Download PDF</a>
+</div>
+</div>
+{% endblock %}

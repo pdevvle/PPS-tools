@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{{ e.display_name if e.id else 'New employee' }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="crumbs"><a href="{{ url_for('names.employees') }}">Employees</a></div><h1>{{ e.display_name if e.id else 'New employee' }}</h1></div>
+  {% if e.id %}<div class="actions"><a class="btn" href="{{ url_for('time.new', employee_id=e.id) }}">Log time</a></div>{% endif %}</div>
+<div class="grid cols-2">
+<form method="post" class="card"><div class="card-body">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <div class="form-row narrow">
+    <div class="field"><label>First name</label><input name="first_name" value="{{ e.first_name or '' }}"></div>
+    <div class="field"><label>Last name</label><input name="last_name" value="{{ e.last_name or '' }}"></div>
+    <div class="field"><label class="required">Display name</label><input name="display_name" value="{{ e.display_name or '' }}" required></div>
+  </div>
+  <div class="form-row narrow">
+    <div class="field"><label>Email</label><input type="email" name="email" value="{{ e.email or '' }}"></div>
+    <div class="field"><label>Phone</label><input name="phone" value="{{ e.phone or '' }}"></div>
+    <div class="field"><label>Employee ID</label><input name="employee_number" value="{{ e.employee_number or '' }}"></div>
+  </div>
+  <div class="form-row narrow"><div class="field"><label>Street</label><input name="bill_line1" value="{{ e.bill_line1 or '' }}"></div><div class="field"><label>City</label><input name="bill_city" value="{{ e.bill_city or '' }}"></div>
+    <div class="field"><label>State</label><input name="bill_state" value="{{ e.bill_state or '' }}"></div><div class="field"><label>ZIP</label><input name="bill_postal" value="{{ e.bill_postal or '' }}"></div></div>
+  <div class="form-row narrow">
+    <div class="field"><label>Hire date</label><input type="date" name="hire_date" value="{{ e.hire_date|date_input }}"></div>
+    <div class="field"><label>Release date</label><input type="date" name="release_date" value="{{ e.release_date|date_input }}"></div>
+    <div class="field"><label>SSN (last 4)</label><input name="ssn_last4" value="{{ e.ssn_last4 or '' }}" maxlength="4" inputmode="numeric"></div>
+  </div>
+  <div class="form-row narrow">
+    <div class="field"><label>Billable rate / hr</label><input class="num" name="billable_rate" value="{{ e.billable_rate|plain_decimal if e.billable_rate is not none else '' }}"></div>
+    <div class="field"><label>Cost rate / hr</label><input class="num" name="cost_rate" value="{{ e.cost_rate|plain_decimal if e.cost_rate is not none else '' }}"><div class="hint">Used for project labor cost.</div></div>
+    <div class="field"><label>Sign-in user</label><select name="user_id"><option value="">—</option>{% for u in users %}<option value="{{ u.id }}"{% if e.user_id == u.id %} selected{% endif %}>{{ u.name }}</option>{% endfor %}</select></div>
+  </div>
+  {% if e.id %}<label class="inline"><input type="checkbox" name="active" value="1"{% if e.active %} checked{% endif %}> Active</label>{% endif %}
+  <div class="field" style="margin-top:.75rem"><label>Notes</label><textarea name="notes">{{ e.notes or '' }}</textarea></div>
+  {% if can('lists.edit') %}<button type="submit" class="primary">Save</button>{% endif %}
+</div></form>
+{% if e.id %}
+<div class="card"><div class="card-head"><h3>Recent time</h3><a class="small" href="{{ url_for('reports.view', key='time_by_employee', employee_id=e.id) }}">Report</a></div>
+  <table class="data compact"><tbody>{% for ta in time_rows %}<tr class="clickable" data-href="{{ url_for('time.edit', ta_id=ta.id) }}"><td>{{ ta.date|date }}</td><td>{{ ta.customer.display_name if ta.customer else '' }}</td><td>{{ ta.description or '' }}</td><td class="num">{{ ta.hours|qty }} h</td></tr>
+  {% else %}<tr><td class="muted">No time logged yet.</td></tr>{% endfor %}</tbody></table></div>
+{% endif %}
+</div>
+{% endblock %}
