@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+import os
 from types import ModuleType
 
 MODULE_NAMES = [
@@ -41,12 +42,25 @@ MODULE_NAMES = [
 ]
 
 
+ALWAYS = ("core", "auth")
+
+
+def enabled_names() -> list[str]:
+    """All modules, or only those listed in SWITCHBOARD_MODULES (comma-separated; core
+    and auth are always on). Handy for developing one module in isolation."""
+    only = os.environ.get("SWITCHBOARD_MODULES", "").strip()
+    if not only:
+        return list(MODULE_NAMES)
+    wanted = {x.strip() for x in only.split(",") if x.strip()} | set(ALWAYS)
+    return [n for n in MODULE_NAMES if n in wanted]
+
+
 def load_modules() -> list[ModuleType]:
-    """Import every module that exists. A module file that is missing is skipped (the
-    app runs with whatever features are installed); a module that fails to import
-    raises, so real bugs surface."""
+    """Import every enabled module that exists. A module file that is missing is
+    skipped (the app runs with whatever features are installed); a module that fails
+    to import raises, so real bugs surface."""
     loaded = []
-    for name in MODULE_NAMES:
+    for name in enabled_names():
         full = f"pps_tools.switchboard.api.{name}"
         if importlib.util.find_spec(full) is None:
             continue
