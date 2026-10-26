@@ -56,7 +56,7 @@ def build(s: Session, password: str, today: Optional[date] = None, seed: int = 7
     company.address_line1, company.city, company.state, company.postal_code = "212 Mill Street", "Riverbend", "PA", "17000"
     prefs.set_many(s, {"track_time": True, "track_projects": True, "track_inventory": True,
                        "time_billable_by_default": True, "reminders_enabled": True, "reminder_days": [3, 15, 30],
-                       "invoice_footer": "Thank you for your business! Checks payable to Riverbend Print Co."})
+                       "invoice_footer": "Checks payable to Riverbend Print Co."})
     acct = {a.name: a for a in s.scalars(select(Account))}
     checking, card = acct["Checking"], acct["Business Credit Card"]
     undeposited = system_account_id(s, "undeposited_funds")
