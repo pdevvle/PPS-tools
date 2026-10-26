@@ -19,7 +19,7 @@ from pps_tools.marketing.pacing import pacing_for
 ACTIONS = ("pause", "enable", "increase_budget", "decrease_budget", "new_creative", "targeting", "other")
 MAX_CAMPAIGNS = 40
 
-SYSTEM_TEMPLATE = """You are a performance-marketing analyst reviewing a small business's paid advertising across Google Ads, Meta (Facebook and Instagram), Pinterest, X, LinkedIn and TikTok.
+SYSTEM_TEMPLATE = """You are a performance-marketing analyst reviewing a small business's paid advertising across Google Ads, Meta (Facebook and Instagram), Pinterest, X, LinkedIn, TikTok and Microsoft Advertising (Bing).
 
 About the business:
 {brand}

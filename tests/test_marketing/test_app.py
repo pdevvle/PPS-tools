@@ -165,6 +165,10 @@ def test_demo_toggle_and_oauth_guards(client, monkeypatch):
     resp = client.get("/oauth/meta/callback?code=x&state=forged", follow_redirects=True)
     assert b"expired or was already used" in resp.data
     assert client.get("/oauth/myspace/start").status_code == 404
+    for name in ("MICROSOFT_ADS_CLIENT_ID", "MICROSOFT_ADS_CLIENT_SECRET", "MICROSOFT_ADS_DEVELOPER_TOKEN"):
+        monkeypatch.setenv(name, "x")
+    resp = client.get("/oauth/microsoft_ads/start")
+    assert resp.headers["Location"].startswith("https://login.microsoftonline.com/common/oauth2/v2.0/authorize?")
 
 
 def test_export_csv(client):

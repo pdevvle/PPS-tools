@@ -48,7 +48,7 @@ FORMATS: dict[str, CopyFormat] = {
     for f in (
         CopyFormat(
             "google_rsa",
-            "Google Ads · Responsive search ad",
+            "Google & Microsoft Ads · Responsive search ad",
             "google",
             (
                 FieldSpec("headlines", "Headlines", 30, items=(10, 15)),

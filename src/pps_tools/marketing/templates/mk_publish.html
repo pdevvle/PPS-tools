@@ -12,7 +12,7 @@
       {% if editing %}<a class="small" href="{{ url_for('publish') }}">Start a new post instead</a>{% endif %}</div>
 
     {% if not targets %}
-      <div class="banner info">{{ icon("info") }}<p>Connect Meta, Pinterest, X or LinkedIn on the <a href="{{ url_for('connections') }}">Connections</a> page to publish. Google Ads and TikTok are ads-only here.</p></div>
+      <div class="banner info">{{ icon("info") }}<p>Connect Meta, Pinterest, X or LinkedIn on the <a href="{{ url_for('connections') }}">Connections</a> page to publish. Google Ads, Microsoft Advertising and TikTok are ads-only here.</p></div>
     {% endif %}
 
     <form method="post" action="{{ url_for('publish') }}" id="composer" data-busy>

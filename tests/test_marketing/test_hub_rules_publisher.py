@@ -168,7 +168,8 @@ class TestDemoData:
         a, _ = demo_hub.metrics(start, end)
         b, _ = demo_hub.metrics(start, end)
         assert [r.to_dict() for r in a] == [r.to_dict() for r in b]
-        assert {r.network for r in a} >= {"google", "facebook", "instagram", "pinterest", "x", "linkedin", "tiktok"}
+        assert {r.network for r in a} >= {"google", "facebook", "instagram", "pinterest", "x", "linkedin", "tiktok",
+                                               "microsoft"}
 
     def test_pausing_in_demo_stops_spend_from_today(self, demo_hub):
         key = "google_ads:4825519306:20481"

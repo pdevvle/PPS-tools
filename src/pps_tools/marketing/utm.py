@@ -17,6 +17,8 @@ NETWORK_PRESETS = {
     "x": {"paid": ("x", "paid_social"), "organic": ("x", "social")},
     "linkedin": {"paid": ("linkedin", "paid_social"), "organic": ("linkedin", "social")},
     "tiktok": {"paid": ("tiktok", "paid_social"), "organic": ("tiktok", "social")},
+    # What Microsoft's own UTM auto-tagging uses for search ads.
+    "microsoft": {"paid": ("bing", "cpc"), "organic": ("bing", "organic")},
     "email": {"paid": ("newsletter", "email"), "organic": ("newsletter", "email")},
 }
 

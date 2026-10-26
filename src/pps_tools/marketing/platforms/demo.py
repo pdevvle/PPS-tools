@@ -123,6 +123,18 @@ DEMO_ACCOUNTS: dict[str, DemoAccount] = {
             DemoCampaign("1780000000002", "In-Feed — Custom Stickers & Labels", "WEB_CONVERSIONS", 20, 0.52, 0.010, 0.014, 48),
         ),
     ),
+    # Bing search: cheaper clicks than Google and an older, desk-bound B2B crowd.
+    "microsoft_ads": DemoAccount(
+        "180436527",
+        "Priority Print Service",
+        campaigns=(
+            DemoCampaign("413052001", "Search — Business Cards", "SEARCH", 20, 1.65, 0.058, 0.070, 85),
+            DemoCampaign("413052002", "Search — Brochures & Catalogs", "SEARCH", 15, 2.15, 0.047, 0.048, 200),
+            DemoCampaign("413052003", "Performance Max — Online Print Shop", "PERFORMANCE_MAX", 15, 0.80, 0.016, 0.024, 140),
+            DemoCampaign("413052004", "Audience — Remarketing on MSN & Outlook", "AUDIENCE", 8, 0.55, 0.005, 0.009, 120,
+                         paused_days_ago=20),
+        ),
+    ),
 }
 
 DEMO_TARGETS: dict[str, list[PublishTarget]] = {
