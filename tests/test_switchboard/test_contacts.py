@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import io
 
-from pps_tools.switchboard.services import inbox
+from pps_tools.switchboard.services import hooks, inbox
 from tests.test_switchboard.test_inbox import make_channel, receive
 
 
@@ -75,6 +75,16 @@ def test_merge_moves_everything(client):
     assert inbox.get(msg["conversation_id"])["contact_id"] == keep["id"]
     client.get(f"/api/contacts/{dupe_id}", expect=404)
     client.post(f"/api/contacts/{keep['id']}/merge", {"other_id": keep["id"]}, expect=400)
+
+
+def test_create_and_merge_fire_hooks(client, monkeypatch):
+    seen = []
+    monkeypatch.setattr(hooks, "_handlers", {"*": [lambda event, data: seen.append((event, data))]})
+    a = client.post("/api/contacts", {"name": "Lena Ortiz", "email": "lena@bloom.example"})["contact"]
+    b = client.post("/api/contacts", {"name": "Lena O.", "phone": "+16025550111"})["contact"]
+    client.post(f"/api/contacts/{a['id']}/merge", {"other_id": b["id"]})
+    events = [(e, d.get("contact_id"), d.get("merged_id")) for e, d in seen if e.startswith("contact.")]
+    assert events == [("contact.created", a["id"], None), ("contact.created", b["id"], None), ("contact.merged", a["id"], b["id"])]
 
 
 def test_detail_includes_conversation_history(client):

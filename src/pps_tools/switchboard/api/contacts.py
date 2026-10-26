@@ -7,7 +7,7 @@ import sqlite3
 from flask import Blueprint, Response, request
 
 from pps_tools.switchboard import db, realtime
-from pps_tools.switchboard.services import contact_book, inbox_query
+from pps_tools.switchboard.services import contact_book, hooks, inbox_query
 from pps_tools.switchboard.services import contacts as contacts_svc
 from pps_tools.switchboard.services import search as search_svc
 from pps_tools.switchboard.web import (
@@ -67,6 +67,7 @@ def list_contacts():
 def create_contact():
     contact = contact_book.create_contact(body(), current_user()["id"])
     _changed(contact["id"])
+    hooks.fire("contact.created", {"contact_id": contact["id"], "by": current_user()["id"]})
     return ok({"contact": contact_book.serialize_one(contact)}, 201)
 
 
@@ -108,6 +109,7 @@ def merge_contacts(contact_id: int):
     contact = contact_book.merge(contact_id, int(data["other_id"]))
     _changed(contact_id)
     _changed(int(data["other_id"]))
+    hooks.fire("contact.merged", {"contact_id": contact_id, "merged_id": int(data["other_id"]), "by": current_user()["id"]})
     return ok({"contact": contact_book.serialize_one(contact)})
 
 
