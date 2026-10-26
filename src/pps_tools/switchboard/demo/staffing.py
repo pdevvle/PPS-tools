@@ -103,7 +103,10 @@ def seed_staffing(ctx) -> None:
                                         "color": "#f08c00", "created_at": stamp})
     ctx.data["positions"] = positions
     ctx.data["locations"] = {"main": main, "warehouse": warehouse}
-    ctx.data["skills"] = {name: db.insert("skills", {"name": name, "created_at": stamp}) for name in SKILLS}
+    # Another module's seed may already have created some of these skills.
+    for name in SKILLS:
+        db.execute("INSERT OR IGNORE INTO skills (name, created_at) VALUES (?, ?)", name, stamp)
+    ctx.data["skills"] = {r["name"].lower(): r["id"] for r in db.query("SELECT id, name FROM skills")}
 
     today = st.today()
     for key, (number, kind, rate, hired, target, maximum, pos_names, skills, loc) in PROFILES.items():
@@ -118,7 +121,7 @@ def seed_staffing(ctx) -> None:
         for name in pos_names:
             db.insert("staff_positions", {"user_id": uid, "position_id": positions[name]})
         for name, level in skills.items():
-            db.insert("staff_skills", {"user_id": uid, "skill_id": ctx.data["skills"][name], "level": level})
+            db.insert("staff_skills", {"user_id": uid, "skill_id": ctx.data["skills"][name.lower()], "level": level})
 
     # Jamie: weekday evenings + Saturdays. Taylor: not after 2pm on Fridays.
     for wd in range(5):
