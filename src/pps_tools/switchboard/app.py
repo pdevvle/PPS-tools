@@ -49,6 +49,11 @@ def create_app(config: Config | None = None, **overrides) -> Flask:
     )
     app.json.sort_keys = False
     app.extensions["switchboard"] = config
+    if config.proxy_count:
+        from werkzeug.middleware.proxy_fix import ProxyFix
+
+        n = config.proxy_count
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=n, x_proto=n, x_host=n, x_prefix=n)
 
     modules = load_modules()
     app.extensions["switchboard_modules"] = modules

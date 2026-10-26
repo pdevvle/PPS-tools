@@ -169,7 +169,10 @@ them in an internal discussion). Personal email accounts are visible only to the
   and read receipts. Session cookies are marked Secure automatically on https.
 - **Reverse proxy.** Disable response buffering for `/api/events` (live updates use
   Server-Sent Events; with nginx: `proxy_buffering off;` — the app also sends
-  `X-Accel-Buffering: no`) and allow uploads up to 60 MB.
+  `X-Accel-Buffering: no`) and allow uploads up to 60 MB. Set
+  `SWITCHBOARD_PROXY_COUNT=1` (the number of proxies in front of the app) so sign-in
+  throttling and the public chat/form rate limits see visitors' real addresses;
+  without it, `X-Forwarded-For` is ignored because anyone can fake it.
 - **Backups.** `pps switchboard backup /path/to/backup.db` makes a consistent copy while
   the server runs (admins can also download one from Settings → Import & export). Back up
   the `files/` folder in the data directory too — it holds attachments.
@@ -181,8 +184,9 @@ them in an internal discussion). Personal email accounts are visible only to the
   links from Settings → People.
 
 Environment variables: `SWITCHBOARD_DATA_DIR`, `SWITCHBOARD_BASE_URL`,
-`SWITCHBOARD_SECRET_KEY`, `ANTHROPIC_API_KEY` (optional, for AI assists),
-`SWITCHBOARD_MODULES` (development: load only some modules).
+`SWITCHBOARD_SECRET_KEY`, `SWITCHBOARD_PROXY_COUNT` (behind a reverse proxy),
+`ANTHROPIC_API_KEY` (optional, for AI assists), `SWITCHBOARD_MODULES` (development:
+load only some modules).
 
 ## How it's built
 

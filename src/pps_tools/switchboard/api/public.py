@@ -35,7 +35,7 @@ from pps_tools.switchboard.services import users as users_svc
 from pps_tools.switchboard.services.inbox import Inbound, deliver_inbound
 from pps_tools.switchboard.services.rules import in_business_hours
 from pps_tools.switchboard.util import html_to_text, initials, norm_email, norm_phone, now_iso, text_to_html, token
-from pps_tools.switchboard.web import ApiError, bad_request, not_found, ok
+from pps_tools.switchboard.web import ApiError, bad_request, client_ip, not_found, ok
 
 bp = Blueprint("public", __name__)
 
@@ -77,10 +77,6 @@ class RateLimiter:
 session_limiter = RateLimiter(10, 60)
 chat_limiter = RateLimiter(30, 60)
 form_limiter = RateLimiter(10, 60)
-
-
-def client_ip() -> str:
-    return (request.headers.get("X-Forwarded-For") or request.remote_addr or "?").split(",")[0].strip()
 
 
 def _limit(limiter: RateLimiter, scope: str) -> None:

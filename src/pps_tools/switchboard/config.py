@@ -19,6 +19,9 @@ class Config:
     base_url: str = f"http://localhost:{DEFAULT_PORT}"
     testing: bool = False
     start_worker: bool = True
+    # How many reverse proxies sit in front of the app. Their X-Forwarded-* headers
+    # are trusted only when this is set; otherwise anyone could fake their IP.
+    proxy_count: int = 0
 
     @property
     def db_path(self) -> Path:
@@ -50,6 +53,11 @@ class Config:
             or os.environ.get("SWITCHBOARD_BASE_URL")
             or f"http://localhost:{DEFAULT_PORT}"
         )
+        if "proxy_count" not in overrides:
+            try:
+                overrides["proxy_count"] = max(0, int(os.environ.get("SWITCHBOARD_PROXY_COUNT") or 0))
+            except ValueError:
+                overrides["proxy_count"] = 0
         return cls(data_dir=data_dir, secret_key=secret, base_url=base_url.rstrip("/"), **overrides)
 
 

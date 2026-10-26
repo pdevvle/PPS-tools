@@ -20,7 +20,7 @@ from pps_tools.switchboard.services import staffing as st
 from pps_tools.switchboard.services import users as users_svc
 from pps_tools.switchboard.util import iso, now, now_iso, parse_iso, pick_color
 from pps_tools.switchboard.web import (
-    ApiError, as_bool, as_int, audit, bad_request, body, can, conflict, current_user, forbidden, login_required,
+    ApiError, as_bool, as_int, audit, bad_request, body, can, client_ip, conflict, current_user, forbidden, login_required,
     not_found, ok, public_user, require, require_fields,
 )
 from pps_tools.switchboard.worker import Task
@@ -1085,7 +1085,7 @@ KIOSK_MAX_FAILURES = 8
 @require("manage_staff")
 def kiosk_punch():
     """Shop tablet: a PIN identifies the person; punches toggle in / out."""
-    ip = request.headers.get("X-Forwarded-For", request.remote_addr or "?").split(",")[0].strip()
+    ip = client_ip()
     cutoff = time.time() - KIOSK_WINDOW
     with _kiosk_lock:
         recent = [t for t in _kiosk_failures.get(ip, []) if t > cutoff]
