@@ -28,7 +28,7 @@ export function dueLabel(t) {
   if (isSameDay(d, today)) return `Today${time}`;
   if (isSameDay(d, addDays(today, 1))) return `Tomorrow${time}`;
   if (isSameDay(d, addDays(today, -1))) return `Yesterday${time}`;
-  return fmtDate(d, { weekday: true }) + time;
+  return fmtDate(d, { weekday: true }) + (time ? `,${time}` : '');
 }
 
 // Overdue / Today / Upcoming / No due date / Done

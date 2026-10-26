@@ -505,7 +505,7 @@ function OrgDetail({ id, mobile }) {
         <h3 class="contact-card-title">Details</h3>
         <dl class="kv">
           <div class="kv-row"><dt>Domain</dt><dd class="row row-wrap gap-1"><${InlineText} value=${o.domain} placeholder="example.com" label="domain" onSave=${(domain) => save({ domain })} />
-            ${o.domain && html`<${Button} size="sm" variant="ghost" icon="link" onClick=${linkDomain}>Link @${o.domain}</${Button}>`}</dd></div>
+            ${o.domain && html`<${Button} size="sm" variant="ghost" icon="link" data-tip=${`Link everyone with an @${o.domain} address`} onClick=${linkDomain}>Link people</${Button}>`}</dd></div>
           <div class="kv-row"><dt>Phone</dt><dd><${InlineText} value=${o.phone} label="phone" onSave=${(phone) => save({ phone })} /></dd></div>
           <div class="kv-row"><dt>Website</dt><dd><${InlineText} value=${o.website} label="website" onSave=${(website) => save({ website })} />
             ${o.website && html` <a href=${o.website} target="_blank" rel="noopener" aria-label="Open website"><${Icon} name="external-link" size=${12} /></a>`}</dd></div>

@@ -60,6 +60,7 @@
 .task-panel .task-quick-add { margin-top: 6px; box-shadow: none; border-radius: var(--radius); padding: 2px 4px 2px 8px; }
 .task-panel .task-quick-input { font-size: 13px; height: 26px; }
 .task-panel .task-quick-add .btn { display: none; }
+.task-widget { border-radius: 0 0 var(--radius-lg) var(--radius-lg); overflow: hidden; }
 .task-widget .task-row { border-bottom: 1px solid var(--divider); }
 .task-widget .task-row:last-child { border-bottom: 0; }
 

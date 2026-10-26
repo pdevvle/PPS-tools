@@ -332,6 +332,8 @@ def _seed_team_history(ctx, job_windows: list[dict]) -> None:
             uid, "part_time" if key == "parttime" else "full_time", rate, _position_for(key, positions), stamp,
         )
     busy_week = today - timedelta(days=17)
+    for window in job_windows:
+        window["left"] = window["minutes"] * rng.uniform(0.75, 1.35)
     for days_ago in range(35, 0, -1):
         day = today - timedelta(days=days_ago)
         if day >= stop:
@@ -355,20 +357,26 @@ def _seed_team_history(ctx, job_windows: list[dict]) -> None:
             if key == "press" and abs((day - busy_week).days) <= 3:
                 extra = rng.randint(90, 150)  # a busy week with overtime on press
             clock_out = end + timedelta(minutes=rng.randint(-5, 12) + extra)
-            jobs_today = [w for w in job_windows if w["start"].astimezone(ctx.tz).date() == day]
-            if key in ("press", "bindery", "parttime") and jobs_today:
-                midday = clock_in + (clock_out - clock_in) / 2
-                for job, (a, b) in zip((jobs_today[0], jobs_today[-1]), ((clock_in, midday), (midday, clock_out))):
+            # Production staff punch onto that day's jobs until each job's hours (close to its
+            # estimate) are used up; the rest of the shift is general shop time.
+            cursor = clock_in
+            if key in ("press", "bindery", "parttime"):
+                for job in (w for w in job_windows if w["start"].astimezone(ctx.tz).date() == day):
+                    take = min(job["left"], (clock_out - cursor).total_seconds() / 60 - 30)
+                    if take < 20:
+                        continue
+                    seg_end = cursor + timedelta(minutes=round(take))
                     db.insert("time_entries", {
-                        "user_id": uid, "shift_id": sid, "job_id": job["id"], "clock_in": iso(a), "clock_out": iso(b),
-                        "break_minutes": brk // 2, "source": "clock", "status": "approved",
-                        "approved_by": ctx.uid("manager"), "approved_at": iso(b), "created_at": iso(a),
+                        "user_id": uid, "shift_id": sid, "job_id": job["id"], "clock_in": iso(cursor), "clock_out": iso(seg_end),
+                        "source": "clock", "status": "approved", "approved_by": ctx.uid("manager"),
+                        "approved_at": iso(seg_end), "created_at": iso(cursor),
                     })
-                continue
+                    job["left"] -= round(take)
+                    cursor = seg_end
             db.insert("time_entries", {
-                "user_id": uid, "shift_id": sid, "clock_in": iso(clock_in), "clock_out": iso(clock_out),
+                "user_id": uid, "shift_id": sid, "clock_in": iso(cursor), "clock_out": iso(clock_out),
                 "break_minutes": brk, "source": "clock", "status": "approved", "approved_by": ctx.uid("manager"),
-                "approved_at": iso(clock_out), "created_at": iso(clock_in),
+                "approved_at": iso(clock_out), "created_at": iso(cursor),
             })
     if not db.scalar("SELECT COUNT(*) FROM time_off_requests WHERE end_date < ?", today.isoformat()):
         for key, back, length in (("bindery", 24, 2), ("designer", 11, 1)):
