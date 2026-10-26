@@ -403,7 +403,11 @@ export default function Reports({ route }) {
     if (route.query.team_id) query.team_id = route.query.team_id;
     if (route.query.channel_id) query.channel_id = route.query.channel_id;
   }
-  const { data, error, loading, reload } = useReport(current, query);
+  const fetched = useReport(current, query);
+  // Right after switching reports the previous report's numbers are still loaded;
+  // never hand them to the new report's component.
+  const data = fetched.data && fetched.data.__report === current ? fetched.data : null;
+  const { error, loading, reload } = fetched;
   const { title, Component } = REPORTS[current];
   const days = Math.round((fromDateKey(range.end) - fromDateKey(range.start)) / 86400000) + 1;
   const prevLabel = `previous ${days} days`;
