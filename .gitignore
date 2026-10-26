@@ -35,7 +35,3 @@ htmlcov/
 
 # Switchboard runtime data (database, attachments, secret key)
 switchboard_data/
-
-# PPS Books data (database, attachments, session key)
-books-data/
-books-demo/
