@@ -11,6 +11,7 @@ from pps_tools.commands.report import report
 from pps_tools.commands.export import export
 from pps_tools.commands.export_comp_js import export_comp_js
 from pps_tools.commands.import_data import import_group
+from pps_tools.switchboard.cli import switchboard_group
 
 
 @click.group()
@@ -30,6 +31,11 @@ def main():
       4. pps compare -p business_cards  # Compare prices
       5. pps report --type dashboard    # Generate reports
       6. pps export --format csv        # Export raw data
+
+    Switchboard (team inbox, staffing and job scheduling):
+
+    \b
+      pps switchboard run               # open the web app
     """
 
 
@@ -42,6 +48,7 @@ main.add_command(report)
 main.add_command(export)
 main.add_command(export_comp_js)
 main.add_command(import_group, "import")
+main.add_command(switchboard_group, "switchboard")
 
 
 if __name__ == "__main__":
