@@ -64,7 +64,7 @@ function ModuleOutlet({ route }) {
   const allowed = mod && (!mod.perm || (me.permissions || []).includes(mod.perm));
   const { component: Component, loading, error } = useModule(allowed ? mod : null);
   if (!mod || !allowed) {
-    return html`<div class="module-placeholder"><${Empty} icon="compass" title="Nothing here"
+    return html`<div class="module-placeholder"><${Empty} icon="search" title="Nothing here"
       action=${html`<${Button} variant="primary" onClick=${() => navigate(homePath(me))}>Go home</${Button}>`}>
       ${mod ? "You don't have access to this area." : "This page doesn't exist."}</${Empty}></div>`;
   }
