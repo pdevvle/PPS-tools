@@ -98,7 +98,9 @@ def test_staff_profiles_rates_and_permissions(client, make_user, positions):
 
 def test_skills_and_availability(client, press):
     user, api = press
-    skill = client.post("/api/skills", {"name": "Digital press"})["item"]
+    # (the jobs module seeds common skills into the same table, so use a name it doesn't)
+    skill = client.post("/api/skills", {"name": "Spot UV coater"})["item"]
+    client.post("/api/skills", {"name": "spot uv coater"}, expect=409)
     client.put(f"/api/staff/{user['id']}/skills", {"skills": [{"skill_id": skill["id"], "level": 3}]})
     client.put(f"/api/staff/{user['id']}/skills", {"skills": [{"skill_id": skill["id"], "level": 7}]}, expect=400)
     assert client.get(f"/api/staff/{user['id']}")["skills"] == [{"skill_id": skill["id"], "level": 3}]
