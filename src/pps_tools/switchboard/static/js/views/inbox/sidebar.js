@@ -2,7 +2,7 @@
 
 import { html, useState } from '../../lib/preact.js';
 import { api } from '../../lib/api.js';
-import { useStore, can } from '../../lib/store.js';
+import { useStore, can, getState, setState } from '../../lib/store.js';
 import { useFetch } from '../../lib/hooks.js';
 import { navigate } from '../../lib/router.js';
 import { SidebarHeader, SidebarSection, SidebarItem } from '../../ui/layout.js';
@@ -73,9 +73,36 @@ function onDropToLabel(labelId) {
   };
 }
 
-export function InboxSidebar({ parsed }) {
+export async function saveSearch(q) {
+  const name = await promptDialog({ title: 'Save this search', label: 'Name', value: q, confirmLabel: 'Save' });
+  if (!name) return;
+  const me = getState().me;
+  const list = [...((me.prefs || {}).saved_searches || []), { id: Date.now(), name, q }];
+  try {
+    const res = await api.patch('/me/prefs', { saved_searches: list });
+    setState({ me: { ...getState().me, prefs: res.prefs } });
+  } catch (err) { toastError(err); }
+}
+
+function savedMenu(e, view) {
+  e.preventDefault();
+  showMenu(e.currentTarget, [{
+    label: 'Remove saved search', icon: 'trash', danger: true,
+    onSelect: async () => {
+      const me = getState().me;
+      const list = ((me.prefs || {}).saved_searches || []).filter((v) => v.id !== view.id);
+      try {
+        const res = await api.patch('/me/prefs', { saved_searches: list });
+        setState({ me: { ...getState().me, prefs: res.prefs } });
+      } catch (err) { toastError(err); }
+    },
+  }]);
+}
+
+export function InboxSidebar({ parsed, currentQ }) {
   const teams = useStore((s) => s.teams);
   const me = useStore((s) => s.me);
+  const saved = (me.prefs || {}).saved_searches || [];
   const labels = useStore((s) => s.boot.labels || []);
   const { data: counts } = useCounts();
   const [showMore, setShowMore] = useState(MORE.includes(parsed.mailbox));
@@ -122,6 +149,10 @@ export function InboxSidebar({ parsed }) {
     return html`<${SidebarItem} key=${id} href=${m.path} icon=${m.icon} label=${m.label} active=${parsed.mailbox === id ? true : undefined} />`;
   })}
     </${SidebarSection}>
+    ${saved.length > 0 && html`<${SidebarSection} title="Saved searches" collapsible storageKey="inbox-saved">
+      ${saved.map((v) => html`<${SidebarItem} key=${v.id} href=${`/inbox/search?q=${encodeURIComponent(v.q)}`} icon="search" label=${v.name}
+        active=${parsed.mailbox === 'search' && currentQ === v.q} title=${v.q} onContextMenu=${(e) => savedMenu(e, v)} />`)}
+    </${SidebarSection}>`}
     ${myTeams.length > 0 && html`<${SidebarSection} title="Team inboxes" collapsible storageKey="inbox-teams">
       ${myTeams.map((t) => html`<${TeamItem} key=${t.id} team=${t} counts=${counts} active=${parsed.teamId === t.id} />`)}
     </${SidebarSection}>`}

@@ -6,12 +6,12 @@ import { api } from '../../lib/api.js';
 import { useFetch, useIsMobile } from '../../lib/hooks.js';
 import { useHotkeys } from '../../lib/shortcuts.js';
 import { navigate } from '../../lib/router.js';
-import { useStore } from '../../lib/store.js';
+import { useStore, getState } from '../../lib/store.js';
 import { ModuleLayout, SidebarButton } from '../../ui/layout.js';
 import { Button, Checkbox, Icon, IconButton, Loading, SearchInput, Segmented, cx } from '../../ui/components.js';
 import { showPopover, toast, toastError } from '../../ui/overlay.js';
 import { registerCommands } from '../../ui/palette.js';
-import { InboxSidebar, useCounts } from './sidebar.js';
+import { InboxSidebar, useCounts, saveSearch } from './sidebar.js';
 import { ConversationList, BulkBar } from './list.js';
 import { ConversationView } from './conversation.js';
 import { Composer, scheduledToast } from './composer.js';
@@ -44,7 +44,7 @@ function searchHelp(anchor) {
   </div>`, { width: 360, placement: 'bottom-end' });
 }
 
-function ListHeader({ parsed, route, count, onSearch, searchRef }) {
+function ListHeader({ parsed, route, count, onSearch, searchRef, onTakeNext }) {
   const [q, setQ] = useState(route.query.q || '');
   const timer = useRef(null);
   useEffect(() => { if (parsed.mailbox !== 'search') setQ(''); }, [parsed.mailbox]);
@@ -65,12 +65,15 @@ function ListHeader({ parsed, route, count, onSearch, searchRef }) {
     <div class="list-search">
       <${SearchInput} value=${q} onValue=${change} placeholder="Search conversations" inputRef=${searchRef}
         onKeyDown=${(e) => { if (e.key === 'Enter') { clearTimeout(timer.current); onSearch(q); } if (e.key === 'Escape') { change(''); e.currentTarget.blur(); } }} />
+      ${parsed.mailbox === 'search' && route.query.q && html`<${IconButton} icon="bookmark" label="Save this search" size="sm" onClick=${() => saveSearch(route.query.q)} />`}
       <${IconButton} icon="help" label="Search tips" size="sm" onClick=${(e) => searchHelp(e.currentTarget)} />
     </div>
     ${parsed.teamId && html`<div class="list-tabs">
       <${Segmented} size="sm" value=${parsed.teamView || 'open'}
         options=${TEAM_VIEWS.map((v) => ({ value: v.id, label: v.label }))}
         onChange=${(v) => navigate(`/inbox/team/${parsed.teamId}${v === 'open' ? '' : '/' + v}`)} />
+      <span class="grow"></span>
+      ${onTakeNext && html`<${Button} size="sm" icon="user-check" onClick=${onTakeNext} data-tip="Assign the longest-waiting unassigned conversation to yourself">Take next</${Button}>`}
     </div>`}
     ${parsed.labelId && html`<div class="list-tabs">
       <${Checkbox} checked=${route.query.closed === '1'} label="Include closed"
@@ -159,6 +162,17 @@ export default function Inbox({ route }) {
     const next = items[idx + 1] || items[idx - 1];
     if (next && next.id !== fromId) open(next); else back();
   };
+  // Team inbox: grab the longest-waiting unassigned conversation.
+  const takeNext = async () => {
+    try {
+      const res = await api.get('/conversations', { mailbox: `team:${parsed.teamId}:unassigned`, limit: 200 });
+      const oldest = [...res.items].sort((a, b) => (a.last_activity_at < b.last_activity_at ? -1 : 1))[0];
+      if (!oldest) { toast('No unassigned conversations — nice work'); return; }
+      await act([oldest.id], 'assign', { user_ids: [getState().me.id], mode: 'add' });
+      open(oldest);
+    } catch (err) { toastError(err); }
+  };
+
   const onSearch = (value) => {
     const v = value.trim();
     if (v) navigate('/inbox/search', { replace: parsed.mailbox === 'search', query: { q: v } });
@@ -221,12 +235,12 @@ export default function Inbox({ route }) {
         </div>`;
 
   const showDetail = !!(openId || parsed.compose);
-  return html`<${ModuleLayout} sidebar=${html`<${InboxSidebar} parsed=${parsed} />`} class="inbox-module">
+  return html`<${ModuleLayout} sidebar=${html`<${InboxSidebar} parsed=${parsed} currentQ=${q} />`} class="inbox-module">
     <div class=${cx('inbox-panes', showDetail && 'has-detail')}>
       <section class="inbox-list-pane" aria-label="Conversation list">
         ${selection.size > 0
     ? html`<${BulkBar} items=${items || []} selection=${selection} setSelection=${setSelection} mailbox=${parsed.mailbox} />`
-    : html`<${ListHeader} parsed=${parsed} route=${route} count=${countForHeader} onSearch=${onSearch} searchRef=${searchRef} />`}
+    : html`<${ListHeader} parsed=${parsed} route=${route} count=${countForHeader} onSearch=${onSearch} searchRef=${searchRef} onTakeNext=${parsed.teamId ? takeNext : null} />`}
         ${parsed.mailbox === 'search' && !q
     ? html`<div class="search-empty">Type to search every conversation you can see. Press <kbd class="kbd">?</kbd> next to the box for operators.</div>`
     : html`<${ConversationList}
