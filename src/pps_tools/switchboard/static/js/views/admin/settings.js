@@ -301,7 +301,7 @@ def is_from_switchboard(secret: str, body: bytes, header: str) -> bool:
 }
 
 export function DevelopersSettings() {
-  return html`<div>
+  return html`<div class="admin-page">
     <${TokensSection} />
     <${WebhooksSection} />
   </div>`;
@@ -404,7 +404,7 @@ export function IntegrationsSettings() {
     if (!(await confirmDialog({ title: `Remove “${item.name}”?`, message: 'It disappears from the conversation sidebar for everyone.', confirmLabel: 'Remove', danger: true }))) return;
     try { await api.del(`/admin/integrations/${item.id}`); toast('Removed'); refresh(); } catch (err) { toastError(err); }
   };
-  return html`<div>
+  return html`<div class="admin-page">
     <${Section} title="Sidebar apps" description="Show information from your other tools next to every conversation, matched to the customer you're talking to."
       actions=${html`<${Button} icon="plus" iconRight="chevron-down" onClick=${add} disabled=${!state.data}>Add app</${Button}>`}>
       ${items.length ? html`<div class="settings-list">
@@ -469,7 +469,7 @@ export function AISettings() {
     } catch (err) { setResult({ ok: false, message: err.message }); } finally { setTesting(false); }
   };
   const current = data.models.find((m) => m.id === data.model);
-  return html`<div>
+  return html`<div class="admin-page">
     <${Section} title="Status">
       ${!data.enabled ? html`<${Banner} tone="muted" icon="circle-pause">AI features are off. Teammates won't see AI buttons.</${Banner}>`
     : !data.configured ? html`<${Banner} tone="warn">Add an Anthropic API key to turn on AI features.</${Banner}>`
@@ -510,6 +510,23 @@ export function AISettings() {
 // -- data: backup, export, audit -----------------------------------------------------------
 
 const ACTION_LABELS = {
+  'user.create': 'Added a person',
+  'user.update': "Changed someone's details or role",
+  'user.password_changed': 'Changed a password',
+  'staff.update': 'Changed staff details',
+  'time_entry.create': 'Added a time entry',
+  'time_entry.update': 'Edited a time entry',
+  'time_entry.delete': 'Deleted a time entry',
+  'timesheets.approve': 'Approved timesheets',
+  'channel.create': 'Connected a channel',
+  'channel.update': 'Changed a channel',
+  'channel.delete': 'Removed a channel',
+  'channel.rotate_key': 'Rotated a channel key',
+  'rule.create': 'Added a rule',
+  'rule.update': 'Changed a rule',
+  'rule.delete': 'Deleted a rule',
+  'rule.apply': 'Ran a rule on existing conversations',
+  'job.delete': 'Deleted a job',
   'api_token.create': 'Created an API token',
   'api_token.revoke': 'Revoked an API token',
   'webhook.create': 'Added a webhook',
@@ -552,7 +569,7 @@ function AuditLog() {
     setBusy(true);
     try { const r = await api.get('/admin/audit', { limit: 50, before: cursor }); setOlder((o) => [...o, ...r.items]); setNext(r.next); } catch (err) { toastError(err); } finally { setBusy(false); }
   };
-  return html`<${Section} title="Audit log" description="Sign-ins, permission changes, settings and other admin actions, newest first."
+  return html`<${Section} title="Audit log" description="Changes to people and roles, settings, channels, rules, timesheets, integrations, and every backup or export, newest first."
     actions=${html`<${IconButton} icon="refresh-cw" label="Refresh" onClick=${() => { setOlder([]); setNext(undefined); state.reload(); }} />`}>
     ${items.length ? html`<div class="table-wrap audit-wrap"><table class="table audit-table">
       <thead><tr><th>When</th><th>Who</th><th>What</th><th class="hide-mobile">Details</th></tr></thead>
@@ -569,7 +586,7 @@ function AuditLog() {
 }
 
 export function DataSettings() {
-  return html`<div>
+  return html`<div class="admin-page">
     <${Section} title="Backup" description="A consistent copy of the whole database as one SQLite file, safe to take while people are working. It includes password hashes and connection secrets, so store it somewhere safe.">
       <a class="btn btn-secondary" href="/api/admin/backup" download data-native><${Icon} name="archive" size=${16} /><span class="btn-label">Download backup</span></a>
       <p class="muted text-sm mt-2">Attachments are kept as files next to the database (the <span class="mono">files</span> folder in the data directory); back that folder up too.

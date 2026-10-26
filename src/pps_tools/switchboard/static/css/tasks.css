@@ -1,5 +1,9 @@
 /* tasks module styles (builds on base.css tokens). */
 
+/* Keep long content from stretching the app shell on phones (the column-reverse shell
+   lets .app-main grow to its content); the module's own panes scroll instead. */
+.tasks-module { contain: size; }
+
 .tasks-body { background: var(--surface-2); }
 .tasks-inner { max-width: 820px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
 .tasks-search { width: 240px; }

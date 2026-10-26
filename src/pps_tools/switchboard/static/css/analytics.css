@@ -43,6 +43,10 @@
 
 /* -- page ------------------------------------------------------------------------- */
 
+/* Long pages on phones: let the main column shrink so the header stays on screen
+   (scoped workaround until .app-main gets min-height: 0 in app.css). */
+.app-main:has(.reports-module) { min-height: 0; }
+
 .reports-module .page-body { background: var(--surface-2); }
 .reports-filters { gap: 8px; }
 .reports-select { width: auto; min-width: 150px; max-width: 220px; }

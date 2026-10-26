@@ -1,5 +1,9 @@
 /* chat module styles (builds on base.css tokens). */
 
+/* Keep long content from stretching the app shell on phones (the column-reverse shell
+   lets .app-main grow to its content); the module's own panes scroll instead. */
+.chat-module { contain: size; }
+
 /* -- rooms list (sidebar + phone list) ------------------------------------------- */
 
 .chat-rooms { display: flex; flex-direction: column; }

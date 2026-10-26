@@ -201,6 +201,7 @@ export function ScheduleBoard({ route }) {
   const [dropHint, setDropHint] = useState(null); // { rowKey, x }
   const [showQueue, setShowQueue] = useState(!mobile);
   const dragRef = useRef(null);
+  const suppressClick = useRef(false); // the click that ends a real drag shouldn't open details
   const scrolledFor = useRef(null);
 
   useLayoutEffect(() => {
@@ -337,9 +338,10 @@ export function ScheduleBoard({ route }) {
   };
 
   // -- drag: move & resize ------------------------------------------------------------
-  // Listeners go on in pointerdown itself (not an effect) so a quick click or tap can't
-  // release before they exist. No preventDefault: the overlay host closes any open
-  // popover on mousedown, and CSS keeps the grid from selecting text.
+  // Listeners go on in pointerdown itself (not an effect) so a quick click can't release
+  // before they exist. A plain click opens details from the click handler, after the
+  // overlay host has closed (or toggled) popovers on mousedown — for mouse, pen and touch
+  // alike. CSS keeps the grid from selecting text, so no preventDefault here.
   const trackX = (clientX) => {
     const el = scrollRef.current;
     const rect = el.getBoundingClientRect();
@@ -353,10 +355,8 @@ export function ScheduleBoard({ route }) {
 
   const finishDrag = async (d) => {
     const b = d.block;
-    if (!d.moved) {
-      openDetails(d.anchorEl, b);
-      return;
-    }
+    if (!d.moved) return;
+    suppressClick.current = true;
     const preview = previewTimes(d);
     const fields = { start_at: preview.start.toISOString(), end_at: preview.end.toISOString() };
     if (d.mode === 'move' && d.targetRow !== d.row) {
@@ -374,12 +374,9 @@ export function ScheduleBoard({ route }) {
   const startDrag = (e, block, mode) => {
     if (!manage || e.button !== 0 || dragRef.current) return;
     e.stopPropagation();
-    const target = e.currentTarget;
+    suppressClick.current = false;
     const row = rowKey(group === 'user' ? block.user_id : block.resource_id);
-    dragRef.current = {
-      id: block.id, block, mode, startX: e.clientX, startY: e.clientY, dx: 0, moved: false, row, targetRow: row,
-      anchorEl: mode === 'resize' ? target.parentElement : target,
-    };
+    dragRef.current = { id: block.id, block, mode, startX: e.clientX, startY: e.clientY, dx: 0, moved: false, row, targetRow: row };
     setDrag(dragRef.current);
     const onMove = (ev) => {
       const d = dragRef.current;
@@ -563,7 +560,10 @@ export function ScheduleBoard({ route }) {
                     style=${{ left: g.left + 'px', width: g.width + 'px', top: top + 'px', '--block': b.stage_color || 'var(--accent)' }}
                     title=${`${b.job_number} · ${b.name}\n${fmtTimeShort(b.start_at)}–${fmtTimeShort(b.end_at)}${bad ? '\n⚠ ' + b.conflicts.map((c) => c.message).join('\n⚠ ') : ''}`}
                     onPointerDown=${(e) => (manage ? startDrag(e, b, 'move') : null)}
-                    onClick=${(e) => { if (!manage) openDetails(e.currentTarget, b); }}
+                    onClick=${(e) => {
+      if (suppressClick.current) { suppressClick.current = false; return; }
+      openDetails(e.currentTarget, b);
+    }}
                     role="button" tabIndex="0"
                     onKeyDown=${(e) => { if (e.key === 'Enter') openDetails(e.currentTarget, b); }}
                   >

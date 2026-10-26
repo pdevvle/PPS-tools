@@ -87,21 +87,24 @@ export function LineChart({ labels, series, format = compact, xFormat = (l) => l
   const top = ticks[ticks.length - 1] || 1;
   const narrow = width < 460;
   const labelChars = Math.max(...series.map((s) => s.label.length), 0);
-  const direct = !narrow && series.length <= 4;
-  const m = { l: 40, r: direct ? Math.min(130, labelChars * 6.6 + 22) : 12, t: 10, b: 26 };
+  const mt = 10;
+  const mb = 26;
+  const ph = height - mt - mb;
+  const y = (v) => mt + ph - ((v || 0) / top) * ph;
+
+  // End labels only when they fit and don't collide; otherwise the legend carries identity.
+  let ends = !narrow && series.length <= 4 && n > 0
+    ? series.map((s, i) => ({ i, y: y(s.values[n - 1]), label: s.label, value: format(s.values[n - 1] || 0) })) : [];
+  const sorted = [...ends].sort((a, b) => a.y - b.y);
+  if (sorted.some((e, k) => k && e.y - sorted[k - 1].y < 14)) ends = [];
+
+  const m = { l: 40, r: ends.length ? Math.min(130, labelChars * 6.6 + 22) : 12, t: mt, b: mb };
   const pw = Math.max(10, width - m.l - m.r);
-  const ph = height - m.t - m.b;
   const x = (i) => m.l + (n <= 1 ? pw / 2 : (i * pw) / (n - 1));
-  const y = (v) => m.t + ph - ((v || 0) / top) * ph;
 
   const paths = series.map((s) => s.values.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(''));
   const area = series.length === 1 && n > 1
     ? `${paths[0]}L${x(n - 1).toFixed(1)},${y(0)}L${x(0).toFixed(1)},${y(0)}Z` : null;
-
-  // End labels only when they don't collide; otherwise the legend carries identity.
-  let ends = direct ? series.map((s, i) => ({ i, y: y(s.values[n - 1]), label: s.label, value: format(s.values[n - 1] || 0) })) : [];
-  const sorted = [...ends].sort((a, b) => a.y - b.y);
-  if (sorted.some((e, k) => k && e.y - sorted[k - 1].y < 14)) ends = [];
 
   const every = Math.max(1, Math.ceil(n / Math.max(2, Math.floor(pw / 70))));
   const show = (idx) => {

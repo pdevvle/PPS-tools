@@ -1,6 +1,10 @@
 /* Admin: API tokens, webhooks, sidebar apps, AI settings, data & audit, and the
    sidebar-app panels in the conversation sidebar. */
 
+/* Long pages on phones: let the main column shrink so the header stays on screen
+   (scoped workaround until .app-main gets min-height: 0 in app.css). */
+.app-main:has(.admin-page) { min-height: 0; }
+
 .admin-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
 .admin-row-icon {

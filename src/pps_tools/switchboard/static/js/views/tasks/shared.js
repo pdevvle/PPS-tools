@@ -149,6 +149,13 @@ export function QuickAdd({ defaults = {}, placeholder = 'Add a task…', onCreat
 }
 
 // Right-hand drawer for ?task=<id>
+// Grow a textarea to fit its text (the title can wrap over a few lines).
+function fitHeight(el) {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 'px';
+}
+
 export function TaskDrawer({ id, onClose }) {
   const teams = useStore((s) => s.teams);
   const me = useStore((s) => s.me);
@@ -187,8 +194,8 @@ export function TaskDrawer({ id, onClose }) {
       ${task && html`<div class="task-drawer-body">
         <div class="row row-top gap-2">
           <${TaskCheck} task=${task} onChange=${(t) => setData((d) => ({ ...d, task: t }))} />
-          <textarea class="task-title-input" rows="1" value=${task.title} aria-label="Title"
-            onInput=${(e) => { e.currentTarget.style.height = 'auto'; e.currentTarget.style.height = e.currentTarget.scrollHeight + 'px'; }}
+          <textarea class="task-title-input" rows="1" value=${task.title} aria-label="Title" ref=${fitHeight}
+            onInput=${(e) => fitHeight(e.currentTarget)}
             onBlur=${(e) => { const v = e.currentTarget.value.trim(); if (v && v !== task.title) patch({ title: v }); }}
             onKeyDown=${(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}></textarea>
         </div>
