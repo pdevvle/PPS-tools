@@ -216,7 +216,7 @@ def resuggest(account_id: int):
         from pps_tools.books.services import ai
 
         try:
-            used_ai = ai.categorize_feed(s, [it for it in items if not it.suggestion_source], core.config())
+            used_ai = ai.categorize_feed(s, items, core.config())
         except BooksError as exc:
             flash(str(exc), "error")
     s.commit()

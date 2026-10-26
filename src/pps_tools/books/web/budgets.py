@@ -12,7 +12,7 @@ from sqlalchemy import delete as sa_delete
 from sqlalchemy import func, select
 
 from pps_tools.books.models import Budget, BudgetLine, Customer, Location, TrackingClass
-from pps_tools.books.money import MoneyError, cents, round_cents
+from pps_tools.books.money import MoneyError, cents, percent_of
 from pps_tools.books.services import audit
 from pps_tools.books.services import dates as D
 from pps_tools.books.services.accounts import ordered_accounts
@@ -109,7 +109,7 @@ def _create(s) -> Budget:
 def _prefill_from_actuals(s, budget: Budget, adjust: str) -> None:
     """Last fiscal year's actual amounts, month by month, optionally up or down a percent."""
     try:
-        factor = 1 + Decimal(str(adjust).rstrip("%")) / 100
+        pct = Decimal(str(adjust).strip().rstrip("%") or "0")
     except InvalidOperation:
         raise ValidationError("The adjustment has to be a percent, like 5 or -10.", "adjust_pct") from None
     types = {a.id: a.type for a in ordered_accounts(s, types=PL_TYPES)}
@@ -123,7 +123,7 @@ def _prefill_from_actuals(s, budget: Budget, adjust: str) -> None:
             if dim and dim_value is None:
                 continue
             value = -amount if types[account_id] in CREDIT_NORMAL else amount
-            value = round_cents(Decimal(value) * factor)
+            value += percent_of(value, pct)
             if value:
                 s.add(BudgetLine(budget_id=budget.id, account_id=account_id, period=i + 1,
                                  subdivision_id=dim_value if dim else None, amount_cents=value))

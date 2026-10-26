@@ -140,17 +140,18 @@ def validate_account(s: Session, acct: Account) -> None:
             if node.id == acct.id:
                 raise ValidationError("An account can't be its own parent.", "parent_id")
             node = node.parent
-    dup = s.scalar(select(Account).where(func.lower(Account.name) == acct.name.strip().lower(),
-                                         Account.parent_id.is_(acct.parent_id) if acct.parent_id is None
-                                         else Account.parent_id == acct.parent_id,
-                                         Account.id != (acct.id or 0)))
+    # no_autoflush: a new account already added to the session must not be flushed and then found as its own duplicate.
+    with s.no_autoflush:
+        dup = s.scalar(select(Account).where(func.lower(Account.name) == acct.name.strip().lower(),
+                                             Account.parent_id.is_(acct.parent_id) if acct.parent_id is None
+                                             else Account.parent_id == acct.parent_id,
+                                             Account.id != (acct.id or 0)))
+        dupn = s.scalar(select(Account).where(Account.number == acct.number, Account.id != (acct.id or 0))) \
+            if acct.number else None
     if dup is not None:
         raise ValidationError(f"Another account is already named “{acct.name}”.", "name")
-    if acct.number:
-        dupn = s.scalar(select(Account).where(Account.number == acct.number, Account.id != (acct.id or 0)))
-        if dupn is not None:
-            raise ValidationError(f"Account number {acct.number} is already used by {dupn.full_name}.",
-                                  "number")
+    if dupn is not None:
+        raise ValidationError(f"Account number {acct.number} is already used by {dupn.full_name}.", "number")
     if acct.system_key and acct.id:
         expected_type = SYSTEM_ACCOUNTS.get(acct.system_key, (None, acct.type))[1]
         if expected_type != acct.type:

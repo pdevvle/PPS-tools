@@ -9,6 +9,7 @@
     STRIPE_WEBHOOK_SECRET whsec_... for /stripe/webhook
     SMTP_HOST SMTP_PORT SMTP_USER SMTP_PASSWORD SMTP_FROM SMTP_TLS  outgoing email
     ANTHROPIC_API_KEY     optional: AI categorization and receipt reading
+    BOOKS_AI_MODEL        Claude model for those (claude-opus-5-5)
 """
 
 from __future__ import annotations
@@ -43,6 +44,7 @@ class Config:
     smtp_from: Optional[str] = field(default_factory=lambda: os.environ.get("SMTP_FROM"))
     smtp_tls: bool = field(default_factory=lambda: os.environ.get("SMTP_TLS", "1") not in ("0", "false", "no"))
     anthropic_api_key: Optional[str] = field(default_factory=lambda: os.environ.get("ANTHROPIC_API_KEY"))
+    ai_model: str = field(default_factory=lambda: os.environ.get("BOOKS_AI_MODEL", "claude-opus-5-5"))
     testing: bool = False
     max_upload_mb: int = 25
 

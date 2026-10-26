@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Optional
 
@@ -188,6 +188,8 @@ def _reminders(s: Session, config, today: date, base_url: str, out: RunReport) -
             continue
         try:
             if email_service.send_reminder(s, config, inv, base_url):
+                # Stamp it with the day this run is for, which is what the marks above compare against.
+                inv.last_reminder_at = datetime.combine(today, datetime.min.time())
                 sent += 1
         except BooksError as exc:
             out.errors.append(f"Reminder for invoice {inv.number}: {exc}")

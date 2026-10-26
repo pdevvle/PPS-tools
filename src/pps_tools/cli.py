@@ -12,6 +12,7 @@ from pps_tools.commands.export import export
 from pps_tools.commands.export_comp_js import export_comp_js
 from pps_tools.commands.import_data import import_group
 from pps_tools.commands.qb_categorize import qb_categorize
+from pps_tools.books.cli import books_group
 
 
 @click.group()
@@ -31,6 +32,12 @@ def main():
       4. pps compare -p business_cards  # Compare prices
       5. pps report --type dashboard    # Generate reports
       6. pps export --format csv        # Export raw data
+
+    PPS Books (bookkeeping and invoicing with Stripe payments):
+
+    \b
+      pps books serve                   # open the web app
+      pps books demo                    # try it with a demo company
     """
 
 
@@ -44,6 +51,7 @@ main.add_command(export)
 main.add_command(export_comp_js)
 main.add_command(import_group, "import")
 main.add_command(qb_categorize)
+main.add_command(books_group, "books")
 
 
 if __name__ == "__main__":
