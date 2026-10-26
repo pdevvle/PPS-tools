@@ -12,6 +12,7 @@ from pps_tools.commands.export import export
 from pps_tools.commands.export_comp_js import export_comp_js
 from pps_tools.commands.import_data import import_group
 from pps_tools.commands.qb_categorize import qb_categorize
+from pps_tools.commands.marketing import marketing_group
 from pps_tools.switchboard.cli import switchboard_group
 
 
@@ -32,6 +33,16 @@ def main():
       4. pps compare -p business_cards  # Compare prices
       5. pps report --type dashboard    # Generate reports
       6. pps export --format csv        # Export raw data
+
+    Marketing Hub (ads + social across Google, Meta, Pinterest, X, LinkedIn, TikTok):
+
+    \b
+      pps marketing serve               # open the web app
+
+    Switchboard (team inbox, staffing and job scheduling):
+
+    \b
+      pps switchboard run               # open the web app
     """
 
 
@@ -45,6 +56,7 @@ main.add_command(export)
 main.add_command(export_comp_js)
 main.add_command(import_group, "import")
 main.add_command(qb_categorize)
+main.add_command(marketing_group, "marketing")
 main.add_command(switchboard_group, "switchboard")
 
 

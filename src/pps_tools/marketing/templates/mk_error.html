@@ -1,0 +1,9 @@
+{% extends "mk_base.html" %}
+{% block title %}{{ error.code }}{% endblock %}
+{% block heading %}{{ "Page not found" if error.code == 404 else "Something went wrong" }}{% endblock %}
+{% block content %}
+<section class="card">
+  <p>{{ error.description }}</p>
+  <a class="btn ghost sm" href="{{ url_for('dashboard') }}">Back to the dashboard</a>
+</section>
+{% endblock %}

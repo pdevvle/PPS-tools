@@ -1,0 +1,275 @@
+{% extends "mk_base.html" %}
+{% from "mk_macros.html" import icon, net with context %}
+{% block title %}AI Studio{% endblock %}
+{% block heading %}AI Studio{% endblock %}
+{% block intro %}Describe what you're promoting once. Claude writes copy for each network in the right format and length, with a different angle in each variant so you can A/B test.{% endblock %}
+
+{% block content %}
+{% if not ai_ready %}
+<div class="banner warning">{{ icon("alert") }}<p>Add your <code>ANTHROPIC_API_KEY</code> to the <code>.env</code> file and restart the hub to use AI Studio.</p></div>
+{% endif %}
+
+<div class="grid grid-main">
+  <section class="card">
+    <form id="brief" class="form-grid">
+      <div class="field full">
+        <label for="product">What are you promoting?</label>
+        <textarea id="product" name="product" rows="3" required placeholder="e.g. Premium business cards — 16pt matte, rounded corners, ready in 2 business days"></textarea>
+      </div>
+      <div class="field">
+        <label for="offer">Offer <span class="hint">optional</span></label>
+        <input id="offer" name="offer" type="text" placeholder="e.g. 20% off your first order with code FIRST20">
+      </div>
+      <div class="field">
+        <label for="audience">Audience <span class="hint">optional</span></label>
+        <input id="audience" name="audience" type="text" placeholder="e.g. realtors and small business owners in Phoenix">
+      </div>
+      <div class="field">
+        <label for="goal">Goal</label>
+        <select id="goal" name="goal">{% for key, label in goals.items() %}<option value="{{ key }}" {% if key == "conversions" %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+      </div>
+      <div class="field">
+        <label for="tone">Tone</label>
+        <input id="tone" name="tone" type="text" list="tones" value="Friendly, confident and clear">
+        <datalist id="tones"><option value="Friendly, confident and clear"><option value="Professional and trustworthy"><option value="Playful and witty"><option value="Urgent and promotional"><option value="Premium and understated"></datalist>
+      </div>
+      <div class="field">
+        <label for="landing_url">Landing page <span class="hint">optional</span></label>
+        <input id="landing_url" name="landing_url" type="url" placeholder="https://priorityprintservice.com/business-cards">
+      </div>
+      <div class="field">
+        <label for="keywords">Keywords <span class="hint">optional, for search ads and Pins</span></label>
+        <input id="keywords" name="keywords" type="text" placeholder="business cards, same day business cards">
+      </div>
+      <div class="field full">
+        <label for="notes">Anything else? <span class="hint">optional</span></label>
+        <input id="notes" name="notes" type="text" placeholder="e.g. mention free design proof; avoid the word 'cheap'">
+      </div>
+      <fieldset class="field full" style="border:0;padding:0;margin:0">
+        <legend style="font-size:0.86rem;font-weight:550;margin-bottom:6px">Formats</legend>
+        <div class="chips">
+          {% for key, f in formats.items() %}
+          <label class="chip-check"><input type="checkbox" name="formats" value="{{ key }}" {% if key in ("google_rsa", "meta_feed", "instagram_post") %}checked{% endif %}>
+            <span><span class="swatch s{{ network_for(f.network).slot }}" aria-hidden="true"></span>{{ f.label }}</span></label>
+          {% endfor %}
+        </div>
+      </fieldset>
+      <div class="field">
+        <label for="variants">Variants per format</label>
+        <select id="variants" name="variants">{% for n in range(1, 6) %}<option value="{{ n }}" {% if n == 3 %}selected{% endif %}>{{ n }}</option>{% endfor %}</select>
+      </div>
+      <div class="field" style="align-self:end">
+        <button class="btn" type="submit" id="generate">{{ icon("sparkle") }} Write ad copy</button>
+      </div>
+    </form>
+  </section>
+
+  <aside class="stack">
+    <section class="card">
+      <h2>{{ icon("info") }}How it works</h2>
+      <ul class="tight small" style="margin-top:10px">
+        <li>Every field is measured against the platform's real limit (X counts the way X does); anything too long is sent back to Claude once to tighten.</li>
+        <li>Click any line to edit it — the character count updates as you type.</li>
+        <li>Send social copy straight to the composer, or save the whole set to your library.</li>
+        <li>Claude only uses prices, discounts and turnaround times you give it or that are in your business description.</li>
+      </ul>
+      <p class="subtle small" style="margin-top:10px">Model: <code>{{ model }}</code></p>
+    </section>
+    <section class="card">
+      <h2>Library</h2>
+      {% for item in library %}
+        <div class="toggle-row">
+          <button class="linkish load-copy" type="button" data-id="{{ item.id }}" style="text-align:left">{{ item.title }}</button>
+          <span class="small muted nowrap">{{ item.created_at|local_time }}</span>
+          <form class="inline" method="post" action="{{ url_for('studio_delete', copy_id=item.id) }}" data-confirm="Remove from the library?">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="linkish small" type="submit" aria-label="Remove {{ item.title }}">✕</button></form>
+        </div>
+      {% else %}
+        <p class="subtle small">Saved copy sets appear here.</p>
+      {% endfor %}
+    </section>
+  </aside>
+</div>
+
+<section id="results" class="section-gap" aria-live="polite"></section>
+
+<script type="application/json" id="formats-data">{{ formats_json|tojson }}</script>
+<script type="application/json" id="library-data">{{ library|tojson }}</script>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  var FORMATS = MK.readJSON("formats-data");
+  var LIBRARY = MK.readJSON("library-data") || [];
+  var form = document.getElementById("brief");
+  var results = document.getElementById("results");
+  var button = document.getElementById("generate");
+  var current = null;
+
+  function weigh(s) {
+    var n = 0;
+    Array.from(s).forEach(function (ch) {
+      var cp = ch.codePointAt(0);
+      n += (cp <= 0x10FF || (cp >= 0x2000 && cp <= 0x200D) || (cp >= 0x2010 && cp <= 0x201F) || (cp >= 0x2032 && cp <= 0x2037)) ? 1 : 2;
+    });
+    return n;
+  }
+  function measure(field, text) {
+    if (field.counter === "x") {
+      var re = /https?:\/\/\S+/g, total = 0, last = 0, m;
+      while ((m = re.exec(text))) { total += weigh(text.slice(last, m.index)) + 23; last = m.index + m[0].length; }
+      return total + weigh(text.slice(last));
+    }
+    return Array.from(text).length;
+  }
+  function countClass(field, n) {
+    if (n > field.limit) return "count over";
+    if (field.recommended && n > field.recommended) return "count near";
+    return "count";
+  }
+
+  function lineNode(field, text, onChange) {
+    var line = MK.el("div", { class: "copy-line" });
+    var txt = MK.el("span", { class: "txt", contenteditable: "true", spellcheck: "true" }, text);
+    var count = MK.el("span", { class: "count" });
+    var copyBtn = MK.el("button", { class: "copy-btn", type: "button" }, "Copy");
+    function refresh() {
+      var n = measure(field, txt.textContent);
+      count.className = countClass(field, n);
+      count.textContent = n + "/" + field.limit;
+      count.title = field.recommended ? "Aim for " + field.recommended + " or fewer" : "";
+    }
+    txt.addEventListener("input", function () { refresh(); onChange(txt.textContent); });
+    copyBtn.addEventListener("click", function () { MK.copy(txt.textContent); });
+    line.appendChild(txt); line.appendChild(count); line.appendChild(copyBtn);
+    refresh();
+    return line;
+  }
+
+  function composerHandoff(key, v) {
+    var o = {}, out = { body: "", overrides: o };
+    if (key === "instagram_post") { o.instagram = (v.caption + "\n\n" + (v.hashtags || []).join(" ")).trim(); out.body = v.caption; }
+    else if (key === "meta_feed") { o.facebook = v.primary_text; out.body = v.primary_text; out.title = v.headline; }
+    else if (key === "pinterest_pin") { o.pinterest = v.description; out.body = v.description; out.title = v.title; }
+    else if (key === "x_post") { o.x = v.text; out.body = v.text; }
+    else if (key === "linkedin_sponsored") { o.linkedin = v.intro_text; out.body = v.intro_text; out.title = v.headline; }
+    var landing = document.getElementById("landing_url").value.trim();
+    if (landing) out.link = landing;
+    return out;
+  }
+
+  function render(data) {
+    current = data;
+    var result = data.result;
+    results.textContent = "";
+    var head = MK.el("div", { class: "card" });
+    var row = MK.el("div", { class: "row" });
+    var h = MK.el("h2", {}, "Strategy");
+    row.appendChild(h);
+    row.appendChild(MK.el("span", { class: "spacer" }));
+    var save = MK.el("button", { class: "btn ghost sm", type: "button" }, "Save to library");
+    save.addEventListener("click", function () {
+      MK.post("{{ url_for('api_studio_save') }}", { brief: current.brief, result: current.result }).then(function () {
+        MK.toast("Saved to your library."); save.disabled = true; save.textContent = "Saved";
+      }).catch(function (e) { MK.toast(e.message, "error"); });
+    });
+    row.appendChild(save);
+    head.appendChild(row);
+    head.appendChild(MK.el("p", { class: "subtle", style: "margin-top:6px" }, result.strategy || ""));
+    if (result.repaired) head.appendChild(MK.el("p", { class: "small muted" }, "Some lines ran over a limit and were tightened automatically."));
+    results.appendChild(head);
+
+    var grid = MK.el("div", { class: "grid grid-2 section-gap" });
+    Object.keys(result.formats).forEach(function (key) {
+      var spec = FORMATS[key];
+      if (!spec) return;
+      var card = MK.el("section", { class: "card" });
+      var title = MK.el("div", { class: "card-head" });
+      var h2 = MK.el("h2");
+      var sw = MK.el("span", { class: "swatch s" + spec.slot, style: "width:10px;height:10px;border-radius:3px;display:inline-block;margin-right:8px" });
+      h2.appendChild(sw);
+      h2.appendChild(document.createTextNode(spec.label));
+      title.appendChild(h2);
+      card.appendChild(title);
+      (result.formats[key] || []).forEach(function (variant, vi) {
+        var box = MK.el("div", { class: "variant" });
+        var vh = MK.el("div", { class: "variant-head" });
+        vh.appendChild(MK.el("span", { class: "angle" }, (result.formats[key].length > 1 ? "Variant " + (vi + 1) + " · " : "") + (variant.angle || "")));
+        var actions = MK.el("span", { class: "row" });
+        var copyAll = MK.el("button", { class: "copy-btn", type: "button" }, "Copy all");
+        copyAll.addEventListener("click", function () {
+          var parts = spec.fields.map(function (f) {
+            var v = variant[f.name];
+            return f.label + ":\n" + (Array.isArray(v) ? v.join("\n") : v);
+          });
+          MK.copy(parts.join("\n\n"));
+        });
+        actions.appendChild(copyAll);
+        if (["instagram_post", "meta_feed", "pinterest_pin", "x_post", "linkedin_sponsored"].indexOf(key) !== -1) {
+          var use = MK.el("button", { class: "copy-btn", type: "button" }, "Use in composer →");
+          use.addEventListener("click", function () {
+            try { localStorage.setItem("mk-compose", JSON.stringify(composerHandoff(key, variant))); } catch (e) { /* ignore */ }
+            window.location = "{{ url_for('publish') }}";
+          });
+          actions.appendChild(use);
+        }
+        vh.appendChild(actions);
+        box.appendChild(vh);
+        spec.fields.forEach(function (field) {
+          var wrap = MK.el("div", { class: "copy-field" });
+          var label = MK.el("div", { class: "flabel" });
+          label.appendChild(MK.el("span", {}, field.label));
+          if (field.items) label.appendChild(MK.el("span", {}, (variant[field.name] || []).length + " of " + field.items[1]));
+          wrap.appendChild(label);
+          if (field.items) {
+            (variant[field.name] || []).forEach(function (item, ii) {
+              wrap.appendChild(lineNode(field, item, function (t) { variant[field.name][ii] = t; }));
+            });
+          } else {
+            wrap.appendChild(lineNode(field, variant[field.name] || "", function (t) { variant[field.name] = t; }));
+          }
+          box.appendChild(wrap);
+        });
+        ((result.issues[key] || [])[vi] || []).filter(function (i) { return i.level === "error"; }).forEach(function (issue) {
+          box.appendChild(MK.el("div", { class: "issue" }, issue.message));
+        });
+        card.appendChild(box);
+      });
+      grid.appendChild(card);
+    });
+    results.appendChild(grid);
+    results.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var payload = {};
+    new FormData(form).forEach(function (v, k) {
+      if (k === "formats") (payload.formats = payload.formats || []).push(v);
+      else payload[k] = v;
+    });
+    if (!payload.formats || !payload.formats.length) { MK.toast("Pick at least one format.", "error"); return; }
+    button.disabled = true;
+    var original = button.innerHTML;
+    button.innerHTML = '<span class="spinner" aria-hidden="true"></span> Writing… (about a minute)';
+    MK.post("{{ url_for('api_studio_generate') }}", payload).then(render).catch(function (err) {
+      MK.toast(err.message, "error");
+    }).finally(function () { button.disabled = false; button.innerHTML = original; });
+  });
+
+  document.querySelectorAll(".load-copy").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var item = LIBRARY.find(function (i) { return String(i.id) === b.dataset.id; });
+      if (!item) return;
+      Object.keys(item.brief).forEach(function (k) {
+        var input = form.elements[k];
+        if (input && typeof item.brief[k] !== "object") input.value = item.brief[k];
+      });
+      form.querySelectorAll('input[name="formats"]').forEach(function (c) { c.checked = item.brief.formats.indexOf(c.value) !== -1; });
+      render({ result: item.result, brief: item.brief });
+    });
+  });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in · PPS Marketing Hub</title>
+  <script>try{var t=localStorage.getItem("mk-theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}</script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='mk.css') }}">
+</head>
+<body>
+<main class="login-wrap">
+  <form class="card login-card" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="brand" style="padding:0 0 14px"><span class="brand-mark" aria-hidden="true">PPS</span>
+      <span class="brand-name">Marketing Hub<small>Priority Print Service</small></span></div>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for cat, msg in messages %}<div class="banner {{ cat }}" role="alert"><p>{{ msg }}</p></div>{% endfor %}
+    {% endwith %}
+    <div class="field"><label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required autofocus></div>
+    <button class="btn" type="submit" style="width:100%;margin-top:14px">Sign in</button>
+  </form>
+</main>
+</body>
+</html>

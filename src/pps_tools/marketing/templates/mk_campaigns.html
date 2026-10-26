@@ -1,0 +1,177 @@
+{% extends "mk_base.html" %}
+{% from "mk_macros.html" import icon, net, platform, campaign_status, period_filters, data_errors with context %}
+{% block title %}Campaigns{% endblock %}
+{% block heading %}Campaigns{% endblock %}
+{% block intro %}Every campaign on every connected platform. Pause, re-enable or change daily budgets without leaving the hub.{% endblock %}
+
+{% block content %}
+{{ period_filters(period, "campaigns") }}
+{{ data_errors(errors) }}
+
+<section class="card">
+  <div class="filters" style="margin-bottom:12px">
+    <label class="sr-only" for="c-search">Search campaigns</label>
+    <input id="c-search" type="search" placeholder="Search campaigns…" style="max-width:260px">
+    <label class="sr-only" for="c-platform">Platform</label>
+    <select id="c-platform" style="max-width:220px">
+      <option value="">All platforms</option>
+      {% for key, name in platform_names.items() %}<option value="{{ key }}">{{ name }}</option>{% endfor %}
+    </select>
+    <label class="sr-only" for="c-status">Status</label>
+    <select id="c-status" style="max-width:160px">
+      <option value="">Any status</option><option value="ACTIVE">Active</option><option value="PAUSED">Paused</option>
+    </select>
+    <span class="spacer"></span>
+    <span class="subtle" id="c-count">{{ items|length }} campaigns</span>
+  </div>
+
+  <div class="table-wrap">
+  <table class="data" data-sortable id="campaign-table">
+    <thead><tr>
+      <th data-sort="text">Campaign</th>
+      <th data-sort="text">Status</th>
+      <th class="num" data-sort="num">Daily budget</th>
+      <th class="num" data-sort="num">Spend</th>
+      <th class="num" data-sort="num">Clicks</th>
+      <th class="num" data-sort="num">CTR</th>
+      <th class="num" data-sort="num">Conv.</th>
+      <th class="num" data-sort="num">Cost / conv.</th>
+      <th class="num" data-sort="num">Revenue</th>
+      <th class="num" data-sort="num">ROAS</th>
+      <th>Trend</th>
+      <th><span class="sr-only">Actions</span></th>
+    </tr></thead>
+    <tbody>
+    {% for item in items %}
+      {% set c, t = item.c, item.t %}
+      <tr data-key="{{ c.key }}" data-platform="{{ c.platform }}" data-status="{{ c.status }}" data-name="{{ c.name|lower }}">
+        <td class="name" data-value="{{ c.name|lower }}">{{ c.name }}
+          <small>{{ platform(c.platform) }}{% if c.objective %} · {{ c.objective|objective }}{% endif %}</small>
+        </td>
+        <td class="status-cell" data-value="{{ c.status }}">{{ campaign_status(c.status) }}</td>
+        <td class="num budget-cell" data-value="{{ c.daily_budget or 0 }}">
+          {% if c.daily_budget %}
+            <span class="budget-text">{{ c.daily_budget|money(c.currency, true) }}</span>
+            {% if c.budget_editable %}<button class="linkish small edit-budget" type="button" data-amount="{{ c.daily_budget }}" aria-label="Edit daily budget of {{ c.name }}">Edit</button>{% endif %}
+          {% elif c.lifetime_budget %}
+            <span title="Lifetime budget">{{ c.lifetime_budget|money(c.currency) }} total</span>
+          {% else %}
+            <span class="muted" title="{{ 'Budgets are set on the ad sets' if c.extra.get('budget_level') == 'ad_set' else 'No campaign-level daily budget' }}">—</span>
+          {% endif %}
+        </td>
+        <td class="num" data-value="{{ t.spend }}">{{ t.spend|money(c.currency) }}</td>
+        <td class="num" data-value="{{ t.clicks }}">{{ t.clicks|num }}</td>
+        <td class="num" data-value="{{ t.ctr or 0 }}">{{ t.ctr|pct }}</td>
+        <td class="num" data-value="{{ t.conversions }}">{{ t.conversions|num(0) }}</td>
+        <td class="num" data-value="{{ t.cpa or 0 }}">{{ t.cpa|money(c.currency) }}</td>
+        <td class="num" data-value="{{ t.conversion_value }}">{{ t.conversion_value|money(c.currency) }}</td>
+        <td class="num" data-value="{{ t.roas or 0 }}">{{ t|roas }}</td>
+        <td>{% if item.spark %}<svg class="cell-spark" data-spark="{{ item.spark|tojson|forceescape }}" role="img" aria-label="Daily spend trend"></svg>{% endif %}</td>
+        <td class="right nowrap">
+          {% if c.status == "ACTIVE" %}
+            <button class="btn ghost sm toggle-status" type="button" data-to="PAUSED">Pause</button>
+          {% elif c.status == "PAUSED" %}
+            <button class="btn ghost sm toggle-status" type="button" data-to="ACTIVE">Enable</button>
+          {% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="12" class="empty">No campaigns found. <a href="{{ url_for('connections') }}">Check your connections</a>.</td></tr>
+    {% endfor %}
+    </tbody>
+    {% if items %}
+    <tfoot><tr><td colspan="3">Total ({{ period.label|lower }})</td><td class="num">{{ totals.spend|money }}</td><td class="num">{{ totals.clicks|num }}</td>
+      <td class="num">{{ totals.ctr|pct }}</td><td class="num">{{ totals.conversions|num(0) }}</td><td class="num">{{ totals.cpa|money }}</td>
+      <td class="num">{{ totals.conversion_value|money }}</td><td class="num">{{ totals|roas }}</td><td colspan="2"></td></tr></tfoot>
+    {% endif %}
+  </table>
+  </div>
+  <p class="subtle small" style="margin-top:12px">Budgets that live on ad sets, shared budgets and lifetime budgets show without an Edit button — change those in the platform's own tools. Every change is recorded on the <a href="{{ url_for('activity') }}">Activity</a> page.</p>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  var table = document.getElementById("campaign-table");
+  if (!table) return;
+  var maxChange = {{ max_change|tojson }};
+  var search = document.getElementById("c-search");
+  var plat = document.getElementById("c-platform");
+  var status = document.getElementById("c-status");
+  var count = document.getElementById("c-count");
+
+  function applyFilters() {
+    var q = search.value.trim().toLowerCase();
+    var shown = 0;
+    table.querySelectorAll("tbody tr[data-key]").forEach(function (tr) {
+      var ok = (!q || tr.dataset.name.indexOf(q) !== -1) &&
+        (!plat.value || tr.dataset.platform === plat.value) &&
+        (!status.value || tr.dataset.status === status.value);
+      tr.hidden = !ok;
+      if (ok) shown++;
+    });
+    count.textContent = shown + " campaign" + (shown === 1 ? "" : "s");
+  }
+  [search, plat, status].forEach(function (el) { el.addEventListener("input", applyFilters); });
+
+  table.addEventListener("click", function (e) {
+    var btn = e.target.closest(".toggle-status");
+    if (btn) {
+      var tr = btn.closest("tr");
+      var to = btn.dataset.to;
+      var name = tr.querySelector(".name").firstChild.textContent.trim();
+      var question = to === "PAUSED" ? "Pause “" + name + "”? It stops spending right away." : "Turn “" + name + "” back on? It will start spending again.";
+      if (!window.confirm(question)) return;
+      btn.disabled = true;
+      MK.post("{{ url_for('api_campaign_status') }}", { key: tr.dataset.key, status: to }).then(function (res) {
+        tr.dataset.status = res.status;
+        var cell = tr.querySelector(".status-cell");
+        cell.textContent = "";
+        var pill = MK.el("span", { class: "pill" + (res.status === "ACTIVE" ? " tone-good" : "") });
+        pill.appendChild(MK.el("span", { class: "dot" }));
+        pill.appendChild(document.createTextNode(res.status === "ACTIVE" ? "Active" : "Paused"));
+        cell.appendChild(pill);
+        btn.dataset.to = res.status === "ACTIVE" ? "PAUSED" : "ACTIVE";
+        btn.textContent = res.status === "ACTIVE" ? "Pause" : "Enable";
+        MK.toast(res.message);
+      }).catch(function (err) { MK.toast(err.message, "error"); }).finally(function () { btn.disabled = false; });
+      return;
+    }
+
+    var edit = e.target.closest(".edit-budget");
+    if (edit) {
+      var cell = edit.closest(".budget-cell");
+      var current = parseFloat(edit.dataset.amount);
+      var form = MK.el("span", { class: "budget-edit" });
+      var input = MK.el("input", { type: "number", min: "1", step: "0.01", "aria-label": "New daily budget" });
+      input.value = current.toFixed(2);
+      var save = MK.el("button", { class: "btn sm", type: "button" }, "Save");
+      var cancel = MK.el("button", { class: "linkish small", type: "button" }, "Cancel");
+      form.appendChild(input); form.appendChild(save); form.appendChild(cancel);
+      var old = Array.prototype.slice.call(cell.childNodes);
+      cell.textContent = "";
+      cell.appendChild(form);
+      input.focus(); input.select();
+      var restore = function () { cell.textContent = ""; old.forEach(function (n) { cell.appendChild(n); }); };
+      cancel.addEventListener("click", restore);
+      input.addEventListener("keydown", function (ev) { if (ev.key === "Enter") save.click(); if (ev.key === "Escape") restore(); });
+      save.addEventListener("click", function () {
+        var amount = parseFloat(input.value);
+        if (!(amount > 0)) { MK.toast("Enter a budget above zero.", "error"); return; }
+        var change = Math.abs(amount - current) / current * 100;
+        if (change > maxChange && !window.confirm("That's a " + change.toFixed(0) + "% change in one step. Platforms can take a few days to settle after big budget moves. Continue?")) return;
+        save.disabled = true;
+        MK.post("{{ url_for('api_campaign_budget') }}", { key: cell.closest("tr").dataset.key, amount: amount }).then(function (res) {
+          restore();
+          cell.querySelector(".budget-text").textContent = res.text;
+          cell.dataset.value = res.daily_budget;
+          edit.dataset.amount = res.daily_budget;
+          MK.toast(res.message);
+        }).catch(function (err) { save.disabled = false; MK.toast(err.message, "error"); });
+      });
+    }
+  });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,163 @@
+{% extends "mk_base.html" %}
+{% from "mk_macros.html" import icon, net, platform, campaign_status, delta, period_filters, data_errors with context %}
+{% block title %}Dashboard{% endblock %}
+{% block heading %}Dashboard{% endblock %}
+{% block intro %}{{ period.label }} · {{ period.start|short_date }} – {{ period.end|long_date }}, compared with the {{ period.days }} days before.{% endblock %}
+{% block actions %}
+  <a class="btn ghost sm" href="{{ url_for('export_csv', range=period.preset, start=period.start.isoformat() if period.preset == 'custom' else None, end=period.end.isoformat() if period.preset == 'custom' else None) }}">{{ icon("download") }} Export CSV</a>
+{% endblock %}
+
+{% block content %}
+{{ period_filters(period, "dashboard") }}
+{{ data_errors(errors) }}
+{% if currencies|length > 1 %}
+<div class="banner warning">{{ icon("alert") }}<p>Your accounts report in different currencies ({{ currencies|join(", ") }}). Totals add them up as-is without converting.</p></div>
+{% endif %}
+
+{% if not connected %}
+<div class="card"><p class="empty">No platforms are connected yet. <a href="{{ url_for('connections') }}">Connect one</a> or turn on demo mode to explore.</p></div>
+{% else %}
+
+<section class="kpis" aria-label="Key numbers">
+  {% for k in kpis %}
+  <div class="card kpi">
+    <div class="label">{{ k.label }}</div>
+    <div class="value">{{ k.text }}</div>
+    <div class="meta">
+      {{ delta(k.tone, k.delta_text, "Previous period: " ~ k.previous_text) }}
+      <span class="vs">vs {{ k.previous_text }}</span>
+    </div>
+    <svg class="spark" data-spark="{{ k.spark|tojson|forceescape }}" role="img" aria-label="{{ k.label }} by day"></svg>
+  </div>
+  {% endfor %}
+</section>
+
+<div class="grid grid-main">
+  <section class="card" id="spend-chart" data-title="Daily spend by channel">
+    <div class="card-head">
+      <div><h2>Daily spend by channel</h2><p>One column per day. Each channel keeps its color everywhere in the hub.</p></div>
+      <button class="linkish table-toggle" type="button" data-table-toggle="spend-table" aria-expanded="false">Show as table</button>
+    </div>
+    <ul class="legend" aria-label="Channels and their spend"></ul>
+    <div class="chart" style="min-height:264px"></div>
+    <div class="chart-table" id="spend-table"></div>
+  </section>
+
+  <section class="card" id="conv-chart">
+    <div class="card-head">
+      <div><h2>Conversions per day</h2><p>All channels together.</p></div>
+      <button class="linkish table-toggle" type="button" data-table-toggle="conv-table" aria-expanded="false">Show as table</button>
+    </div>
+    <div class="chart" style="min-height:220px"></div>
+    <div class="chart-table" id="conv-table"></div>
+  </section>
+</div>
+
+<section class="card section-gap">
+  <div class="card-head"><div><h2>Channels</h2><p>Where the money went and what it brought back.</p></div></div>
+  <div class="table-wrap">
+  <table class="data" data-sortable>
+    <thead><tr>
+      <th data-sort="text">Channel</th><th class="num" data-sort="num">Spend</th><th class="num" data-sort="num">Impressions</th>
+      <th class="num" data-sort="num">Clicks</th><th class="num" data-sort="num">CTR</th><th class="num" data-sort="num">Conversions</th>
+      <th class="num" data-sort="num">Cost / conv.</th><th class="num" data-sort="num">Revenue</th><th class="num" data-sort="num">ROAS</th>
+    </tr></thead>
+    <tbody>
+    {% for key, t, share in networks %}
+      {% set n = network_for(key) %}
+      <tr>
+        <td>{{ net(key) }}</td>
+        <td data-value="{{ t.spend }}"><div class="bar-cell"><div class="track"><div class="fill s{{ n.slot }}" style="width: {{ (share * 100)|round(1) }}%"></div></div><span class="v">{{ t.spend|money(currency) }}</span></div></td>
+        <td class="num" data-value="{{ t.impressions }}">{{ t.impressions|compact }}</td>
+        <td class="num" data-value="{{ t.clicks }}">{{ t.clicks|num }}</td>
+        <td class="num" data-value="{{ t.ctr or 0 }}">{{ t.ctr|pct }}</td>
+        <td class="num" data-value="{{ t.conversions }}">{{ t.conversions|num(0) }}</td>
+        <td class="num" data-value="{{ t.cpa or 0 }}">{{ t.cpa|money(currency) }}</td>
+        <td class="num" data-value="{{ t.conversion_value }}">{{ t.conversion_value|money(currency) }}</td>
+        <td class="num" data-value="{{ t.roas or 0 }}">{{ t|roas }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="9" class="empty">No spend in this period.</td></tr>
+    {% endfor %}
+    </tbody>
+    {% if networks %}
+    <tfoot><tr><td>All channels</td><td class="num">{{ totals.spend|money(currency) }}</td><td class="num">{{ totals.impressions|compact }}</td>
+      <td class="num">{{ totals.clicks|num }}</td><td class="num">{{ totals.ctr|pct }}</td><td class="num">{{ totals.conversions|num(0) }}</td>
+      <td class="num">{{ totals.cpa|money(currency) }}</td><td class="num">{{ totals.conversion_value|money(currency) }}</td><td class="num">{{ totals|roas }}</td></tr></tfoot>
+    {% endif %}
+  </table>
+  </div>
+</section>
+
+<div class="grid grid-main section-gap">
+  <section class="card">
+    <div class="card-head"><div><h2>Top campaigns</h2><p>By spend in this period.</p></div>
+      <a class="small" href="{{ url_for('campaigns', range=period.preset) }}">All campaigns →</a></div>
+    <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Campaign</th><th class="num">Spend</th><th class="num">Conv.</th><th class="num">Cost / conv.</th><th class="num">ROAS</th><th>Daily spend</th></tr></thead>
+      <tbody>
+      {% for c in top_campaigns %}
+        <tr>
+          <td class="name">{{ c.name }}<small>{{ platform(c.platform) }}{% if c.status == "PAUSED" %} · Paused{% endif %}</small></td>
+          <td class="num">{{ c.totals.spend|money(currency) }}</td>
+          <td class="num">{{ c.totals.conversions|num(0) }}</td>
+          <td class="num">{{ c.totals.cpa|money(currency) }}</td>
+          <td class="num">{{ c.totals|roas }}</td>
+          <td><svg class="cell-spark" data-spark="{{ c.spark|tojson|forceescape }}" role="img" aria-label="Daily spend trend"></svg></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6" class="empty">No campaign spend in this period.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <div class="stack">
+    <section class="card">
+      <div class="card-head"><div><h2>Budget pacing</h2><p>This month so far.</p></div>
+        <a class="small" href="{{ url_for('budgets') }}">Budgets →</a></div>
+      {% if pacing %}
+        {% for p in pacing %}
+        <div class="meter-row" style="grid-template-columns: 1fr;">
+          <div class="row"><strong class="small">{{ p.label }}</strong><span class="spacer"></span>
+            <span class="pill tone-{{ p.tone }}"><span class="dot"></span>{{ p.status_label }}</span></div>
+          <div class="meter tone-{{ p.tone }}" role="meter" aria-valuemin="0" aria-valuemax="{{ p.budget }}" aria-valuenow="{{ p.spent }}" aria-label="{{ p.label }} spend against budget">
+            <div class="fill" style="width: {{ [p.used_pct * 100, 100]|min }}%"></div>
+            <div class="mark" style="left: calc({{ [p.expected_to_date / p.budget * 100, 100]|min }}% - 1px)" title="Where spend should be today"></div>
+          </div>
+          <div class="meter-meta"><span>{{ p.spent|money }} of {{ p.budget|money }}</span>
+            <span>{% if p.projected is not none %}On course for {{ p.projected|money }}{% else %}{{ p.days_left }} days left{% endif %}</span></div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <p class="subtle">Set a monthly budget per platform to see whether you're on course to over- or underspend.</p>
+        <a class="btn ghost sm" href="{{ url_for('budgets') }}">Set monthly budgets</a>
+      {% endif %}
+    </section>
+
+    <section class="card">
+      <h2>{{ icon("sparkle") }}Want a second opinion?</h2>
+      <p class="subtle" style="margin:6px 0 12px">Claude reviews these numbers across every platform and suggests what to pause, scale or test next.</p>
+      <a class="btn" href="{{ url_for('insights', range=period.preset) }}">Get AI insights</a>
+    </section>
+  </div>
+</div>
+{% endif %}
+
+<script type="application/json" id="chart-data">{{ chart|tojson }}</script>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  var data = MK.readJSON("chart-data");
+  if (!data) return;
+  var spend = document.getElementById("spend-chart");
+  if (spend) MK.charts.stacked(spend, data);
+  var conv = document.getElementById("conv-chart");
+  if (conv) MK.charts.line(conv, { days: data.days, values: data.conversions, label: "Conversions" });
+});
+</script>
+{% endblock %}
