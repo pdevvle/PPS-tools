@@ -4,7 +4,7 @@
 {% block content %}
 <div class="page-head"><div><div class="crumbs">Accounting</div><h1>Budgets</h1></div>
   <div class="actions"><a class="btn" href="{{ url_for('reports.view', key='budget_vs_actuals') }}">Budget vs. actuals</a></div></div>
-<div class="grid" style="grid-template-columns:minmax(0,2fr) minmax(280px,1fr)">
+<div class="grid main-side">
 <div class="card"><table class="data">
   <thead><tr><th>Budget</th><th>Fiscal year</th><th>Subdivided by</th><th class="num">Income</th><th class="num">Expenses</th><th class="num">Net</th><th></th></tr></thead>
   <tbody>{% for b in rows %}{% set inc, exp = totals[b.id] %}<tr>

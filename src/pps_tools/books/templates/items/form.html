@@ -10,7 +10,7 @@
     <a class="btn" href="{{ url_for('txn.new', slug='purchase-orders', vendor_id=it.preferred_vendor_id) }}">Reorder</a>
     <a class="btn" href="{{ url_for('reports.view', key='inventory_valuation_detail', item_id=it.id, preset='this_year') }}">Stock history</a></div>{% endif %}
 </div>
-<div class="grid" style="grid-template-columns:minmax(0, 2fr) minmax(0, 1fr)">
+<div class="grid main-side">
 <form method="post" class="card"><div class="card-body">
   <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
   <div class="form-row">

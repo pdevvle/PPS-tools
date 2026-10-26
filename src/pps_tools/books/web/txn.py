@@ -402,6 +402,16 @@ def _new_defaults(info: TxnType) -> dict:
             data["vendor_id"] = bill.vendor_id
             data["preapply"] = {bill.id: bill.balance_cents}
             data["amount"] = money.fmt_plain(bill.balance_cents)
+    if info.has_terms and not data.get("terms_id"):
+        # The company's default terms, until a customer or vendor with their own terms is chosen.
+        from pps_tools.books.services import prefs
+        from pps_tools.books.services.dates import due_date
+
+        default = prefs.get(s, "default_terms_id" if info.open_item == "ar" else "default_bill_terms_id")
+        terms = s.get(Terms, int(default)) if default else None
+        if terms is not None:
+            data["terms_id"] = terms.id
+            data["due_date"] = due_date(terms, date.today()).isoformat()
     if info.code in ("estimate", "invoice", "sales_receipt", "credit_memo", "refund_receipt") and not data.get("lines"):
         data["lines"] = [{"kind": "item"}, {"kind": "item"}]
     if info.code in ("bill", "expense", "check", "vendor_credit", "cc_credit", "purchase_order") and not data.get("lines"):

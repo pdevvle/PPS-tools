@@ -2,7 +2,7 @@
 {% block title %}Users{% endblock %}
 {% block content %}
 <div class="page-head"><div><div class="crumbs"><a href="{{ url_for('settings.index') }}">Settings</a></div><h1>Users and roles</h1></div></div>
-<div class="grid" style="grid-template-columns:minmax(0,2fr) minmax(0,1fr)">
+<div class="grid main-side">
 <div class="card"><table class="data">
   <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Last sign-in</th><th></th></tr></thead>
   <tbody>{% for u in rows %}

@@ -1,7 +1,7 @@
 {% extends "public/base.html" %}
 {% block title %}{{ txn.info.label }} {{ txn.number or '' }} from {{ company.name }}{% endblock %}
 {% block content %}
-<div class="grid" style="grid-template-columns:minmax(0,1fr) 300px;align-items:start">
+<div class="grid main-side narrow-side">
 <div class="doc-paper">
   <div class="doc-head">
     <div>

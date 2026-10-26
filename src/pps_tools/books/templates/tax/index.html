@@ -32,7 +32,8 @@
         <td class="num">{{ p.taxable|money }}</td><td class="num">{{ p.tax|money }}</td><td class="num">{{ p.adjustments|money if p.adjustments else '' }}</td>
         <td class="num">{{ p.owed_at_end|money }}</td><td class="small">{{ p.due|date }}</td>
         <td class="actions nowrap"><a class="btn small" href="{{ url_for('reports.view', key='sales_tax_liability', preset='custom', start=p.start|date_input, end=p.end|date_input) }}">Report</a>
-          {% if not p.open and p.owed_at_end > 0 and can('accounting.edit') %}<a class="btn small primary" href="{{ url_for('txn.new', slug='tax-payments', tax_agency_id=ag.id, amount=p.owed_at_end|money_plain, memo='Sales tax ' ~ (p.start|date) ~ ' – ' ~ (p.end|date)) }}">Pay</a>{% endif %}</td></tr>{% endfor %}</tbody>
+          {% if not p.open and p.unpaid > 0 and can('accounting.edit') %}<a class="btn small primary" href="{{ url_for('txn.new', slug='tax-payments', tax_agency_id=ag.id, amount=p.unpaid|money_plain, memo='Sales tax ' ~ (p.start|date) ~ ' – ' ~ (p.end|date)) }}">Pay {{ p.unpaid|money }}</a>
+          {% elif not p.open and p.owed_at_end > 0 %}<span class="badge paid">Paid</span>{% endif %}</td></tr>{% endfor %}</tbody>
     </table>
     {% if c.payments %}<h4 style="margin-top:1rem">Recent payments</h4>
     <table class="data compact"><tbody>{% for t in c.payments %}<tr class="clickable" data-href="{{ url_for('txn.go', txn_id=t.id) }}"><td>{{ t.date|date }}</td><td>{{ t.memo or '' }}</td><td class="num">{{ t.total_cents|money }}</td></tr>{% endfor %}</tbody></table>{% endif %}

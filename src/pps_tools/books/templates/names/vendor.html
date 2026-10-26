@@ -21,7 +21,7 @@
   <div class="kpi"><div class="label">Overdue</div><div class="value">{{ overdue|money }}</div></div>
   {% if v.track_1099 %}<div class="kpi"><div class="label">1099 payments {{ year }}</div><a class="value" href="{{ url_for('reports.view', key='contractor_1099_detail', vendor_id=v.id, preset='this_year') }}">{{ paid_1099|money }}</a><div class="sub">{{ 'W-9 on file' if v.w9_on_file else 'No W-9 on file' }}{% if not v.tax_id %} · tax ID missing{% endif %}</div></div>{% endif %}
 </div>
-<div class="grid" style="grid-template-columns: minmax(0, 3fr) minmax(0, 1fr)">
+<div class="grid main-side wide-main">
   <div class="card">
     <form class="filters" method="get"><div class="field"><label>Type</label><select name="type" data-autosubmit><option value="">All</option>{% for t in ['bill', 'bill_payment', 'expense', 'check', 'purchase_order', 'vendor_credit', 'cc_credit'] %}<option value="{{ t }}"{% if request.args.get('type') == t %} selected{% endif %}>{{ txn_types[t].plural }}</option>{% endfor %}</select></div></form>
     <div class="table-wrap"><table class="data">
