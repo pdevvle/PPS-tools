@@ -68,6 +68,10 @@ CREATE TABLE jobs (
     tags_json         TEXT NOT NULL DEFAULT '[]',
     position          REAL NOT NULL DEFAULT 0,   -- order within its stage column
     public_token      TEXT UNIQUE,               -- customer status / proof approval page
+    proof_status      TEXT CHECK (proof_status IN ('pending', 'approved', 'changes_requested')),
+    proof_decided_at  TEXT,
+    proof_decided_by  TEXT,                      -- name the customer typed on the proof page
+    stage_entered_at  TEXT,                      -- when it reached its current stage
     created_by        INTEGER REFERENCES users(id) ON DELETE SET NULL,
     created_at        TEXT NOT NULL,
     updated_at        TEXT,
@@ -108,12 +112,16 @@ CREATE TABLE job_operations (
     status           TEXT NOT NULL DEFAULT 'pending'
                      CHECK (status IN ('pending', 'in_progress', 'done')),
     notes            TEXT,
+    started_at       TEXT,
+    started_by       INTEGER REFERENCES users(id) ON DELETE SET NULL,
     completed_at     TEXT,
     completed_by     INTEGER REFERENCES users(id) ON DELETE SET NULL,
     created_at       TEXT NOT NULL
 );
 CREATE INDEX idx_job_operations_job ON job_operations(job_id, sequence);
 CREATE INDEX idx_job_operations_schedule ON job_operations(start_at, end_at);
+CREATE INDEX idx_job_operations_resource ON job_operations(resource_id, start_at);
+CREATE INDEX idx_job_operations_user ON job_operations(user_id, start_at);
 
 CREATE TABLE job_checklist (
     id       INTEGER PRIMARY KEY,
@@ -137,3 +145,11 @@ CREATE TABLE job_activity (
     created_at TEXT NOT NULL
 );
 CREATE INDEX idx_job_activity_job ON job_activity(job_id, created_at);
+
+-- Job files (attachments with owner_type 'job') the customer sees on the proof page.
+CREATE TABLE job_proofs (
+    attachment_id INTEGER PRIMARY KEY REFERENCES attachments(id) ON DELETE CASCADE,
+    job_id        INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+    created_at    TEXT NOT NULL
+);
+CREATE INDEX idx_job_proofs_job ON job_proofs(job_id);

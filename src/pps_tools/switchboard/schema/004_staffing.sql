@@ -105,7 +105,8 @@ CREATE TABLE shifts (
     created_by    INTEGER REFERENCES users(id) ON DELETE SET NULL,
     created_at    TEXT NOT NULL,
     updated_at    TEXT,
-    published_at  TEXT
+    published_at  TEXT,
+    reminded_at   TEXT                -- "your shift starts soon" was sent
 );
 CREATE INDEX idx_shifts_range ON shifts(start_at, end_at);
 CREATE INDEX idx_shifts_user ON shifts(user_id, start_at);
@@ -136,9 +137,11 @@ CREATE TABLE shift_requests (
     note            TEXT,
     decided_by      INTEGER REFERENCES users(id) ON DELETE SET NULL,
     decided_at      TEXT,
+    decision_note   TEXT,
     created_at      TEXT NOT NULL
 );
 CREATE INDEX idx_shift_requests_status ON shift_requests(status);
+CREATE INDEX idx_shift_requests_shift ON shift_requests(shift_id);
 
 -- Time clock punches. clock_out NULL = currently clocked in. breaks_json: [{"start", "end"}].
 CREATE TABLE time_entries (
@@ -153,6 +156,7 @@ CREATE TABLE time_entries (
     notes         TEXT,
     source        TEXT NOT NULL DEFAULT 'clock' CHECK (source IN ('clock', 'kiosk', 'manual')),
     status        TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'approved')),
+    flag          TEXT,              -- needs review, e.g. auto_clock_out
     approved_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,
     approved_at   TEXT,
     created_by    INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -161,3 +165,4 @@ CREATE TABLE time_entries (
 );
 CREATE INDEX idx_time_entries_user ON time_entries(user_id, clock_in);
 CREATE INDEX idx_time_entries_job ON time_entries(job_id);
+CREATE INDEX idx_time_entries_open ON time_entries(clock_out);
