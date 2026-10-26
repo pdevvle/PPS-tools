@@ -972,7 +972,63 @@ DEFAULT_RESOURCES = [
     ("Delivery Van", "vehicle", "#2f9e44"),
 ]
 
-DEFAULT_SKILLS = ["Prepress", "Digital press", "Wide format", "Bindery", "Cutting", "Delivery"]
+# Shared with staffing (it may create the same names); matched by name.
+DEFAULT_SKILLS = ["Prepress", "Digital press", "Wide format", "Guillotine cutter", "Folder", "Saddle stitch",
+                  "Finishing", "Delivery"]
+
+_COMMON_CHECKLIST = ["Files received", "Proof approved", "Stock pulled", "Quality check", "Customer notified"]
+
+# name, description, [(step, minutes, equipment, skill)], checklist, default specs
+DEFAULT_TEMPLATES = [
+    ("Business cards", "500–1,000 cards per name, 16pt stock.",
+     [("Prepress", 30, None, "Prepress"), ("Print", 30, "Digital Press 1", "Digital press"),
+      ("Cut", 20, "Guillotine Cutter", "Guillotine cutter"), ("Pack", 10, None, None)],
+     _COMMON_CHECKLIST, {"product": "Business cards", "paper_stock": "16pt matte", "finished_size": "3.5 × 2 in",
+                         "ink": "4/4", "proof_required": True}),
+    ("Trifold brochure", "Letter trifold, 100lb gloss text.",
+     [("Prepress", 45, None, "Prepress"), ("Print", 60, "Digital Press 1", "Digital press"),
+      ("Fold", 45, "Folder", "Folder"), ("Pack", 15, None, None)],
+     _COMMON_CHECKLIST, {"product": "Trifold brochure", "paper_stock": "100lb gloss text",
+                         "finished_size": "8.5 × 11 in (folded to 3.67 × 8.5)", "ink": "4/4", "finishing": "Trifold",
+                         "proof_required": True}),
+    ("Saddle-stitched booklet", "Booklets with cover, folded and stapled.",
+     [("Prepress & imposition", 90, None, "Prepress"), ("Print", 120, "Digital Press 1", "Digital press"),
+      ("Fold & stitch", 90, "Saddle Stitcher", "Saddle stitch"), ("Trim", 30, "Guillotine Cutter", "Guillotine cutter"),
+      ("Pack", 20, None, None)],
+     _COMMON_CHECKLIST, {"product": "Booklet", "paper_stock": "80lb gloss text + 100lb gloss cover",
+                         "finished_size": "5.5 × 8.5 in", "ink": "4/4", "finishing": "Saddle stitch", "proof_required": True}),
+    ("Vinyl banner", "13oz vinyl with hems and grommets.",
+     [("Prepress", 30, None, "Prepress"), ("Print", 120, "Wide Format Printer", "Wide format"),
+      ("Hem & grommet", 60, None, "Finishing"), ("Pack", 15, None, None)],
+     ["Files received", "Proof approved", "Grommet spacing confirmed", "Quality check", "Customer notified"],
+     {"product": "Vinyl banner", "paper_stock": "13oz scrim vinyl", "finished_size": "3 × 6 ft", "ink": "4/0",
+      "finishing": "Hemmed, grommets every 2 ft", "proof_required": True}),
+    ("Menus", "Laminated menus, folded or flat.",
+     [("Prepress", 45, None, "Prepress"), ("Print", 60, "Digital Press 2", "Digital press"),
+      ("Laminate", 60, "Laminator", "Finishing"), ("Fold & trim", 30, "Folder", "Folder"), ("Pack", 10, None, None)],
+     _COMMON_CHECKLIST, {"product": "Menus", "paper_stock": "100lb gloss cover", "finished_size": "11 × 17 in folded",
+                         "ink": "4/4", "finishing": "Laminated, half fold", "proof_required": True}),
+]
+
+
+def _template_operations(steps, link_skills: bool) -> list[dict]:
+    res = {r["name"]: r["id"] for r in jobs_svc.resources()}
+    ops = []
+    for name, minutes, equipment, skill in steps:
+        ops.append({"name": name, "duration_minutes": minutes, "resource_id": res.get(equipment),
+                    "skill_id": jobs_svc.ensure_skill(skill) if (skill and link_skills) else None})
+    return ops
+
+
+def link_template_skills() -> None:
+    """Point the default templates' steps at skills (creating missing ones by name).
+    The demo runs this after staffing has added its own skills."""
+    stamp = now_iso()
+    for name, _desc, steps, _checklist, _specs in DEFAULT_TEMPLATES:
+        row = db.one("SELECT id FROM job_templates WHERE name = ?", name)
+        if row:
+            db.update("job_templates", row["id"], {"operations_json": db.jdump(_template_operations(steps, True)),
+                                                   "updated_at": stamp})
 
 
 def on_setup(ctx: dict) -> None:
@@ -982,46 +1038,13 @@ def on_setup(ctx: dict) -> None:
     for i, (key, label, kind, options) in enumerate(DEFAULT_FIELDS):
         db.insert("job_fields", {"key": key, "label": label, "type": kind, "options_json": db.jdump(options),
                                  "position": i, "created_at": stamp})
-    res = {}
     for i, (name, kind, color) in enumerate(DEFAULT_RESOURCES):
-        res[name] = db.insert("resources", {"name": name, "kind": kind, "color": color, "position": i, "created_at": stamp})
-    sk = {name: jobs_svc.ensure_skill(name) for name in DEFAULT_SKILLS}
-
-    def op(name, minutes, resource=None, skill=None):
-        return {"name": name, "duration_minutes": minutes, "resource_id": res.get(resource), "skill_id": sk.get(skill)}
-
-    common = ["Files received", "Proof approved", "Stock pulled", "Quality check", "Customer notified"]
-    templates = [
-        ("Business cards", "500–1,000 cards per name, 16pt stock.",
-         [op("Prepress", 30, None, "Prepress"), op("Print", 30, "Digital Press 1", "Digital press"),
-          op("Cut", 20, "Guillotine Cutter", "Cutting"), op("Pack", 10, None, "Bindery")],
-         common, {"product": "Business cards", "paper_stock": "16pt matte", "finished_size": "3.5 × 2 in", "ink": "4/4",
-                  "proof_required": True}),
-        ("Trifold brochure", "Letter trifold, 100lb gloss text.",
-         [op("Prepress", 45, None, "Prepress"), op("Print", 60, "Digital Press 1", "Digital press"),
-          op("Fold", 45, "Folder", "Bindery"), op("Pack", 15, None, "Bindery")],
-         common, {"product": "Trifold brochure", "paper_stock": "100lb gloss text", "finished_size": "8.5 × 11 in (folded to 3.67 × 8.5)",
-                  "ink": "4/4", "finishing": "Trifold", "proof_required": True}),
-        ("Saddle-stitched booklet", "Booklets with cover, folded and stapled.",
-         [op("Prepress & imposition", 90, None, "Prepress"), op("Print", 120, "Digital Press 1", "Digital press"),
-          op("Fold & stitch", 90, "Saddle Stitcher", "Bindery"), op("Trim", 30, "Guillotine Cutter", "Cutting"),
-          op("Pack", 20, None, "Bindery")],
-         common, {"product": "Booklet", "paper_stock": "80lb gloss text + 100lb gloss cover", "finished_size": "5.5 × 8.5 in",
-                  "ink": "4/4", "finishing": "Saddle stitch", "proof_required": True}),
-        ("Vinyl banner", "13oz vinyl with hems and grommets.",
-         [op("Prepress", 30, None, "Prepress"), op("Print", 120, "Wide Format Printer", "Wide format"),
-          op("Hem & grommet", 60, None, "Bindery"), op("Pack", 15, None, "Bindery")],
-         ["Files received", "Proof approved", "Grommet spacing confirmed", "Quality check", "Customer notified"],
-         {"product": "Vinyl banner", "paper_stock": "13oz scrim vinyl", "finished_size": "3 × 6 ft", "ink": "4/0",
-          "finishing": "Hemmed, grommets every 2 ft", "proof_required": True}),
-        ("Menus", "Laminated menus, folded or flat.",
-         [op("Prepress", 45, None, "Prepress"), op("Print", 60, "Digital Press 2", "Digital press"),
-          op("Laminate", 60, "Laminator", "Bindery"), op("Fold & trim", 30, "Folder", "Cutting"), op("Pack", 10, None, "Bindery")],
-         common, {"product": "Menus", "paper_stock": "100lb gloss cover", "finished_size": "11 × 17 in folded", "ink": "4/4",
-                  "finishing": "Laminated, half fold", "proof_required": True}),
-    ]
-    for name, desc, ops, checklist, specs in templates:
-        db.insert("job_templates", {"name": name, "description": desc, "operations_json": db.jdump(ops),
+        db.insert("resources", {"name": name, "kind": kind, "color": color, "position": i, "created_at": stamp})
+    # A demo workspace gets its skills from the staffing seed; link them in seed().
+    link_skills = not ctx.get("demo")
+    for name, desc, steps, checklist, specs in DEFAULT_TEMPLATES:
+        db.insert("job_templates", {"name": name, "description": desc,
+                                    "operations_json": db.jdump(_template_operations(steps, link_skills)),
                                     "checklist_json": db.jdump(checklist), "specs_json": db.jdump(specs),
                                     "created_at": stamp, "updated_at": stamp})
 

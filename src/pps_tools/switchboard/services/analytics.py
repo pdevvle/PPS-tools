@@ -704,12 +704,17 @@ def _job_minutes(entries: list[dict], current: datetime) -> float:
     return total
 
 
+def _on_time(job: dict) -> bool:
+    done, due = parse_iso(job["completed_at"]), parse_iso(job["due_at"])
+    return bool(done and due and done <= due)
+
+
 def _jobs_totals(period: Period) -> dict:
     s, e = period.start_utc, period.end_utc
     created = db.scalar("SELECT COUNT(*) FROM jobs WHERE created_at >= ? AND created_at < ?", s, e) or 0
     completed = db.query("SELECT due_at, completed_at, quote_amount FROM jobs WHERE completed_at >= ? AND completed_at < ?", s, e)
     with_due = [j for j in completed if j["due_at"]]
-    on_time = sum(1 for j in with_due if j["completed_at"] <= j["due_at"])
+    on_time = sum(1 for j in with_due if _on_time(j))
     return {
         "created": created,
         "completed": len(completed),
@@ -746,7 +751,7 @@ def jobs_report(period: Period) -> dict:
             weeks[week_start(d.date())]["completed"] += 1
 
     with_due = [j for j in completed if j["due_at"]]
-    on_time = sum(1 for j in with_due if j["completed_at"] <= j["due_at"])
+    on_time = sum(1 for j in with_due if _on_time(j))
     cycle = [m for m in (minutes_between(parse_iso(j["created_at"]), parse_iso(j["completed_at"])) for j in completed) if m >= 0]
 
     open_rows = db.query(
@@ -921,11 +926,20 @@ TABLES = {
 }
 
 
+def _cell(value):
+    """Blank for None; text that a spreadsheet would run as a formula gets a leading quote."""
+    if value is None:
+        return ""
+    if isinstance(value, str) and value[:1] in ("=", "+", "-", "@", "\t", "\r"):
+        return "'" + value
+    return value
+
+
 def to_csv(report: str, table: str, data: dict) -> str:
     headers, rows = TABLES[report][table]
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow(headers)
     for row in rows(data):
-        writer.writerow(["" if v is None else v for v in row])
+        writer.writerow([_cell(v) for v in row])
     return buf.getvalue()

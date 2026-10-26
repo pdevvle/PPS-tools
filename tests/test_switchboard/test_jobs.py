@@ -279,7 +279,7 @@ def test_auto_scheduler_uses_skills_and_shifts(client, make_user):
     b = boot(client)
     monday = next_monday(7)
     cutter, _ = make_user("staff", name="Cutter Pro")
-    skill = b["skills"]["Cutting"]["id"]
+    skill = b["skills"]["Guillotine cutter"]["id"]
     with db.transaction():
         db.execute("INSERT INTO staff_skills (user_id, skill_id, level) VALUES (?, ?, 2)", cutter["id"], skill)
         # only working Monday afternoon

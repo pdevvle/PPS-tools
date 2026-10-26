@@ -132,7 +132,7 @@ export function LineChart({ labels, series, format = compact, xFormat = (l) => l
       onPointerMove=${onMove} onPointerLeave=${() => show(null)}>
     ${width > 0 && html`<svg width=${width} height=${height} aria-hidden="true">
       ${ticks.map((t) => html`<g key=${t}>
-        <line x1=${m.l} x2=${m.l + pw} y1=${y(t)} y2=${y(t)} class=${t === 0 ? 'viz-baseline' : 'viz-grid'} />
+        <line x1=${m.l} x2=${m.l + pw} y1=${y(t)} y2=${y(t)} class=${t === 0 ? 'viz-baseline' : 'viz-gridline'} />
         <text x=${m.l - 8} y=${y(t) + 4} class="viz-tick" text-anchor="end">${format(t)}</text>
       </g>`)}
       ${labels.map((l, i) => (i % every === 0 || i === n - 1) && (i === n - 1 || n - 1 - i >= every * 0.6) && html`<text key=${l}
@@ -192,18 +192,18 @@ export function ColumnChart({ labels, series, format = compact, xFormat = (l) =>
       onBlur=${() => setActive(null)} onPointerLeave=${() => setActive(null)}>
     ${width > 0 && html`<svg width=${width} height=${height} aria-hidden="true">
       ${ticks.map((t) => html`<g key=${t}>
-        <line x1=${m.l} x2=${m.l + pw} y1=${y(t)} y2=${y(t)} class=${t === 0 ? 'viz-baseline' : 'viz-grid'} />
+        <line x1=${m.l} x2=${m.l + pw} y1=${y(t)} y2=${y(t)} class=${t === 0 ? 'viz-baseline' : 'viz-gridline'} />
         <text x=${m.l - 8} y=${y(t) + 4} class="viz-tick" text-anchor="end">${format(t)}</text>
       </g>`)}
       ${labels.map((l, gi) => {
     const gx = m.l + band * gi + (band - groupW) / 2;
     return html`<g key=${l} class=${cx('viz-group', active === gi && 'is-active')}>
+          <rect x=${m.l + band * gi} y=${m.t} width=${band} height=${ph} class="viz-hit" onPointerEnter=${() => setActive(gi)} />
           ${series.map((s, si) => html`<path key=${s.key} d=${columnPath(gx + si * (barW + 2), y(s.values[gi]), barW, y(0))}
-            style=${{ fill: seriesColor(si) }} />`)}
+            class="viz-bar" style=${{ fill: seriesColor(si) }} />`)}
           ${gi === n - 1 && series.map((s, si) => (s.values[gi] ? html`<text key=${'v' + s.key}
             x=${gx + si * (barW + 2) + barW / 2} y=${y(s.values[gi]) - 5} class="viz-cap" text-anchor="middle">${format(s.values[gi])}</text>` : null))}
           ${(gi % every === 0 || gi === n - 1) && html`<text x=${m.l + band * gi + band / 2} y=${height - 6} class="viz-tick" text-anchor="middle">${xFormat(l)}</text>`}
-          <rect x=${m.l + band * gi} y=${m.t} width=${band} height=${ph} class="viz-hit" onPointerEnter=${() => setActive(gi)} />
         </g>`;
   })}
     </svg>`}
@@ -315,7 +315,7 @@ export function Kpi({ label, value, current, previous, direction = 'up', hint, p
 }
 
 // Meter: a single ratio against a target; the fill carries severity, with a label.
-export function Meter({ value, label, status = 'accent' }) {
+export function Meter({ value, label, status = 'good' }) {
   const pct = Math.max(0, Math.min(100, value || 0));
   return html`<div class=${cx('viz-meter', `is-${status}`)} role="meter" aria-valuenow=${pct} aria-valuemin="0" aria-valuemax="100" aria-label=${label}>
     <div class="viz-meter-fill" style=${{ width: pct + '%' }}></div>

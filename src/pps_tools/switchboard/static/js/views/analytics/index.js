@@ -8,7 +8,7 @@ import { boot, useStore } from '../../lib/store.js';
 import { addDays, dateKey, fromDateKey, startOfMonth } from '../../lib/dates.js';
 import { fmtDate, fmtMoney, fmtNumber, plural } from '../../lib/format.js';
 import { ModuleLayout, SidebarButton, SidebarHeader, SidebarItem, SidebarSection } from '../../ui/layout.js';
-import { Avatar, Banner, Button, Empty, ErrorBox, Icon, Loading, PageHeader, Select, cx } from '../../ui/components.js';
+import { Avatar, Banner, Button, ErrorBox, Icon, Loading, PageHeader, Select, Spinner, cx } from '../../ui/components.js';
 import { showMenu, showPopover } from '../../ui/overlay.js';
 import { BarList, ChartCard, ColumnChart, DataTable, Heatmap, Kpi, Legend, LineChart, Meter } from './charts.js';
 
@@ -100,7 +100,8 @@ function RangePicker({ range, close }) {
 // Keeps showing the last result (dimmed) while a new range loads.
 function useReport(report, query) {
   const [state, setState] = useState({ data: null, error: null, loading: true });
-  const key = JSON.stringify([report, query]);
+  const [nonce, setNonce] = useState(0);
+  const key = JSON.stringify([report, query, nonce]);
   const seq = useRef(0);
   useEffect(() => {
     const id = ++seq.current;
@@ -109,7 +110,7 @@ function useReport(report, query) {
       .then((data) => { if (id === seq.current) setState({ data: { ...data, __report: report }, error: null, loading: false }); })
       .catch((error) => { if (id === seq.current) setState((s) => ({ ...s, error, loading: false })); });
   }, [key]);
-  return { ...state, reload: () => setState((s) => ({ ...s })) };
+  return { ...state, reload: () => setNonce((n) => n + 1) };
 }
 
 const TABLES = {
@@ -137,7 +138,7 @@ function InboxReport({ data, stale, prevLabel }) {
     { key: 'closed', label: 'Closed', values: daily.map((d) => d.closed) },
   ];
   const sla = data.sla;
-  const slaStatus = !sla || sla.within_pct === null ? 'accent' : sla.within_pct >= 90 ? 'accent' : sla.within_pct >= 75 ? 'warning' : 'critical';
+  const slaStatus = !sla || sla.within_pct === null || sla.within_pct >= 90 ? 'good' : sla.within_pct >= 75 ? 'warning' : 'critical';
   const anyVolume = daily.some((d) => d.received || d.sent || d.closed);
   return html`
     <div class="kpi-row">
@@ -170,7 +171,7 @@ function InboxReport({ data, stale, prevLabel }) {
         ${sla && html`<div class="sla">
           <div class="sla-head">
             <span class=${cx('sla-status', `is-${slaStatus}`)}>
-              <${Icon} name=${slaStatus === 'accent' ? 'circle-check' : slaStatus === 'warning' ? 'triangle-alert' : 'octagon-alert'} size=${15} />
+              <${Icon} name=${slaStatus === 'good' ? 'circle-check' : slaStatus === 'warning' ? 'triangle-alert' : 'octagon-alert'} size=${15} />
               ${sla.within_pct === null ? 'No replies yet' : `${pct(sla.within_pct)} answered within ${fmtSpan(sla.target_minutes)}`}
             </span>
             <span class="muted text-sm">${plural(sla.breaches, 'breach', 'breaches')}</span>
@@ -392,7 +393,7 @@ export default function Reports({ route }) {
     if (route.query.team_id) query.team_id = route.query.team_id;
     if (route.query.channel_id) query.channel_id = route.query.channel_id;
   }
-  const { data, error, loading } = useReport(current, query);
+  const { data, error, loading, reload } = useReport(current, query);
   const { title, Component } = REPORTS[current];
   const days = Math.round((fromDateKey(range.end) - fromDateKey(range.start)) / 86400000) + 1;
   const prevLabel = `previous ${days} days`;
@@ -419,15 +420,13 @@ export default function Reports({ route }) {
           options=${teams.map((tm) => ({ value: String(tm.id), label: tm.name }))} onValue=${(v) => setQuery({ team_id: v || undefined })} />
         <${Select} class="reports-select" value=${route.query.channel_id || ''} placeholder="All channels" aria-label="Channel"
           options=${channels.map((c) => ({ value: String(c.id), label: c.name }))} onValue=${(v) => setQuery({ channel_id: v || undefined })} />`}
-      ${loading && data && html`<span class="spinner reports-spinner" aria-label="Updating"></span>`}
+      ${loading && data && html`<${Spinner} size=${14} class="reports-spinner" />`}
     </div>
     <div class="page-body viz-root">
-      ${error && !data && html`<${ErrorBox} error=${error} retry=${() => window.location.reload()} />`}
+      ${error && html`<${ErrorBox} error=${error} retry=${reload} class="mb-3" />`}
       ${!data && loading && html`<${Loading} label="Crunching numbers…" />`}
       ${data && html`<div class=${cx('reports-body', loading && 'is-stale')}><${Component} data=${data} stale=${loading} prevLabel=${prevLabel} /></div>`}
-      ${data && !loading && error && html`<${ErrorBox} error=${error} />`}
     </div>
   </${ModuleLayout}>`;
 }
 
-export { Empty };

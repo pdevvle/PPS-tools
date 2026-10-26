@@ -213,9 +213,22 @@ export function ScheduleBoard({ route }) {
   }, [!!data]);
 
   // -- geometry ---------------------------------------------------------------------
+  // Work windows come from the server in UTC (org timezone applied there), so shading
+  // stays right even when this browser is in another timezone.
   const wh = (data && data.work_hours) || { start: '07:00', end: '18:00', days: [0, 1, 2, 3, 4] };
-  let minMin = Math.max(0, hhmmToMinutes(wh.start, 420) - 60);
-  let maxMin = Math.min(24 * 60, hhmmToMinutes(wh.end, 1080) + 60);
+  const windows = useMemo(() => (data ? data.windows : []).map((w) => [parseISO(w.start_at), parseISO(w.end_at)]), [data]);
+  const pad = view === 'week' ? 30 : 60;
+  let minMin;
+  let maxMin;
+  if (windows.length) {
+    minMin = Math.min(...windows.map(([a]) => minutesOfDay(a)));
+    maxMin = Math.max(...windows.map(([a, b]) => (isSameDay(a, b) ? minutesOfDay(b) : 1440)));
+  } else {
+    minMin = hhmmToMinutes(wh.start, 420);
+    maxMin = hhmmToMinutes(wh.end, 1080);
+  }
+  minMin = Math.max(0, Math.floor((minMin - pad) / 30) * 30);
+  maxMin = Math.min(24 * 60, Math.ceil((maxMin + pad) / 30) * 30);
   for (const b of (data ? data.blocks : [])) {
     const s = parseISO(b.start_at);
     const e = parseISO(b.end_at);
@@ -225,9 +238,10 @@ export function ScheduleBoard({ route }) {
   const span = Math.max(60, maxMin - minMin);
   const labelW = mobile ? 104 : 176;
   const avail = Math.max(320, width - labelW);
-  const dayWidth = view === 'week' ? Math.max(mobile ? 150 : 132, avail / 7) : Math.max(avail, span * (mobile ? 1.6 : 1.1));
+  const dayWidth = view === 'week' ? Math.max(150, avail / 7) : Math.max(avail, span * (mobile ? 1.6 : 1.1));
   const pxPerMin = dayWidth / span;
   const totalW = dayWidth * dayCount;
+  const hourStep = [1, 2, 3, 4, 6, 12, 24].find((h) => h * 60 * pxPerMin >= 46) || 24;
 
   const dayIndex = (d) => {
     for (let i = 0; i < dayCount; i++) if (isSameDay(days[i], d)) return i;
@@ -282,19 +296,23 @@ export function ScheduleBoard({ route }) {
     return out;
   }, [data]);
 
-  // Non-working stripes shared by every row.
+  // Non-working stripes shared by every row: each day's visible span minus work windows.
   const offHours = useMemo(() => {
     const segs = [];
-    const ws = hhmmToMinutes(wh.start, 420);
-    const we = hhmmToMinutes(wh.end, 1080);
     days.forEach((d, i) => {
-      const pyDay = (d.getDay() + 6) % 7; // Python weekday: Monday = 0
-      if (!wh.days.includes(pyDay)) { segs.push({ left: i * dayWidth, width: dayWidth }); return; }
-      if (ws > minMin) segs.push({ left: i * dayWidth, width: (ws - minMin) * pxPerMin });
-      if (we < maxMin) segs.push({ left: i * dayWidth + (we - minMin) * pxPerMin, width: (maxMin - we) * pxPerMin });
+      const open = windows
+        .filter(([a]) => isSameDay(a, d))
+        .map(([a, b]) => [Math.max(minutesOfDay(a), minMin), isSameDay(a, b) ? Math.min(minutesOfDay(b), maxMin) : maxMin])
+        .sort((x, y) => x[0] - y[0]);
+      let cursor = minMin;
+      for (const [a, b] of open) {
+        if (a > cursor) segs.push({ left: i * dayWidth + (cursor - minMin) * pxPerMin, width: (a - cursor) * pxPerMin });
+        cursor = Math.max(cursor, b);
+      }
+      if (cursor < maxMin) segs.push({ left: i * dayWidth + (cursor - minMin) * pxPerMin, width: (maxMin - cursor) * pxPerMin });
     });
     return segs;
-  }, [days, dayWidth, pxPerMin, minMin, maxMin, wh.start, wh.end, wh.days.join(',')]);
+  }, [days, windows, dayWidth, pxPerMin, minMin, maxMin]);
 
   const offShift = (uid) => {
     if (!hasShifts || uid === null) return [];
@@ -474,11 +492,11 @@ export function ScheduleBoard({ route }) {
               ${days.map((d, i) => html`<div class=${cx('sched-day', isSameDay(d, new Date()) && 'is-today')} key=${i} style=${{ left: i * dayWidth + 'px', width: dayWidth + 'px' }}>
                 ${view === 'week' && html`<div class="sched-day-label">${fmtWeekday(d)} ${d.getDate()}</div>`}
                 <div class="sched-hours">
-                  ${Array.from({ length: Math.floor(span / 60) + 1 }, (_, h) => h).filter((h) => view === 'day' || h % (dayWidth / (span / 60) < 34 ? 3 : 2) === 0).map((h) => {
-    const minutes = minMin + h * 60;
-    if (minutes > maxMin) return null;
+                  ${Array.from({ length: Math.floor(span / 60) + 1 }, (_, h) => h).map((h) => {
+    const minutes = Math.ceil(minMin / 60) * 60 + h * 60;
+    if (minutes >= maxMin || (minutes / 60) % hourStep !== 0) return null;
     const t = new Date(d); t.setHours(0, 0, 0, 0); t.setMinutes(minutes);
-    return html`<span class="sched-hour" key=${h} style=${{ left: h * 60 * pxPerMin + 'px' }}>${fmtTimeShort(t)}</span>`;
+    return html`<span class="sched-hour" key=${h} style=${{ left: (minutes - minMin) * pxPerMin + 'px' }}>${fmtTimeShort(t)}</span>`;
   })}
                 </div>
               </div>`)}
@@ -518,7 +536,7 @@ export function ScheduleBoard({ route }) {
       return html`<div
                     key=${b.id}
                     data-op-id=${b.id}
-                    class=${cx('sched-block', `is-${b.status}`, bad && 'has-conflict', dragging && 'is-dragging', manage && 'is-draggable', b.job_priority === 'rush' && 'is-rush')}
+                    class=${cx('sched-block', `is-${b.status}`, bad && 'has-conflict', dragging && 'is-dragging', manage && 'is-draggable', b.job_priority === 'rush' && 'is-rush', g.width < 56 && 'is-narrow')}
                     style=${{ left: g.left + 'px', width: g.width + 'px', top: top + 'px', '--block': b.stage_color || 'var(--accent)' }}
                     title=${`${b.job_number} · ${b.name}\n${fmtTimeShort(b.start_at)}–${fmtTimeShort(b.end_at)}${bad ? '\n⚠ ' + b.conflicts.map((c) => c.message).join('\n⚠ ') : ''}`}
                     onPointerDown=${(e) => (manage ? startDrag(e, b, 'move') : null)}

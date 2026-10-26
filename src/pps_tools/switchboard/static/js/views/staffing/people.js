@@ -6,7 +6,7 @@ import { api } from '../../lib/api.js';
 import { useFetch } from '../../lib/hooks.js';
 import { navigate } from '../../lib/router.js';
 import { useStore, can } from '../../lib/store.js';
-import { fmtDate, fmtTime, fmtDuration, fmtMoney } from '../../lib/format.js';
+import { fmtDate, fmtDuration, fmtMoney } from '../../lib/format.js';
 import {
   Avatar, Button, Card, Checkbox, Chip, Empty, ErrorBox, Field, Icon, IconButton, Input, KeyValue, Loading, PageHeader,
   SearchInput, Select, TextArea, Toggle, cx,
@@ -55,7 +55,7 @@ export function PeopleList() {
             <td class="hide-mobile"><div class="row row-wrap gap-1">${p.skills.slice(0, 3).map((sk) => html`<${SkillChip} key=${sk.skill_id} skill=${sk} />`)}
               ${p.skills.length > 3 ? html`<span class="muted text-sm">+${p.skills.length - 3}</span>` : null}</div></td>
             <td><${S.StatusChip} status=${p.status} /></td>
-            <td class="num hide-mobile">${S.hours(p.week_minutes)}${p.profile.target_hours_week ? html`<span class="muted"> / ${p.profile.target_hours_week}h</span>` : null}</td>
+            <td class="num hide-mobile nowrap">${S.hours(p.week_minutes)}${p.profile.target_hours_week ? html`<span class="muted"> / ${p.profile.target_hours_week}h</span>` : null}</td>
           </tr>`)}
         </tbody>
       </table></div>`}
@@ -261,7 +261,7 @@ export function PersonProfile({ id }) {
           ${(data.is_me || manager) && html`<${Card} title="Recent punches" icon="clock" pad=${false}>
             ${data.time_entries.length ? html`<div class="list">${data.time_entries.slice(0, 10).map((e) => html`<div key=${e.id} class="list-row text-sm">
               <span class="st-entry-date">${S.dayLabel(e.date)}</span>
-              <span class="grow">${fmtTime(e.clock_in)} – ${e.clock_out ? fmtTime(e.clock_out) : html`<${Chip} tone="ok" size="sm">on the clock</${Chip}>`}</span>
+              <span class="grow">${S.orgTime(e.clock_in)} – ${e.clock_out ? S.orgTime(e.clock_out) : html`<${Chip} tone="ok" size="sm">on the clock</${Chip}>`}</span>
               ${e.flag && html`<${Icon} name="triangle-alert" size=${13} class="st-flag" title="Needs review" />`}
               <span class="tabular">${fmtDuration(e.worked_minutes)}</span>
             </div>`)}</div>` : html`<${Empty} icon="clock" compact>No punches in the last two weeks.</${Empty}>`}

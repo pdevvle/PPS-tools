@@ -5,7 +5,7 @@ import { api } from '../../lib/api.js';
 import { useFetch, useNow } from '../../lib/hooks.js';
 import { navigate } from '../../lib/router.js';
 import { useStore } from '../../lib/store.js';
-import { fmtTime, fmtClock, fmtDuration, fmtUntil } from '../../lib/format.js';
+import { fmtClock, fmtDuration } from '../../lib/format.js';
 import { Button, Card, Empty, Icon, Loading, Select, cx } from '../../ui/components.js';
 import { toastError } from '../../ui/overlay.js';
 import * as S from './shared.js';
@@ -13,16 +13,18 @@ import { TimeOffRow } from './timeoff.js';
 import { RequestCard } from './requests.js';
 
 function useMyJobs(enabled) {
-  // Jobs live in another module; if it's missing or errors, the picker just hides.
+  // Jobs live in another module (it puts job_stages in bootstrap); without it, or if the
+  // request fails, the picker just hides.
+  const hasJobs = useStore((s) => Array.isArray(s.boot.job_stages));
   const [jobs, setJobs] = useState(null);
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !hasJobs) return;
     let alive = true;
-    api.get('/jobs', { mine: 1, limit: 30 })
+    api.get('/jobs', { mine: 1, done: 0, limit: 30 })
       .then((res) => { if (alive) setJobs(Array.isArray(res?.items) ? res.items : []); })
       .catch(() => { if (alive) setJobs([]); });
     return () => { alive = false; };
-  }, [enabled]);
+  }, [enabled, hasJobs]);
   return jobs || [];
 }
 
@@ -50,7 +52,7 @@ export function ClockWidget() {
   return html`<${Card} title="Time clock" icon="clock" class="st-clock-card">
     <div class=${cx('st-clock', entry && 'is-in', entry?.on_break && 'is-break')}>
       <div class="st-clock-status">
-        ${entry ? html`<span class="st-clock-dot"></span>${entry.on_break ? 'On break' : 'Clocked in'} since ${fmtTime(entry.on_break ? breakStart : entry.clock_in)}`
+        ${entry ? html`<span class="st-clock-dot"></span>${entry.on_break ? 'On break' : 'Clocked in'} since ${S.orgTime(entry.on_break ? breakStart : entry.clock_in)}`
     : html`<span class="muted">You're clocked out</span>`}
       </div>
       <div class="st-clock-timer tabular">${entry ? fmtClock(entry.on_break ? (now - new Date(breakStart).getTime()) / 1000 : Math.max(0, elapsed)) : fmtDuration(data.today_minutes) || '0m'}</div>
@@ -69,7 +71,7 @@ export function ClockWidget() {
         <${Icon} name="calendar-clock" size=${14} />
         <span>${data.shift ? 'Shift now' : 'Next shift'}: <strong>${S.dayLabel(shift.date)}, ${S.shiftRange(shift)}</strong>
           ${S.positionOf(shift.position_id) ? ` · ${S.positionOf(shift.position_id).name}` : ''}
-          ${!data.shift ? html`<span class="muted"> (${fmtUntil(shift.start_at)})</span>` : null}</span>
+          ${!data.shift ? html`<span class="muted"> (${S.untilLabel(shift.start_at)})</span>` : null}</span>
       </div>`}
     </div>
   </${Card}>`;

@@ -309,3 +309,13 @@ def test_agenda_and_search(client):
     assert [e["title"] for e in agenda] == ["Paper vendor visit"]
     items = client.get("/api/search", query_string={"q": "vendor visit"})["items"]
     assert any(i["type"] == "event" for i in items)
+
+
+def test_moving_an_all_day_occurrence_shifts_the_series(client):
+    ev = client.post("/api/calendar/events", {"title": "Inventory", "all_day": True, "start_date": "2026-11-02",
+                                              "rrule": "FREQ=WEEKLY;COUNT=3"})["event"]
+    second = events(client, "2026-11-08T00:00:00Z", "2026-11-12T00:00:00Z")[0]
+    client.patch(f"/api/calendar/events/{ev['id']}?scope=all&original_start={second['original_start']}",
+                 {"all_day": True, "start_date": "2026-11-10", "end_date": "2026-11-10"})
+    days = [e["start_date"] for e in events(client, "2026-11-01T00:00:00Z", "2026-11-30T00:00:00Z")]
+    assert days == ["2026-11-03", "2026-11-10", "2026-11-17"]
