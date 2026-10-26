@@ -1,0 +1,9 @@
+/* My day dashboard. */
+
+.widget-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 16px; max-width: 1280px; margin: 0 auto; align-items: start; }
+.widget-sm { grid-column: span 4; }
+.widget-md { grid-column: span 6; }
+.widget-lg { grid-column: span 12; }
+.widget > .card { height: 100%; }
+@media (max-width: 1180px) { .widget-sm { grid-column: span 6; } .widget-md { grid-column: span 6; } }
+@media (max-width: 760px) { .widget-grid { grid-template-columns: 1fr; } .widget-sm, .widget-md, .widget-lg { grid-column: auto; } }

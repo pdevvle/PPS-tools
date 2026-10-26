@@ -1,0 +1,30 @@
+{% extends "mk_base.html" %}
+{% from "mk_macros.html" import icon, platform with context %}
+{% block title %}Activity{% endblock %}
+{% block heading %}Activity{% endblock %}
+{% block intro %}Every change made through the hub — by you, by an automation rule or from an AI suggestion — with when it happened and whether it worked.{% endblock %}
+
+{% block content %}
+<section class="card">
+  {% for a in items %}
+    <div class="activity-item">
+      <div><div class="when">{{ a.at|local_time }}</div><div class="kind">{{ a.kind }}</div></div>
+      <div>
+        <div>{% if not a.ok %}<span class="delta bad">✗</span> {% endif %}{{ a.summary }}</div>
+        <div class="small muted">
+          {% if a.platform %}{{ platform(a.platform) }}{% endif %}
+          {% if a.detail.get("actor") and a.detail.actor != "you" %} · by {{ a.detail.actor }}{% endif %}
+          {% if a.detail.get("url")|safe_url %} · <a href="{{ a.detail.url|safe_url }}" target="_blank" rel="noopener">view post</a>{% endif %}
+        </div>
+      </div>
+    </div>
+  {% else %}
+    <p class="empty">Nothing yet. Changes you make here — pausing campaigns, editing budgets, publishing posts — are recorded on this page.</p>
+  {% endfor %}
+  <div class="row" style="margin-top:12px">
+    {% if page > 1 %}<a class="btn ghost sm" href="{{ url_for('activity', page=page - 1) }}">← Newer</a>{% endif %}
+    <span class="spacer"></span>
+    {% if more %}<a class="btn ghost sm" href="{{ url_for('activity', page=page + 1) }}">Older →</a>{% endif %}
+  </div>
+</section>
+{% endblock %}

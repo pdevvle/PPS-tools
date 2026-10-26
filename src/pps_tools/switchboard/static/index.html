@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Switchboard</title>
+  <meta name="theme-color" content="#1f2330">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/css/base.css">
+  <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="stylesheet" href="/static/css/inbox.css">
+  <link rel="stylesheet" href="/static/css/chat.css">
+  <link rel="stylesheet" href="/static/css/jobs.css">
+  <link rel="stylesheet" href="/static/css/staffing.css">
+  <link rel="stylesheet" href="/static/css/calendar.css">
+  <link rel="stylesheet" href="/static/css/tasks.css">
+  <link rel="stylesheet" href="/static/css/contacts.css">
+  <link rel="stylesheet" href="/static/css/analytics.css">
+  <link rel="stylesheet" href="/static/css/settings.css">
+  <link rel="stylesheet" href="/static/css/me.css">
+  <link rel="stylesheet" href="/static/css/channels.css">
+  <link rel="stylesheet" href="/static/css/admin.css">
+  <script>
+    // Apply the saved theme before first paint to avoid a flash.
+    (function () {
+      try {
+        var t = localStorage.getItem('sb.theme') || 'system';
+        var dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      } catch (e) {}
+    })();
+  </script>
+  <script type="importmap">
+    {
+      "imports": {
+        "preact": "/static/vendor/preact.module.js",
+        "preact/hooks": "/static/vendor/hooks.module.js",
+        "htm": "/static/vendor/htm.module.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="app"><div class="boot-splash"><div class="boot-logo"></div></div></div>
+  <script type="module" src="/static/js/main.js"></script>
+</body>
+</html>

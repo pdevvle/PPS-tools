@@ -1,0 +1,10 @@
+{
+  "name": "Switchboard",
+  "short_name": "Switchboard",
+  "description": "Team inbox, staffing and job scheduling",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#161a24",
+  "theme_color": "#161a24",
+  "icons": [{ "src": "/static/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
