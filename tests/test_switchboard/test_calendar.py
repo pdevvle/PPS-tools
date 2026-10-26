@@ -230,6 +230,29 @@ END:VCALENDAR\r
 """
 
 
+class FakeResp:
+    """Just enough of a streamed requests.Response for fetch_ics."""
+
+    def __init__(self, content=b"", status=200, location=None, chunks=None):
+        self.content, self.status_code, self.encoding = content, status, "utf-8"
+        self.headers = {"Location": location} if location else {}
+        self.is_redirect = location is not None
+        self._chunks = chunks
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise RuntimeError(f"HTTP {self.status_code}")
+
+    def iter_content(self, size):
+        yield from (self._chunks if self._chunks is not None else [self.content])
+
+
 def test_parse_ics_and_subscription_import(client, monkeypatch):
     parsed = cal_svc.parse_ics(SAMPLE_ICS, cal_svc.get_zone("America/Phoenix"))
     by_title = {p["title"]: p for p in parsed}
@@ -239,17 +262,10 @@ def test_parse_ics_and_subscription_import(client, monkeypatch):
     assert standup["rrule"] == "FREQ=DAILY;COUNT=4" and standup["description"] == "Line one\nline two"
     assert standup["exdates"] == ["2026-11-03T16:00:00.000Z"]
 
-    class Resp:
-        status_code = 200
-        encoding = "utf-8"
-        content = SAMPLE_ICS.encode()
-
-        def raise_for_status(self):
-            pass
-
     import requests
 
-    monkeypatch.setattr(requests, "get", lambda *a, **k: Resp())
+    monkeypatch.setattr(cal_svc, "_addresses", lambda host, port: ["93.184.215.14"])
+    monkeypatch.setattr(requests, "get", lambda *a, **k: FakeResp(SAMPLE_ICS.encode()))
     cal = client.post("/api/calendars", {"name": "Vendor calendar", "kind": "subscription",
                                          "ics_url": "webcal://vendor.test/cal.ics"}, expect=201)["calendar"]
     assert cal["sync_error"] is None and cal["can_write"] is False
@@ -269,6 +285,54 @@ def test_parse_ics_and_subscription_import(client, monkeypatch):
     monkeypatch.setattr(requests, "get", boom)
     res = client.post(f"/api/calendars/{cal['id']}/sync")
     assert "offline" in res["calendar"]["sync_error"]
+
+
+def test_subscriptions_never_fetch_private_addresses(client, monkeypatch):
+    import requests
+
+    fetched = []
+    lookups = {"localhost.test": ["127.0.0.1"], "meta.test": ["169.254.169.254"], "lan.test": ["192.168.1.20"],
+               "v6.test": ["::1"], "mixed.test": ["93.184.215.14", "10.0.0.5"], "public.test": ["93.184.215.14"]}
+    monkeypatch.setattr(cal_svc, "_addresses", lambda host, port: lookups[host])
+
+    def fake_get(url, **kw):
+        fetched.append(url)
+        assert kw.get("allow_redirects") is False and kw.get("stream") is True
+        if url.startswith("https://public.test/redirect"):
+            return FakeResp(status=302, location="http://lan.test/admin")
+        return FakeResp(SAMPLE_ICS.encode())
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    for host in ("localhost.test", "meta.test", "lan.test", "v6.test", "mixed.test"):
+        cal = client.post("/api/calendars", {"name": host, "kind": "subscription",
+                                             "ics_url": f"http://{host}/cal.ics"}, expect=201)["calendar"]
+        assert "private network" in cal["sync_error"], host
+    assert fetched == []
+
+    # A public link may not redirect into the private network either.
+    cal = client.post("/api/calendars", {"name": "Hop", "kind": "subscription",
+                                         "ics_url": "https://public.test/redirect"}, expect=201)["calendar"]
+    assert "private network" in cal["sync_error"]
+    assert fetched == ["https://public.test/redirect"]
+
+
+def test_subscription_download_is_capped(client, monkeypatch):
+    import requests
+
+    monkeypatch.setattr(cal_svc, "_addresses", lambda host, port: ["93.184.215.14"])
+    monkeypatch.setattr(cal_svc, "MAX_ICS_BYTES", 1000)
+    pulled = []
+
+    def endless():
+        while True:
+            pulled.append(1)
+            yield b"x" * 400
+
+    monkeypatch.setattr(requests, "get", lambda url, **kw: FakeResp(chunks=endless()))
+    cal = client.post("/api/calendars", {"name": "Huge", "kind": "subscription",
+                                         "ics_url": "https://public.test/huge.ics"}, expect=201)["calendar"]
+    assert "larger than 10 MB" in cal["sync_error"]
+    assert len(pulled) == 3  # stopped reading as soon as it went over the cap
 
 
 def test_attendees_notified_and_reminders_fire_once(client, owner, make_user):

@@ -15,10 +15,13 @@
 from __future__ import annotations
 
 import calendar as pycal
+import ipaddress
 import re
+import socket
 import sqlite3
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
+from urllib.parse import urljoin, urlparse
 
 from pps_tools.switchboard import db, realtime
 from pps_tools.switchboard.services import notify, settings
@@ -1031,18 +1034,57 @@ def import_events(cal: dict, items: list[dict]) -> int:
     return len(items)
 
 
-def sync_subscription(cal: dict) -> int:
+MAX_ICS_BYTES = 10 * 1024 * 1024
+MAX_REDIRECTS = 3
+
+
+def _addresses(host: str, port: int) -> list[str]:
+    return [info[4][0] for info in socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)]
+
+
+def _check_public(url: str) -> None:
+    """Any teammate can add a subscription, so never let one make the server fetch from
+    its own network (localhost, the LAN, cloud metadata endpoints)."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        raise ValueError("that isn't a web link to an iCalendar (.ics) file")
+    try:
+        addresses = _addresses(parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80))
+    except OSError:
+        raise ValueError(f"couldn't find {parsed.hostname}") from None
+    if not addresses or not all(ipaddress.ip_address(a).is_global for a in addresses):
+        raise ValueError("that link points to a private network address")
+
+
+def fetch_ics(url: str) -> str:
+    """Download a subscription feed: public addresses only (checked again on every
+    redirect) and at most MAX_ICS_BYTES, read in chunks so a huge file can't fill memory."""
     import requests
 
-    url = (cal["ics_url"] or "").strip()
+    url = url.strip()
     if url.lower().startswith("webcal://"):
         url = "https://" + url[9:]
+    for _ in range(MAX_REDIRECTS + 1):
+        _check_public(url)
+        with requests.get(url, timeout=20, headers={"User-Agent": "Switchboard calendar sync"},
+                          stream=True, allow_redirects=False) as resp:
+            if resp.is_redirect:
+                url = urljoin(url, resp.headers.get("Location", ""))
+                continue
+            resp.raise_for_status()
+            chunks, size = [], 0
+            for chunk in resp.iter_content(64 * 1024):
+                size += len(chunk)
+                if size > MAX_ICS_BYTES:
+                    raise ValueError("calendar file is larger than 10 MB")
+                chunks.append(chunk)
+            return b"".join(chunks).decode(resp.encoding or "utf-8", errors="replace")
+    raise ValueError("that link redirects too many times")
+
+
+def sync_subscription(cal: dict) -> int:
     try:
-        resp = requests.get(url, timeout=20, headers={"User-Agent": "Switchboard calendar sync"})
-        resp.raise_for_status()
-        if len(resp.content) > 10 * 1024 * 1024:
-            raise ValueError("calendar file is larger than 10 MB")
-        text = resp.content.decode(resp.encoding or "utf-8", errors="replace")
+        text = fetch_ics(cal["ics_url"] or "")
         if "BEGIN:VCALENDAR" not in text.upper():
             raise ValueError("that link didn't return an iCalendar (.ics) file")
         return import_events(cal, parse_ics(text, org_tz()))
