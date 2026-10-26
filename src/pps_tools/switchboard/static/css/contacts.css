@@ -1,9 +1,5 @@
 /* contacts module styles (builds on base.css tokens). */
 
-/* Keep long content from stretching the app shell on phones (the column-reverse shell
-   lets .app-main grow to its content); the module's own panes scroll instead. */
-.contacts-module { contain: size; }
-
 .contacts-split { display: grid; grid-template-columns: minmax(300px, 380px) 1fr; height: 100%; min-height: 0; }
 .contacts-list-pane { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--border); background: var(--surface); }
 .contacts-list-head { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--border); }

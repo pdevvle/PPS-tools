@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import io
 
-from pps_tools.switchboard.services import inbox
+from pps_tools.switchboard.services import hooks, inbox
 from tests.test_switchboard.test_inbox import make_channel, receive
 
 
@@ -75,6 +75,16 @@ def test_merge_moves_everything(client):
     assert inbox.get(msg["conversation_id"])["contact_id"] == keep["id"]
     client.get(f"/api/contacts/{dupe_id}", expect=404)
     client.post(f"/api/contacts/{keep['id']}/merge", {"other_id": keep["id"]}, expect=400)
+
+
+def test_create_and_merge_fire_hooks(client, monkeypatch):
+    seen = []
+    monkeypatch.setattr(hooks, "_handlers", {"*": [lambda event, data: seen.append((event, data))]})
+    a = client.post("/api/contacts", {"name": "Lena Ortiz", "email": "lena@bloom.example"})["contact"]
+    b = client.post("/api/contacts", {"name": "Lena O.", "phone": "+16025550111"})["contact"]
+    client.post(f"/api/contacts/{a['id']}/merge", {"other_id": b["id"]})
+    events = [(e, d.get("contact_id"), d.get("merged_id")) for e, d in seen if e.startswith("contact.")]
+    assert events == [("contact.created", a["id"], None), ("contact.created", b["id"], None), ("contact.merged", a["id"], b["id"])]
 
 
 def test_detail_includes_conversation_history(client):
@@ -154,6 +164,20 @@ def test_csv_import_and_export(client):
     assert body.splitlines()[0].startswith("name,email,phone,organization")
     assert "Lena Ortiz,lena@cafe.test,+16025550110,Desert Bloom,Owner" in body
     client.post("/api/contacts/import", {"csv": "foo,bar\n1,2\n"}, expect=400)
+
+
+def test_export_defuses_spreadsheet_formulas_from_senders(client):
+    import csv
+
+    # A stranger controls their own display name, and it becomes the contact's name.
+    receive(make_channel(), sender="evil@cust.test", name='=HYPERLINK("https://x.test","Click")')
+    create(client, name="Pat Plain", phone="+1 (602) 555-0123", notes="-2+3+cmd|' /C calc'!A0")
+    rows = list(csv.reader(io.StringIO(client.raw("get", "/api/contacts/export.csv").get_data(as_text=True))))
+    by_email = {r[1]: r for r in rows[1:]}
+    assert by_email["evil@cust.test"][0] == '\'=HYPERLINK("https://x.test","Click")'
+    pat = next(r for r in rows[1:] if r[0] == "Pat Plain")
+    assert pat[2] == "+16025550123"           # phone numbers stay usable
+    assert pat[6].startswith("'-2+3+cmd")
 
 
 def test_delete_contact_keeps_conversation(client):

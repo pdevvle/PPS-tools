@@ -3,7 +3,7 @@
 
 import { html, useState } from '../../lib/preact.js';
 import { api } from '../../lib/api.js';
-import { getState, boot, user as lookupUser } from '../../lib/store.js';
+import { getState, boot, hasModule, user as lookupUser } from '../../lib/store.js';
 import { navigate } from '../../lib/router.js';
 import { fmtDateTime, fmtUntil } from '../../lib/format.js';
 import { pickUsers, pickFromList, pickDateTime } from '../../ui/pickers.js';
@@ -251,6 +251,7 @@ export async function openMerge(anchor, conv) {
 export async function shareToChat(anchor, conv) {
   let rooms = [];
   try {
+    if (!hasModule('chat')) throw new Error('chat module is off');
     rooms = (await api.get('/chat/rooms')).items || [];
   } catch {
     toast('Team chat is not available');
@@ -318,6 +319,7 @@ function DiscussionForm({ close }) {
 let aiStatus = null;
 export async function getAIStatus() {
   if (aiStatus) return aiStatus;
+  if (!hasModule('ai')) return { enabled: false, configured: false };
   try {
     aiStatus = await api.get('/ai/status');
   } catch {

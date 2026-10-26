@@ -16,6 +16,7 @@ required — and the web app needs no build step.
 - [Running it for real](#running-it-for-real)
 - [How it's built](#how-its-built)
 - [API, tokens and webhooks](#api-tokens-and-webhooks)
+- [Known limits](#known-limits)
 - [Development](#development)
 
 ## Quick start
@@ -114,7 +115,8 @@ Data lives in `./switchboard_data` (database, attachments, session key). Set
 - Reports on response times, volume, workload, busiest hours, labor hours and cost,
   overtime, job throughput and on-time delivery — with CSV export.
 - Notifications in the app and on the desktop, keyboard shortcuts everywhere (`?`), dark
-  mode, and a layout that works on phones.
+  mode, and a layout that works on phones (a bottom tab bar, with everything else under
+  More).
 
 ## Connecting channels
 
@@ -237,9 +239,11 @@ do the same:
   (Browser sessions instead send the `X-Requested-With` header on every write; that is
   the CSRF protection.)
 - Errors look like `{"error": {"code": "not_found", "message": "…"}}`.
-- Webhooks receive JSON `{event, data, sent_at}` with `X-Switchboard-Event` and
-  `X-Switchboard-Signature: sha256=<HMAC of the body with your webhook secret>`, retried
-  with backoff.
+- Webhooks receive JSON `{id, event, data, occurred_at, sent_at}` with
+  `X-Switchboard-Event` and `X-Switchboard-Signature: sha256=<HMAC of the body with your
+  webhook secret>`, retried with backoff. Events cover messages, conversations, comments,
+  contacts, tasks, jobs (including customer proof decisions) and staffing; Settings → API
+  & webhooks lists them all. Team chat is never sent out.
 
 A few useful endpoints:
 
@@ -252,8 +256,27 @@ A few useful endpoints:
 | `POST /api/conversations/<id>/comments` | internal comment |
 | `POST /api/channels/<id>/messages` | push an inbound message into an API channel |
 | `GET /api/jobs`, `POST /api/jobs` | jobs |
-| `GET /api/shifts?start=&end=` | schedule |
+| `GET /api/schedule?start=&end=` | production schedule (job steps on equipment and people) |
+| `GET /api/shifts?start=&end=` | staff schedule |
+| `GET /api/timesheets/export.csv?start=&end=` | payroll CSV |
 | `GET /api/contacts?q=` | contacts |
+| `GET /api/tasks?view=mine`, `POST /api/tasks` | tasks |
+| `GET /api/calendar/events?start=&end=&overlays=` | calendar events, plus shift/job/time-off overlays |
+
+## Known limits
+
+- The production schedule can't be dragged by touch; on phones and tablets, tap a step
+  and change its time, machine or person from its card. The auto-scheduler books the
+  earliest-due work first in 15-minute slots and never moves steps already scheduled.
+- Recurring calendar events support daily, weekly, monthly and yearly repeats with an
+  interval, weekdays, an end date or count, and skipped dates — not every iCalendar rule.
+- Contacts import from CSV (not vCard). Team chat has no pinned messages or in-room
+  search (the ⌘K search covers chat messages).
+- The in-app backup is the database only; copy the `files/` folder for attachments.
+- Times show in each person's own time zone; shifts, timesheets and the production
+  schedule use the workspace time zone (Settings → General).
+- Messenger and Instagram aren't connected (they need Meta app review); everything else
+  can come in through the API channel.
 
 ## Development
 
@@ -263,6 +286,9 @@ python -m pytest tests/test_switchboard -q
 SWITCHBOARD_MODULES=inbox,staffing python -m pytest tests/test_switchboard -q   # a subset
 pps switchboard run --debug --port 5051
 ```
+
+`SWITCHBOARD_MODULES` also works for the server: the web app hides areas, settings,
+My Day widgets and conversation panels whose module isn't running.
 
 Adding a feature module: create `api/<name>.py` with a blueprint `bp` (and any of
 `bootstrap`, `worker_tasks`, `on_setup`, `seed`, `badges`, `search`), add the name to

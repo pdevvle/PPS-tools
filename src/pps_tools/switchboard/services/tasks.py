@@ -10,7 +10,7 @@ import sqlite3
 from datetime import datetime, time, timedelta
 
 from pps_tools.switchboard import db, realtime
-from pps_tools.switchboard.services import inbox, notify, search, settings
+from pps_tools.switchboard.services import hooks, inbox, notify, search, settings
 from pps_tools.switchboard.services import users as users_svc
 from pps_tools.switchboard.services.sanitize import sanitize
 from pps_tools.switchboard.util import html_to_text, iso, now, now_iso, parse_iso
@@ -263,7 +263,13 @@ def create(user: dict, data: dict) -> dict:
             inbox.add_event(task["conversation_id"], "task_created", user["id"], {"task_id": tid, "title": task["title"]})
             inbox.touch(task["conversation_id"], "task")
         _emit(task)
+        hooks.fire("task.created", _hook_payload(task, user))
     return task
+
+
+def _hook_payload(task: dict, user: dict) -> dict:
+    return {"task_id": task["id"], "assignee_id": task["assignee_id"], "conversation_id": task["conversation_id"],
+            "job_id": task["job_id"], "by": user["id"]}
 
 
 def can_edit(user: dict, task: dict) -> bool:
@@ -300,6 +306,8 @@ def update(user: dict, task_id: int, data: dict) -> dict:
         elif new["conversation_id"]:
             inbox.touch(new["conversation_id"], "task")
         _emit(new, extra_users=[task["assignee_id"]])
+        if new["status"] == "done" and task["status"] != "done":
+            hooks.fire("task.completed", _hook_payload(new, user))
     return new
 
 

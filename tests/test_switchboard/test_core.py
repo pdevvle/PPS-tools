@@ -197,3 +197,22 @@ def test_forwarded_for_is_ignored_unless_a_proxy_is_configured(app, client):
         assert set(codes) == {401}
     finally:
         auth_api._failures.clear()
+
+
+def test_bootstrap_lists_running_modules(client):
+    from pps_tools.switchboard import modules
+
+    names = client.get("/api/bootstrap")["modules"]
+    assert names[:2] == ["core", "auth"]
+    assert set(names) <= set(modules.MODULE_NAMES)
+    assert set(names) == set(modules.enabled_names())
+
+
+def test_csv_cell_defuses_formulas_but_keeps_numbers():
+    from pps_tools.switchboard.util import csv_cell
+
+    assert csv_cell(None) == "" and csv_cell(42) == 42 and csv_cell("Ann") == "Ann"
+    for risky in ("=1+2", "+HYPERLINK(\"x\")", "-2+3+cmd|' /C calc'!A0", "@SUM(A1)", "\t=1", "+1+1"):
+        assert csv_cell(risky) == "'" + risky, risky
+    for plain in ("+16025550100", "+1 (602) 555-0100", "-5", "-12.50", "602-555-0100"):
+        assert csv_cell(plain) == plain, plain

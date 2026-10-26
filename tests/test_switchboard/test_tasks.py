@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 from pps_tools.switchboard import db
+from pps_tools.switchboard.services import hooks
 from pps_tools.switchboard.services import tasks as tasks_svc
 from pps_tools.switchboard.util import iso, now
 from tests.test_switchboard.test_inbox import make_channel, receive
@@ -51,6 +52,18 @@ def test_complete_and_reopen(client):
     assert client.get("/api/tasks")["items"] == []
     again = client.patch(f"/api/tasks/{t['id']}", {"status": "todo"})["task"]
     assert again["completed_at"] is None
+
+
+def test_domain_hooks_for_webhooks(client, owner, monkeypatch):
+    seen = []
+    monkeypatch.setattr(hooks, "_handlers", {"*": [lambda event, data: seen.append((event, data))]})
+    t = client.post("/api/tasks", {"title": "Proof the menu"})["task"]
+    client.patch(f"/api/tasks/{t['id']}", {"title": "Proof the menus"})
+    client.patch(f"/api/tasks/{t['id']}", {"status": "done"})
+    client.patch(f"/api/tasks/{t['id']}", {"status": "done"})      # no second completion
+    events = [e for e, _ in seen if e.startswith("task.")]
+    assert events == ["task.created", "task.completed"]
+    assert seen[0][1] == {"task_id": t["id"], "assignee_id": owner["id"], "conversation_id": None, "job_id": None, "by": owner["id"]}
 
 
 def test_overdue_view_and_badge(client, owner):

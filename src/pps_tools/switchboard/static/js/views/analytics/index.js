@@ -140,7 +140,7 @@ function exportMenu(e, report, query) {
 
 function InboxReport({ data, stale, prevLabel }) {
   const t = data.totals;
-  const p = data.previous;
+  const p = data.previous || {}; // null until there's a full previous period to compare with
   const daily = data.daily;
   const volume = [
     { key: 'received', label: 'Received', values: daily.map((d) => d.received) },
@@ -245,7 +245,7 @@ function currentQuery() {
 
 function TeamReport({ data, stale, prevLabel }) {
   const t = data.totals;
-  const p = data.previous;
+  const p = data.previous || {};
   const daily = data.daily;
   const hours = [
     { key: 'scheduled', label: 'Scheduled', values: daily.map((d) => Math.round(((d.scheduled_minutes || 0) / 60) * 10) / 10) },
@@ -313,7 +313,7 @@ function TeamReport({ data, stale, prevLabel }) {
 
 function JobsReport({ data, stale, prevLabel }) {
   const t = data.totals;
-  const p = data.previous;
+  const p = data.previous || {};
   const weekly = data.weekly;
   const series = [
     { key: 'created', label: 'Created', values: weekly.map((w) => w.created) },

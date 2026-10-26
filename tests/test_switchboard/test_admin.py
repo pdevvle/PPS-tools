@@ -353,3 +353,20 @@ def test_demo_seed_adds_examples(app):
     assert db.scalar("SELECT COUNT(*) FROM webhook_deliveries") == 0
     apps = db.query("SELECT * FROM integrations WHERE is_active = 1")
     assert apps and all(db.jload(a["config_json"])["url"].startswith("https://") for a in apps if a["kind"] == "iframe")
+
+
+def test_every_fired_event_is_offered_to_webhooks():
+    """Each hooks.fire("...") in the code base must be listed so admins can subscribe to it."""
+    import re
+    from pathlib import Path
+
+    import pps_tools.switchboard as package
+
+    fired = set()
+    for path in Path(package.__file__).parent.rglob("*.py"):
+        text = path.read_text(encoding="utf-8")
+        for first_arg in re.findall(r"hooks\.fire\(\s*([^,]+),", text):  # may be `"a.b" if x else "a.c"`
+            fired.update(re.findall(r'"([a-z_]+\.[a-z_]+)"', first_arg))
+    catalog = {name for name, _ in webhooks.EVENT_CATALOG}
+    assert fired, "no hooks found — the pattern is stale"
+    assert fired <= catalog, f"add to webhooks.EVENT_CATALOG: {sorted(fired - catalog)}"

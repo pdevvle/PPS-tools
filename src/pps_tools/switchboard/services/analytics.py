@@ -20,7 +20,7 @@ from datetime import date, datetime, time, timedelta, tzinfo
 from pps_tools.switchboard import db
 from pps_tools.switchboard.services import contacts as contacts_svc
 from pps_tools.switchboard.services import settings
-from pps_tools.switchboard.util import iso, now, now_iso, parse_date, parse_iso
+from pps_tools.switchboard.util import csv_cell, iso, now, now_iso, parse_date, parse_iso
 from pps_tools.switchboard.web import PERMISSIONS, bad_request
 
 MAX_DAYS = 366
@@ -65,6 +65,12 @@ class Period:
 
     def previous(self) -> Period:
         return Period(self.start - timedelta(days=self.length), self.start - timedelta(days=1), self.tz)
+
+    def covered_since(self, first_record: str | None) -> bool:
+        """Whether history reaches back to this period's first day. Comparing with a period
+        from before the workspace had data would show growth like +1300%."""
+        first = self.day(first_record)
+        return first is not None and first <= self.start.isoformat()
 
     def local(self, value) -> datetime | None:
         dt = parse_iso(value)
@@ -314,7 +320,9 @@ def inbox_report(period: Period, team_id: int | None = None, channel_id: int | N
                  user: dict | None = None) -> dict:
     where, params = _conv_filter(team_id, channel_id)
     core = _inbox_core(period, where, params)
-    prev = _inbox_core(period.previous(), where, params)
+    before = period.previous()
+    prev = _inbox_core(before, where, params) if before.covered_since(
+        db.scalar("SELECT MIN(created_at) FROM conversations")) else None
 
     daily = {d.isoformat(): {"date": d.isoformat(), "received": 0, "sent": 0, "closed": 0} for d in period.days()}
     for r in core["received"]:
@@ -405,7 +413,7 @@ def inbox_report(period: Period, team_id: int | None = None, channel_id: int | N
         "period": period.describe(),
         "filters": {"team_id": team_id, "channel_id": channel_id},
         "totals": totals,
-        "previous": _inbox_totals(prev),
+        "previous": _inbox_totals(prev) if prev else None,
         "daily": list(daily.values()),
         "first_response": stats([m for _, m in core["frt"]]),
         "resolution": stats(core["resolution"]),
@@ -683,11 +691,17 @@ def _team_core(period: Period) -> dict:
 
 def team_report(period: Period) -> dict:
     core = _team_core(period)
-    prev = _team_core(period.previous())["totals"]
+    before = period.previous()
+    first = min((v for v in (db.scalar("SELECT MIN(start_at) FROM shifts"),
+                             db.scalar("SELECT MIN(clock_in) FROM time_entries")) if v), default=None)
+    previous = None
+    if before.covered_since(first):
+        prev = _team_core(before)["totals"]
+        previous = {k: prev[k] for k in ("scheduled_minutes", "worked_minutes", "overtime_minutes", "labor_cost", "late")}
     return {
         "period": period.describe(),
         **core,
-        "previous": {k: prev[k] for k in ("scheduled_minutes", "worked_minutes", "overtime_minutes", "labor_cost", "late")},
+        "previous": previous,
     }
 
 
@@ -874,7 +888,8 @@ def jobs_report(period: Period) -> dict:
     return {
         "period": period.describe(),
         "totals": totals,
-        "previous": _jobs_totals(period.previous()),
+        "previous": _jobs_totals(period.previous()) if period.previous().covered_since(
+            db.scalar("SELECT MIN(created_at) FROM jobs")) else None,
         "weekly": list(weeks.values()),
         "wip": wip,
         "time_in_stage": time_in_stage,
@@ -938,20 +953,11 @@ TABLES = {
 }
 
 
-def _cell(value):
-    """Blank for None; text that a spreadsheet would run as a formula gets a leading quote."""
-    if value is None:
-        return ""
-    if isinstance(value, str) and value[:1] in ("=", "+", "-", "@", "\t", "\r"):
-        return "'" + value
-    return value
-
-
 def to_csv(report: str, table: str, data: dict) -> str:
     headers, rows = TABLES[report][table]
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow(headers)
     for row in rows(data):
-        writer.writerow([_cell(v) for v in row])
+        writer.writerow([csv_cell(v) for v in row])
     return buf.getvalue()

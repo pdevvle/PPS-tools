@@ -49,8 +49,9 @@ def bootstrap(user: dict) -> dict:
 @login_required
 def get_bootstrap():
     user = current_user()
-    data: dict = {}
-    for module in current_app.extensions["switchboard_modules"]:
+    modules = current_app.extensions["switchboard_modules"]
+    data: dict = {"modules": [m.__name__.rsplit(".", 1)[-1] for m in modules]}
+    for module in modules:
         if hasattr(module, "bootstrap"):
             data.update(module.bootstrap(user) or {})
     return ok(data)

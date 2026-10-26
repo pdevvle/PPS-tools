@@ -1,9 +1,5 @@
 /* calendar module styles (builds on base.css tokens). */
 
-/* Keep long content from stretching the app shell on phones (the column-reverse shell
-   lets .app-main grow to its content); the module's own panes scroll instead. */
-.calendar-module { contain: size; }
-
 .calendar-module .page-header-actions { flex-wrap: wrap; justify-content: flex-end; }
 .cal-body { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; background: var(--surface); }
 .cal-loading { position: absolute; inset: 0; display: flex; align-items: flex-start; justify-content: center; padding-top: 40px; pointer-events: none; z-index: 2; }
@@ -201,4 +197,6 @@
   .cal-agenda { padding: 4px 12px 32px; }
   .cal-agenda-day { grid-template-columns: 52px 1fr; gap: 8px; }
   .cal-agenda-time { width: 84px; font-size: 12px; }
+  .cal-agenda-title { white-space: normal; overflow-wrap: anywhere; display: block; }
+  .cal-agenda-title .icon { display: inline-block; vertical-align: -2px; margin-right: 4px; }
 }

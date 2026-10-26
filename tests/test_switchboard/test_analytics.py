@@ -141,9 +141,23 @@ def test_inbox_report_math_and_local_day_buckets(client, owner, monday):
     channels = {c["channel_id"]: c for c in res["channels"]}
     assert personal not in channels and (channels[shared]["received"], channels[shared]["sent"]) == (3, 3)
 
-    # the previous period of equal length is empty, and filters narrow everything
-    assert res["previous"]["received"] == 0
+    # nothing happened before this period, so there's nothing to compare with; filters narrow everything
+    assert res["previous"] is None
     assert client.get(f"/api/analytics/inbox?start={monday}&end={tue}&channel_id={personal}")["totals"]["received"] == 0
+
+
+def test_previous_period_is_compared_only_once_history_covers_it(client, owner, monday):
+    shared = add_channel()
+    tue = monday + timedelta(days=1)
+    add_conversation(shared, at(tue, "09:00"), at(tue, "09:30"), owner["id"])
+    add_conversation(shared, at(monday - timedelta(days=1), "10:00"))   # Sunday: inside the previous 2 days
+    # History starts on Sunday, but the previous period (Sat-Sun) starts on Saturday.
+    assert client.get(f"/api/analytics/inbox?start={monday}&end={tue}")["previous"] is None
+    add_conversation(shared, at(monday - timedelta(days=2), "10:00"))   # now it reaches Saturday
+    prev = client.get(f"/api/analytics/inbox?start={monday}&end={tue}")["previous"]
+    assert prev["received"] == 2
+    assert client.get(f"/api/analytics/jobs?start={monday}&end={tue}")["previous"] is None   # no jobs at all
+    assert client.get(f"/api/analytics/team?start={monday}&end={tue}")["previous"] is None   # no shifts or punches
 
 
 def test_waiting_list_counts_unanswered_open_conversations(client, owner):
