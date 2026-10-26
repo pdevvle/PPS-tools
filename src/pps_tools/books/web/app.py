@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
+import threading
+import time
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -62,6 +64,21 @@ def create_app(config: Optional[Config] = None) -> Flask:
             return redirect(url_for("auth.login", next=request.full_path if request.method == "GET" else None))
         return None
 
+    @app.before_request
+    def _scheduled_work():
+        # Without cron, run recurring transactions, reminders and late fees at most hourly while
+        # people use the app, on a background thread so no request waits for it.
+        if cfg.testing or not app.config.get("BOOKS_IN_APP_SCHEDULER", True):
+            return None
+        state = app.extensions["books"]
+        now = time.monotonic()
+        if now - state.get("scheduled_at", float("-inf")) < 3600:
+            return None
+        state["scheduled_at"] = now
+        base_url = (cfg.base_url or request.host_url).rstrip("/")
+        threading.Thread(target=_run_scheduled, args=(app, base_url), daemon=True, name="books-scheduler").start()
+        return None
+
     @app.teardown_appcontext
     def _close_db(exc):
         s = g.pop("db", None)
@@ -116,6 +133,36 @@ def create_app(config: Optional[Config] = None) -> Flask:
                                message="The error was logged. Nothing you entered was saved."), 500
 
     return app
+
+
+def _run_scheduled(app: Flask, base_url: str) -> None:
+    from pps_tools.books.services import recurring
+
+    books = app.extensions["books"]
+    s = books["session_factory"]()
+    try:
+        if not setup_service.is_set_up(s):
+            return
+        # Another worker process may have run within the hour; a stamp file in the data folder
+        # decides (kept out of company prefs so it can't race a settings save).
+        stamp = books["config"].data_dir / ".scheduler_last_run"
+        try:
+            if time.time() - stamp.stat().st_mtime < 3300:
+                return
+        except FileNotFoundError:
+            pass
+        stamp.touch()
+        report = recurring.run_scheduled(s, books["config"], date.today(), base_url=base_url)
+        s.commit()
+        if report.created or report.errors:
+            log.info("scheduled work: %d created, %d errors", len(report.created), len(report.errors))
+        for err in report.errors:
+            log.warning("scheduled work: %s", err)
+    except Exception:  # pragma: no cover - never let the background thread take the app down
+        s.rollback()
+        log.exception("scheduled work failed")
+    finally:
+        s.close()
 
 
 class _AttrDict(dict):

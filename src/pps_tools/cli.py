@@ -12,6 +12,7 @@ from pps_tools.commands.export import export
 from pps_tools.commands.export_comp_js import export_comp_js
 from pps_tools.commands.import_data import import_group
 from pps_tools.commands.qb_categorize import qb_categorize
+from pps_tools.books.cli import books_group
 from pps_tools.commands.marketing import marketing_group
 from pps_tools.switchboard.cli import switchboard_group
 
@@ -43,6 +44,12 @@ def main():
 
     \b
       pps switchboard run               # open the web app
+
+    PPS Books (bookkeeping and invoicing with Stripe payments):
+
+    \b
+      pps books serve                   # open the web app
+      pps books demo                    # try it with a demo company
     """
 
 
@@ -58,6 +65,7 @@ main.add_command(import_group, "import")
 main.add_command(qb_categorize)
 main.add_command(marketing_group, "marketing")
 main.add_command(switchboard_group, "switchboard")
+main.add_command(books_group, "books")
 
 
 if __name__ == "__main__":

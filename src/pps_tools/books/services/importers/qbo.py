@@ -100,8 +100,9 @@ def _dec(value: Any) -> Optional[Decimal]:
 
 
 def _cents(value: Any) -> int:
+    """QBO amounts are dollars."""
     d = _dec(value)
-    return money.round_cents(d * 100) if d is not None else 0
+    return money.round_cents(d) if d is not None else 0
 
 
 def _addr(obj: dict, key: str, prefix: str) -> dict:
