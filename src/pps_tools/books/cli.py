@@ -94,13 +94,14 @@ def setup_cmd(data_dir, company, email, name, password, industry) -> None:
 
 
 @books_group.command("demo")
-@data_dir_option
+@click.option("--data-dir", default="books-demo", show_default=True,
+              help="Empty folder for the demo company. BOOKS_DATA_DIR is not used, so a demo never lands in your real books.")
 @click.option("--password", default="demo-books-123", show_default=True, help="Password for demo@example.com.")
-def demo_cmd(data_dir: Optional[str], password: str) -> None:
+def demo_cmd(data_dir: str, password: str) -> None:
     """Build a demo company (a print shop) in an empty data folder."""
     from pps_tools.books.services import demo, setup
 
-    cfg = _config(data_dir or "books-demo")
+    cfg = _config(data_dir)
     s, _ = _session(cfg)
     if setup.is_set_up(s):
         raise click.ClickException(f"{cfg.data_dir} already has a company. Use another --data-dir.")
