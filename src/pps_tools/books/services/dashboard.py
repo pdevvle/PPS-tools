@@ -9,8 +9,8 @@ from typing import Optional
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from pps_tools.books.models import (Account, BankFeedItem, Company, Item, LedgerEntry, RecurringTemplate,
-                                    Transaction, TransactionLink)
+from pps_tools.books.models import (Account, BankFeedItem, Item, LedgerEntry, RecurringTemplate, Transaction,
+                                    TransactionLink)
 from pps_tools.books.services import dates as D
 from pps_tools.books.services.accounts import balances_by_account, system_account_id
 from pps_tools.books.services.reports.engine import Aggregator, compare_range, Params

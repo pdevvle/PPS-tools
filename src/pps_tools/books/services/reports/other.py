@@ -11,9 +11,8 @@ from typing import Optional
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from pps_tools.books.models import (ACCOUNT_TYPES, Account, AuditLog, Budget, BudgetLine, Company, Customer,
-                                    Employee, Item, LedgerEntry, Reconciliation, TaxAgency, TimeActivity,
-                                    Transaction, TransactionLink, Vendor)
+from pps_tools.books.models import (ACCOUNT_TYPES, Account, AuditLog, Budget, Company, Customer, Employee, Item,
+                                    LedgerEntry, Reconciliation, TaxAgency, TimeActivity, Transaction, Vendor)
 from pps_tools.books.money import round_cents
 from pps_tools.books.services import dates as D
 from pps_tools.books.services import inventory as inv_service

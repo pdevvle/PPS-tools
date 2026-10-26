@@ -4,14 +4,12 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import date, timedelta
-from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from pps_tools.books.models import ACCOUNT_TYPES, Account, LedgerEntry, Transaction
-from pps_tools.books.services import cash_basis
 from pps_tools.books.services import dates as D
 from pps_tools.books.services.accounts import ordered_accounts, system_account_id
 from pps_tools.books.services.reports.engine import (DIM_COLUMNS, Aggregator, Col, ColumnSpec, Params,
