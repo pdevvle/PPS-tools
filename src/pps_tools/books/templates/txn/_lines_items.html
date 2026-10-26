@@ -1,0 +1,88 @@
+{# Product/service lines for sales forms, and the inventory adjustment grid. #}
+{% from "partials/macros.html" import icon %}
+{% set inv_adj = info.code == 'inventory_adjustment' %}
+{% set per_line_class = prefs.track_classes == 'per_line' %}
+{% macro item_options(selected) -%}
+<option value="">{{ 'Choose a product' if inv_adj else 'Product or service' }}</option>
+{% for it in items %}{% if not inv_adj or it.type == 'inventory' %}<option value="{{ it.id }}"{% if selected and it.id|string == selected|string %} selected{% endif %}>{{ it.name }}{% if it.sku %} ({{ it.sku }}){% endif %}</option>{% endif %}{% endfor %}
+{%- endmacro %}
+{% macro class_options(selected) -%}
+<option value="">—</option>{% for c in classes %}<option value="{{ c.id }}"{% if selected and c.id|string == selected|string %} selected{% endif %}>{{ c.full_name }}</option>{% endfor %}
+{%- endmacro %}
+{% macro row(i, ln) -%}
+{% set desc_row = ln.kind == 'description' %}
+<tr class="line{% if desc_row %} description-row{% endif %}" data-kind="{{ ln.kind or 'item' }}">
+  <td class="handle" title="Drag to reorder">⋮⋮</td>
+  <td class="ln"><span class="ln-num"></span>
+    <input type="hidden" name="l-{{ i }}-pos" value="{{ i }}" data-f="pos">
+    <input type="hidden" name="l-{{ i }}-id" value="{{ ln.id or '' }}">
+    <input type="hidden" name="l-{{ i }}-kind" value="{{ ln.kind or 'item' }}" data-f="kind">
+    <input type="hidden" name="l-{{ i }}-source_type" value="{{ ln.source_type or '' }}" data-f="source_type">
+    <input type="hidden" name="l-{{ i }}-source_id" value="{{ ln.source_id or '' }}" data-f="source_id"></td>
+  {% if inv_adj %}
+    <td><select name="l-{{ i }}-item_id" data-f="item">{{ item_options(ln.item_id) }}</select></td>
+    <td><input name="l-{{ i }}-description" value="{{ ln.description or '' }}" data-f="desc"></td>
+    <td class="qty"><input class="num" data-f="onhand" readonly tabindex="-1" value=""></td>
+    <td class="qty"><input class="num" name="l-{{ i }}-new_qty" data-f="newqty" value="{{ ln.new_qty or '' }}" inputmode="decimal"></td>
+    <td class="qty"><input class="num" name="l-{{ i }}-qty" data-f="qty" value="{{ ln.qty or '' }}" inputmode="decimal"></td>
+  {% elif desc_row %}
+    {% if prefs.show_service_date %}<td></td>{% endif %}
+    <td colspan="{{ 5 + (1 if info.has_tax else 0) + (1 if per_line_class else 0) }}"><input name="l-{{ i }}-description" value="{{ ln.description or '' }}" data-f="desc" placeholder="Description"></td>
+  {% else %}
+    {% if prefs.show_service_date %}<td style="width:140px"><input type="date" name="l-{{ i }}-service_date" value="{{ ln.service_date or '' }}"></td>{% endif %}
+    <td style="min-width:200px"><select name="l-{{ i }}-item_id" data-f="item">{{ item_options(ln.item_id) }}</select>
+      {% if ln.account_id and not ln.item_id %}<input type="hidden" name="l-{{ i }}-account_id" value="{{ ln.account_id }}">{% endif %}</td>
+    <td><textarea name="l-{{ i }}-description" rows="1" data-f="desc">{{ ln.description or '' }}</textarea></td>
+    <td class="qty"><input class="num" name="l-{{ i }}-qty" value="{{ ln.qty or '' }}" data-f="qty" inputmode="decimal"></td>
+    <td class="rate"><input class="num" name="l-{{ i }}-rate" value="{{ ln.rate or '' }}" data-f="rate" inputmode="decimal"></td>
+    <td class="amount"><input class="num" name="l-{{ i }}-amount" value="{{ ln.amount or '' }}" data-f="amount" inputmode="decimal"></td>
+    {% if info.has_tax %}<td class="tick"><input type="checkbox" name="l-{{ i }}-taxable" value="1" data-f="taxable"{% if ln.taxable %} checked{% endif %} title="Taxable"></td>{% endif %}
+    {% if per_line_class %}<td style="width:150px"><select name="l-{{ i }}-class_id">{{ class_options(ln.class_id) }}</select></td>{% endif %}
+  {% endif %}
+  <td class="del"><button type="button" data-act="del-line" title="Delete line">{{ icon('trash') }}</button></td>
+</tr>
+{%- endmacro %}
+
+<div class="txn-section">
+  {% if billable %}
+  <details class="card" id="billable-panel" style="margin-bottom:1rem" open>
+    <summary class="card-head"><h3>Add billable charges ({{ billable|length }})</h3><span class="muted small">Expenses, time and delayed charges for this customer</span></summary>
+    <table class="data compact"><tbody>
+      {% for b in billable %}
+      <tr data-billable='{{ {"source_type": b.source_type, "source_id": b.source_id, "item_id": b.item_id, "account_id": b.account_id, "description": b.description, "qty": (b.qty|string if b.qty is not none else ""), "rate": (b.rate|string if b.rate is not none else ""), "amount": b.amount|money_plain, "taxable": b.taxable|default(false)}|tojson|forceescape }}'>
+        <td>{{ b.date|date }}</td><td>{{ b.label }}</td><td>{{ b.description }}</td><td class="num">{{ b.amount|money }}</td>
+        <td class="actions"><button type="button" class="small" data-act="add-billable">Add</button></td></tr>
+      {% endfor %}
+    </tbody></table>
+  </details>
+  {% endif %}
+  <div id="billable-slot"></div>
+  <input type="hidden" name="has_lines" value="1">
+  <div class="table-wrap">
+  <table class="lines" id="item-lines" data-lines="item">
+    <thead><tr>
+      <th></th><th>#</th>
+      {% if inv_adj %}
+        <th>Product</th><th>Description</th><th class="num">Qty on hand</th><th class="num">New qty</th><th class="num">Change in qty</th>
+      {% else %}
+        {% if prefs.show_service_date %}<th>Service date</th>{% endif %}
+        <th>Product/service</th><th>Description</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th>
+        {% if info.has_tax %}<th class="center">Tax</th>{% endif %}
+        {% if per_line_class %}<th>Class</th>{% endif %}
+      {% endif %}
+      <th></th>
+    </tr></thead>
+    <tbody>
+      {% set ns = namespace(i=0) %}
+      {% for ln in lines %}{% if ln.kind in ('item', 'description', None) or inv_adj %}{{ row(ns.i, ln) }}{% set ns.i = ns.i + 1 %}{% endif %}{% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <template id="tpl-item">{{ row('__I__', {'kind': 'item'}) }}</template>
+  <template id="tpl-desc">{{ row('__I__', {'kind': 'description'}) }}</template>
+  <div class="line-tools">
+    <button type="button" class="small" data-act="add-line" data-tpl="tpl-item" data-table="item-lines">{{ icon('plus') }} Add product or service</button>
+    {% if not inv_adj %}<button type="button" class="small" data-act="add-line" data-tpl="tpl-desc" data-table="item-lines">Add text</button>{% endif %}
+    <button type="button" class="small ghost" data-act="clear-lines" data-table="item-lines">Clear all lines</button>
+  </div>
+</div>

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Set up your company · PPS Books</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='books.css') }}">
+</head>
+<body>
+<div class="auth-wrap">
+  <div class="card" style="width:min(720px,100%)"><div class="card-body">
+    <div class="brand-line" style="display:flex;gap:.6rem;align-items:center;font-weight:750;font-size:1.2rem;margin-bottom:1rem">
+      <span class="logo" style="width:34px;height:34px;border-radius:8px;background:var(--brand);color:#fff;display:grid;place-items:center">B</span> PPS Books</div>
+    <h1>Set up your company</h1>
+    <p class="muted">This takes a minute. Everything here can be changed later in Settings.</p>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for cat, msg in messages %}<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}
+    {% endwith %}
+    <form method="post">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <fieldset><legend>Your business</legend>
+        <div class="form-row">
+          <div class="field"><label class="required" for="company_name">Company name</label>
+            <input id="company_name" name="company_name" value="{{ form.get('company_name', '') }}" required autofocus></div>
+          <div class="field"><label for="state">State</label>
+            <input id="state" name="state" value="{{ form.get('state', '') }}" placeholder="e.g. WA"></div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label for="industry">Industry</label>
+            <select id="industry" name="industry">{% for v, l in industries %}<option value="{{ v }}"{% if form.get('industry', 'print_shop') == v %} selected{% endif %}>{{ l }}</option>{% endfor %}</select>
+            <div class="hint">Picks a starting chart of accounts.</div></div>
+          <div class="field"><label for="entity_type">Business type</label>
+            <select id="entity_type" name="entity_type">{% for v, l in entities %}<option value="{{ v }}"{% if form.get('entity_type', 'llc') == v %} selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label for="fiscal_year_start_month">Fiscal year starts</label>
+            <select id="fiscal_year_start_month" name="fiscal_year_start_month">
+              {% for m in range(1, 13) %}<option value="{{ m }}"{% if form.get('fiscal_year_start_month', '1')|int == m %} selected{% endif %}>{{ ['January','February','March','April','May','June','July','August','September','October','November','December'][m-1] }}</option>{% endfor %}
+            </select></div>
+          <div class="field"><label for="accounting_method">Default report basis</label>
+            <select id="accounting_method" name="accounting_method">
+              <option value="accrual">Accrual (income when invoiced)</option>
+              <option value="cash"{% if form.get('accounting_method') == 'cash' %} selected{% endif %}>Cash (income when paid)</option>
+            </select></div>
+        </div>
+        <label class="inline"><input type="checkbox" name="account_numbers" value="1" checked> Use account numbers in the chart of accounts</label>
+      </fieldset>
+      <fieldset><legend>Your sign-in</legend>
+        <div class="form-row">
+          <div class="field"><label class="required" for="name">Your name</label><input id="name" name="name" value="{{ form.get('name', '') }}" required></div>
+          <div class="field"><label class="required" for="email">Email</label><input type="email" id="email" name="email" value="{{ form.get('email', '') }}" required autocomplete="username"></div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label class="required" for="password">Password</label><input type="password" id="password" name="password" minlength="8" required autocomplete="new-password"><div class="hint">At least 8 characters.</div></div>
+          <div class="field"><label class="required" for="password2">Confirm password</label><input type="password" id="password2" name="password2" minlength="8" required autocomplete="new-password"></div>
+        </div>
+      </fieldset>
+      <button type="submit" class="primary">Create company</button>
+    </form>
+  </div></div>
+</div>
+</body>
+</html>

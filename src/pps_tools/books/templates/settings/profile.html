@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Your profile{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="crumbs"><a href="{{ url_for('settings.index') }}">Settings</a></div><h1>Your profile</h1></div></div>
+<form method="post" class="card" style="max-width:560px"><div class="card-body">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <div class="field"><label>Name</label><input name="name" value="{{ u.name }}"></div>
+  <div class="field"><label>Email</label><input type="email" name="email" value="{{ u.email }}"></div>
+  <div class="field"><label>Role</label><input readonly value="{{ u.role_label }}"></div>
+  <fieldset><legend>Change password</legend>
+    <div class="field"><label>Current password</label><input type="password" name="current_password" autocomplete="current-password"></div>
+    <div class="field"><label>New password</label><input type="password" name="new_password" minlength="8" autocomplete="new-password"></div>
+    <div class="field"><label>Confirm new password</label><input type="password" name="new_password2" minlength="8" autocomplete="new-password"></div>
+  </fieldset>
+  <button type="submit" class="primary">Save</button>
+</div></form>
+{% endblock %}

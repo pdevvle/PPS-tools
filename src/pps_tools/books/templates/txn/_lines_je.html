@@ -1,0 +1,40 @@
+{# Journal entry lines: account, debit, credit, description, name, class. #}
+{% from "partials/macros.html" import icon, account_options %}
+{% set per_line_class = prefs.track_classes in ('per_line', 'per_transaction') %}
+{% macro name_options(selected) -%}
+<option value="">—</option>
+<optgroup label="Customers">{% for c in customers %}<option value="customer:{{ c.id }}"{% if selected == 'customer:' ~ c.id %} selected{% endif %}>{{ c.full_name }}</option>{% endfor %}</optgroup>
+<optgroup label="Vendors">{% for v in vendors %}<option value="vendor:{{ v.id }}"{% if selected == 'vendor:' ~ v.id %} selected{% endif %}>{{ v.display_name }}</option>{% endfor %}</optgroup>
+<optgroup label="Employees">{% for e in employees %}<option value="employee:{{ e.id }}"{% if selected == 'employee:' ~ e.id %} selected{% endif %}>{{ e.display_name }}</option>{% endfor %}</optgroup>
+{%- endmacro %}
+{% macro row(i, ln) -%}
+<tr class="line" data-kind="account">
+  <td class="handle">⋮⋮</td>
+  <td class="ln"><span class="ln-num"></span>
+    <input type="hidden" name="l-{{ i }}-pos" value="{{ i }}" data-f="pos">
+    <input type="hidden" name="l-{{ i }}-id" value="{{ ln.id or '' }}">
+    <input type="hidden" name="l-{{ i }}-kind" value="account"></td>
+  <td style="min-width:230px"><select name="l-{{ i }}-account_id" data-f="account"><option value="">Account</option>{{ account_options(accounts, ln.account_id) }}</select></td>
+  <td class="amount"><input class="num" name="l-{{ i }}-debit" value="{{ ln.debit or '' }}" data-f="debit" inputmode="decimal"></td>
+  <td class="amount"><input class="num" name="l-{{ i }}-credit" value="{{ ln.credit or '' }}" data-f="credit" inputmode="decimal"></td>
+  <td><textarea name="l-{{ i }}-description" rows="1">{{ ln.description or '' }}</textarea></td>
+  <td style="width:200px"><select name="l-{{ i }}-name">{{ name_options(ln.name) }}</select></td>
+  {% if per_line_class %}<td style="width:140px"><select name="l-{{ i }}-class_id"><option value="">—</option>{% for c in classes %}<option value="{{ c.id }}"{% if ln.class_id and c.id|string == ln.class_id|string %} selected{% endif %}>{{ c.full_name }}</option>{% endfor %}</select></td>{% endif %}
+  <td class="del"><button type="button" data-act="del-line" title="Delete line">{{ icon('trash') }}</button></td>
+</tr>
+{%- endmacro %}
+<div class="txn-section">
+  <input type="hidden" name="has_lines" value="1">
+  <div class="table-wrap">
+  <table class="lines" id="je-lines" data-lines="je">
+    <thead><tr><th></th><th>#</th><th>Account</th><th class="num">Debits</th><th class="num">Credits</th><th>Description</th><th>Name</th>{% if per_line_class %}<th>Class</th>{% endif %}<th></th></tr></thead>
+    <tbody>{% for ln in lines %}{{ row(loop.index0, ln) }}{% endfor %}</tbody>
+    <tfoot><tr><td></td><td></td><td class="right"><strong>Total</strong></td><td class="num"><strong id="je-debits">$0.00</strong></td><td class="num"><strong id="je-credits">$0.00</strong></td><td colspan="4"><span id="je-diff" class="small"></span></td></tr></tfoot>
+  </table>
+  </div>
+  <template id="tpl-je">{{ row('__I__', {'kind': 'account'}) }}</template>
+  <div class="line-tools">
+    <button type="button" class="small" data-act="add-line" data-tpl="tpl-je" data-table="je-lines">{{ icon('plus') }} Add lines</button>
+    <button type="button" class="small ghost" data-act="clear-lines" data-table="je-lines">Clear all lines</button>
+  </div>
+</div>

@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}1099 account mapping{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="crumbs"><a href="{{ url_for('settings.index') }}">Settings</a></div><h1>1099 accounts</h1>
+  <div class="muted small">Payments to 1099 vendors from these accounts are added up per box. Card payments are always left out (they're reported on 1099-K).</div></div></div>
+<form method="post" class="card" style="max-width:820px">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <table class="data"><thead><tr><th>Account</th><th>1099 box</th></tr></thead><tbody>
+    {% for a in accounts %}<tr><td>{{ a.display_name }} <span class="faint small">{{ a.type_label }}</span></td>
+      <td><select name="box_{{ a.id }}"><option value="">Not reported</option>{% for k, label in boxes.items() %}<option value="{{ k }}"{% if a.form_1099_box == k %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></td></tr>{% endfor %}
+  </tbody></table>
+  <div class="card-body"><button type="submit" class="primary">Save</button> <a class="btn" href="{{ url_for('reports.view', key='contractor_1099_summary') }}">1099 summary</a></div>
+</form>
+{% endblock %}
