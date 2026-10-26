@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import icon, pager, account_options %}
+{% block title %}Bank transactions{% endblock %}
+{% block content_class %} wide{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="crumbs">Banking</div><h1>Bank transactions</h1></div>
+  <div class="actions">
+    <a class="btn" href="{{ url_for('banking.rules') }}">Rules</a>
+    <a class="btn" href="{{ url_for('banking.reconcile_start', account_id=account.id) }}">Reconcile</a>
+    {% if can('banking.edit') %}<a class="btn primary" href="{{ url_for('banking.import_file', account_id=account.id) }}">{{ icon('download') }} Upload transactions</a>{% endif %}
+  </div>
+</div>
+<div class="row" style="gap:.75rem;margin-bottom:1rem;overflow-x:auto;flex-wrap:nowrap">
+  {% for a in accounts %}
+  <a class="kpi" style="min-width:220px;{% if a.id == account.id %}border-color:var(--brand);box-shadow:0 0 0 2px var(--brand-soft){% endif %}" href="{{ url_for('banking.feed', account_id=a.id) }}">
+    <div class="label">{{ a.name }}{% if a.bank_last4 %} ••{{ a.bank_last4 }}{% endif %}</div>
+    {% if counts.get(a.id) %}<div class="sub"><span class="badge review">{{ counts[a.id] }} to review</span></div>{% else %}<div class="sub">Up to date</div>{% endif %}
+  </a>
+  {% endfor %}
+</div>
+<div class="kpis">
+  <div class="kpi"><div class="label">In your books</div><div class="value">{{ books|money }}</div><div class="sub"><a href="{{ url_for('accounting.register', account_id=account.id) }}">View register</a></div></div>
+  <div class="kpi"><div class="label">Bank balance</div><div class="value">{{ bank_balance|money if bank_balance is not none else '—' }}</div><div class="sub">{{ 'As of ' ~ bank_balance_date|date if bank_balance_date else 'From your latest statement file' }}</div></div>
+</div>
+<div class="card">
+  <div class="tabs" style="padding:0 1rem;margin:0">
+    <a href="{{ url_for('banking.feed', account_id=account.id) }}" class="{{ 'active' if tab == 'review' }}">For review{% if counts.get(account.id) %} ({{ counts[account.id] }}){% endif %}</a>
+    <a href="{{ url_for('banking.feed', account_id=account.id, tab='categorized') }}" class="{{ 'active' if tab == 'categorized' }}">Categorized</a>
+    <a href="{{ url_for('banking.feed', account_id=account.id, tab='excluded') }}" class="{{ 'active' if tab == 'excluded' }}">Excluded</a>
+  </div>
+  <form class="filters" method="get">
+    <input type="hidden" name="account_id" value="{{ account.id }}"><input type="hidden" name="tab" value="{{ tab }}">
+    <div class="field"><label>Search</label><input type="search" name="q" value="{{ request.args.get('q', '') }}" placeholder="Description"></div>
+    <div class="field"><label>Show</label><select name="dir" data-autosubmit><option value="">All</option><option value="out"{% if request.args.get('dir') == 'out' %} selected{% endif %}>Money out</option><option value="in"{% if request.args.get('dir') == 'in' %} selected{% endif %}>Money in</option></select></div>
+    <button type="submit">Filter</button>
+  </form>
+  {% if tab == 'review' and can('banking.edit') %}
+  <form class="filters" method="post" action="{{ url_for('banking.resuggest', account_id=account.id) }}" style="border-top:0;padding-top:0">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <button type="submit">Refresh suggestions</button>
+    {% if config_ai %}<label class="inline small"><input type="checkbox" name="ai" value="1" checked> Ask Claude about uncategorized ones</label>{% endif %}
+    <span class="small muted">Re-runs rules, matching and past choices on everything waiting.</span>
+  </form>
+  {% endif %}
+  {% if tab == 'review' and can('banking.edit') %}
+  <form method="post" action="{{ url_for('banking.batch') }}" id="feed-batch">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div id="batch-bar" class="filters hidden" style="background:var(--brand-soft)">
+      <strong><span id="batch-count">0</span> selected</strong>
+      <button type="submit" name="action" value="accept" class="primary">Accept suggestions</button>
+      <button type="submit" name="action" value="exclude">Exclude</button>
+    </div>
+  </form>
+  {% endif %}
+  <div class="table-wrap"><table class="data">
+    <thead><tr>{% if tab == 'review' %}<th class="sel"><input type="checkbox" data-select-all="ids" form="feed-batch"></th>{% endif %}<th>Date</th><th>Description</th><th>Payee</th><th>{{ 'Suggestion' if tab == 'review' else 'Recorded as' }}</th><th class="num">Spent</th><th class="num">Received</th><th></th></tr></thead>
+    <tbody>
+      {% for it in items %}
+      <tr data-feed-row="{{ it.id }}" style="cursor:pointer">
+        {% if tab == 'review' %}<td class="sel"><input type="checkbox" name="ids" value="{{ it.id }}" form="feed-batch" data-batch></td>{% endif %}
+        <td class="nowrap">{{ it.date|date }}{% if it.pending %} <span class="badge">Pending</span>{% endif %}</td>
+        <td>{{ it.description }}{% if it.check_number %} <span class="faint">· Check {{ it.check_number }}</span>{% endif %}</td>
+        <td>{{ it.payee or '' }}</td>
+        <td>
+          {% if tab == 'review' %}
+            {% if it.suggestion_source == 'match' and it.suggested_match %}<span class="badge open">Match</span> {{ it.suggestion_reason }}
+            {% elif it.suggestion_source in ('rule', 'history', 'ai') %}<span class="badge {{ 'success' if it.suggestion_source == 'rule' else 'info' }}">{{ {'rule': 'Rule', 'history': 'Last time', 'ai': 'Claude'}[it.suggestion_source] }}</span>
+              {{ it.suggested_account.name if it.suggested_account else '' }}{% if it.suggested_vendor %} · {{ it.suggested_vendor.display_name }}{% endif %}
+            {% else %}<span class="faint">Uncategorized</span>{% endif %}
+          {% elif it.txn %}<a href="{{ url_for('txn.go', txn_id=it.txn.id) }}">{{ it.txn.info.label }} {{ it.txn.number or '' }}</a>{% if it.status == 'matched' %} <span class="badge matched">Matched</span>{% endif %}
+          {% else %}<span class="faint">{{ it.status|title }}</span>{% endif %}
+        </td>
+        <td class="num">{{ (-it.amount_cents)|money if it.amount_cents < 0 else '' }}</td>
+        <td class="num">{{ it.amount_cents|money if it.amount_cents > 0 else '' }}</td>
+        <td class="actions">
+          {% if tab == 'review' and can('banking.edit') %}
+            {% if it.suggestion_source %}<form method="post" action="{{ url_for('banking.batch') }}" style="display:inline"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="ids" value="{{ it.id }}"><button class="small primary" name="action" value="accept" type="submit">{{ 'Match' if it.suggestion_source == 'match' else 'Add' }}</button></form>{% else %}<button type="button" class="small">Categorize</button>{% endif %}
+          {% elif can('banking.edit') %}
+            <form method="post" action="{{ url_for('banking.act', item_id=it.id) }}" style="display:inline"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="small ghost" name="action" value="{{ 'restore' if tab == 'excluded' else 'undo' }}" type="submit"{% if tab != 'excluded' %} onclick="return confirm('Undo this? An added transaction will be deleted.')"{% endif %}>{{ 'Restore' if tab == 'excluded' else 'Undo' }}</button></form>
+          {% endif %}
+        </td>
+      </tr>
+      {% if tab == 'review' and can('banking.edit') %}
+      <tr id="detail-{{ it.id }}" class="hidden"><td colspan="8" style="background:var(--surface-2)">
+        <form method="post" action="{{ url_for('banking.act', item_id=it.id) }}" data-feed-form>
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <div class="row center" style="margin-bottom:.6rem">
+            <select name="mode" style="width:auto" aria-label="What is this?">
+              <option value="categorize">Categorize</option>
+              <option value="match"{% if matches.get(it.id) %} selected{% endif %}>Find match ({{ matches.get(it.id)|length }})</option>
+              <option value="transfer">Record as transfer</option>
+              <option value="split">Split</option>
+            </select>
+          </div>
+          <div data-mode="categorize transfer split">
+            <div class="form-row">
+              <div class="field" data-mode="categorize split"><label>{{ 'Payee' if it.amount_cents < 0 else 'Received from' }}</label>
+                <select name="payee"><option value="">—</option>
+                  {% if it.payee %}<option value="new:{{ it.payee }}">+ New vendor “{{ it.payee }}”</option>{% endif %}
+                  <optgroup label="Vendors">{% for v in vendors %}<option value="vendor:{{ v.id }}"{% if it.suggested_vendor_id == v.id %} selected{% endif %}>{{ v.display_name }}</option>{% endfor %}</optgroup>
+                  <optgroup label="Customers">{% for c in customers %}<option value="customer:{{ c.id }}"{% if it.suggested_customer_id == c.id %} selected{% endif %}>{{ c.full_name }}</option>{% endfor %}</optgroup>
+                </select></div>
+              <div class="field" data-mode="categorize transfer"><label>Category or transfer account</label>
+                <select name="account_id"><option value="">Choose…</option>{{ account_options(categories, it.suggested_account_id) }}</select></div>
+              {% if classes %}<div class="field" data-mode="categorize split"><label>Class</label><select name="class_id"><option value="">—</option>{% for c in classes %}<option value="{{ c.id }}">{{ c.full_name }}</option>{% endfor %}</select></div>{% endif %}
+              <div class="field"><label>Memo</label><input name="memo" value="{{ it.description }}"></div>
+            </div>
+            <div data-mode="split">
+              <table class="lines"><thead><tr><th>Category</th><th>Description</th><th>Customer</th><th class="num">Amount</th></tr></thead><tbody>
+                {% for i in range(4) %}<tr><td><input type="hidden" name="sp-{{ i }}-pos" value="{{ i }}"><select name="sp-{{ i }}-account_id"><option value="">—</option>{{ account_options(categories) }}</select></td>
+                  <td><input name="sp-{{ i }}-description"></td><td><select name="sp-{{ i }}-customer_id"><option value="">—</option>{% for c in customers %}<option value="{{ c.id }}">{{ c.full_name }}</option>{% endfor %}</select></td>
+                  <td class="amount"><input class="num" name="sp-{{ i }}-amount" value="{{ ((it.amount_cents|abs)|money_plain) if i == 0 else '' }}"></td></tr>{% endfor %}
+              </tbody></table>
+              <div class="hint">Split amounts must add up to {{ (it.amount_cents|abs)|money }}.</div>
+            </div>
+            <div class="toolbar" style="margin-top:.6rem">
+              <button type="submit" name="action" value="add" class="primary">Add</button>
+              <label class="inline small" data-mode="categorize"><input type="checkbox" name="make_rule" value="1"> Create a rule from this</label>
+              <span class="grow"></span>
+              <button type="submit" name="action" value="exclude" class="ghost">Exclude</button>
+            </div>
+          </div>
+          <div data-mode="match">
+            {% set ms = matches.get(it.id, []) %}
+            {% if ms %}
+            <table class="data compact"><tbody>
+              {% for m in ms %}
+              <tr><td>
+                {% if m.kind == 'undeposited_all' %}
+                  <label class="inline"><input type="radio" name="match_choice" value="all" checked> {{ m.txns|length }} payments waiting to be deposited ({{ m.txns|sum(attribute='total_cents')|money }})</label>
+                {% else %}
+                  <label class="inline"><input type="radio" name="match_choice" value="{{ m.txn.id }}"{% if loop.first %} checked{% endif %}>
+                    {{ {'txn': '', 'invoice': 'Receive payment for ', 'bill': 'Pay ', 'undeposited': 'Deposit '}[m.kind] }}{{ m.txn.info.label }} {{ m.txn.number or '' }} · {{ m.txn.entity_name }} · {{ m.txn.date|date }} · {{ (m.txn.balance_cents if m.kind in ('invoice', 'bill') else m.txn.total_cents)|money }}</label>
+                {% endif %}
+              </td><td class="actions">
+                <button type="submit" class="small primary" name="action" value="match" onclick="this.form.match_kind.value='{{ m.kind }}';this.form.match_id.value='{{ m.txn.id if m.txn else '' }}';this.form.match_ids.value='{{ (m.txns|map(attribute='id')|join(',')) if m.kind == 'undeposited_all' else (m.txn.id if m.txn else '') }}'">{{ 'Match' if m.kind == 'txn' else 'Record' }}</button></td></tr>
+              {% endfor %}
+            </tbody></table>
+            {% else %}<p class="muted">Nothing in your books matches {{ (it.amount_cents|abs)|money }} around {{ it.date|date }}.</p>{% endif %}
+            <input type="hidden" name="match_kind" value=""><input type="hidden" name="match_id" value=""><input type="hidden" name="match_ids" value="">
+          </div>
+        </form>
+      </td></tr>
+      {% endif %}
+      {% else %}
+      <tr><td colspan="8"><div class="empty">{% if tab == 'review' %}<h3>Nothing to review</h3><p><a href="{{ url_for('banking.import_file', account_id=account.id) }}">Upload a statement file</a> (CSV, OFX, QFX or QBO) from your bank to bring in new transactions.</p>{% else %}<p>Nothing here.</p>{% endif %}</div></td></tr>
+      {% endfor %}
+    </tbody></table></div>
+  {{ pager(page, pages) }}
+</div>
+{% endblock %}

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="crumbs">Settings</div><h1>Settings</h1></div></div>
+<div class="grid cols-3">
+  {% set groups = [
+    ('Your company', [('settings.company', 'Company profile', 'Name, address, logo, tax ID'),
+                      ('settings.advanced', 'Advanced', 'Fiscal year, accounting method, classes, locations, inventory, mileage rates'),
+                      ('accounting.close_books', 'Close the books', 'Closing date and password')]),
+    ('Sales and expenses', [('settings.sales', 'Sales', 'Forms, messages, numbering, reminders, late fees, email templates'),
+                            ('settings.expenses', 'Expenses', 'Bills, purchase orders, billable expenses, check printing'),
+                            ('settings.custom_fields', 'Custom fields', 'Extra fields on invoices and purchase orders')]),
+    ('Payments and email', [('settings.payments', 'Payments (Stripe)', 'Online card and ACH payments, payouts, fees'),
+                            ('settings.email', 'Email', 'Outgoing mail server and outbox')]),
+    ('People', [('settings.users', 'Users and roles', 'Who can sign in and what they can do'),
+                ('settings.profile', 'Your profile', 'Name, email, password')]),
+    ('Lists', [('lists.index', 'All lists', 'Terms, payment methods, classes, locations, tags, vehicles'),
+               ('tax.rates', 'Sales tax rates', 'Agencies, rates and combined rates'),
+               ('settings.form_1099', '1099 accounts', 'Which expense accounts are reported on 1099s')]),
+    ('Data', [('settings.import_data', 'Import data', 'Customers, vendors, products, accounts, journal entries, QuickBooks Online'),
+              ('settings.export_data', 'Export and back up', 'Download everything as CSV or a database backup'),
+              ('settings.api_tokens', 'API access', 'Tokens for the REST API'),
+              ('audit.index', 'Audit log', 'Every change, by whom and when')]),
+  ] %}
+  {% for title, links in groups %}
+  <div class="card"><div class="card-head"><h3>{{ title }}</h3></div>
+    <ul class="task-list">{% for ep, label, desc in links %}<li><div><a href="{{ url_for(ep) }}"><strong>{{ label }}</strong></a><div class="small muted">{{ desc }}</div></div></li>{% endfor %}</ul></div>
+  {% endfor %}
+</div>
+<p class="faint small" style="margin-top:1rem">PPS Books {{ version }}</p>
+{% endblock %}

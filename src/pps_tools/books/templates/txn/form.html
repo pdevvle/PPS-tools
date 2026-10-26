@@ -1,0 +1,333 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import icon, status_badge, account_options %}
+{% set t = info.code %}
+{% set sales_doc = t in ('estimate', 'invoice', 'sales_receipt', 'credit_memo', 'refund_receipt', 'delayed_charge', 'delayed_credit') %}
+{% set purchase_doc = t in ('bill', 'vendor_credit', 'expense', 'check', 'cc_credit', 'purchase_order') %}
+{% set ro = readonly %}
+{% block title %}{{ info.label }}{% if txn and txn.number %} {{ txn.number }}{% endif %}{% endblock %}
+{% block content_class %} wide{% endblock %}
+{% block content %}
+<form method="post" enctype="multipart/form-data" id="txn-form" class="txn-form"
+      action="{{ url_for('txn.edit', slug=info.slug, txn_id=txn.id) if txn else url_for('txn.new', slug=info.slug) }}"
+      data-type="{{ t }}" data-txn-id="{{ txn.id if txn else '' }}" data-shipping-taxable="{{ '1' if prefs.shipping_taxable else '0' }}"
+      data-paid="{{ (txn.total_cents - txn.balance_cents) if txn and info.open_item and info.open_sign == 1 else 0 }}"
+      data-ui-customer="{{ url_for('txn.ui_customer', cid=0) }}" data-ui-vendor="{{ url_for('txn.ui_vendor', vid=0) }}"
+      data-ui-check="{{ url_for('txn.ui_next_check', account_id=0) }}">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <input type="hidden" name="next_action" value="save" id="next-action">
+  {% if data.source_estimate_id %}<input type="hidden" name="source_estimate_id" value="{{ data.source_estimate_id }}">{% endif %}
+  {% if data.source_po_id %}<input type="hidden" name="source_po_id" value="{{ data.source_po_id }}">{% endif %}
+  <script type="application/json" id="items-json">{{ items_json|tojson }}</script>
+  <script type="application/json" id="terms-json">{{ terms_json|tojson }}</script>
+
+  <div class="txn-top">
+    <div>
+      <div class="crumbs muted small">{{ info.section|title }}{% if txn %} · <a href="{{ url_for('txn.history', txn_id=txn.id) }}">History</a>{% endif %}</div>
+      <h1>{{ info.label }}{% if txn and txn.number %} #{{ txn.number }}{% endif %}
+        {% if txn %}{{ status_badge(txn) }}{% endif %}
+        {% if txn and txn.voided %}<span class="void-stamp">VOID</span>{% endif %}
+        {% if txn and txn.needs_review %}<span class="badge review">Needs review</span>{% endif %}
+      </h1>
+      {% if txn and txn.source != 'manual' %}<div class="muted small">Created by {{ txn.source.replace('_', ' ') }}{% if txn.stripe_payment_intent_id %} · Stripe {{ txn.stripe_payment_intent_id }}{% endif %}</div>{% endif %}
+    </div>
+    <div class="big-amount">
+      <div class="label">{% if t == 'invoice' %}Balance due{% elif t in ('payment', 'bill_payment') %}Amount{% elif t == 'journal_entry' %}Debits{% elif t == 'inventory_adjustment' %}Value change{% else %}Total{% endif %}</div>
+      <div class="value" id="big-amount">{{ ((txn.balance_cents if t == 'invoice' else txn.total_cents)|money) if txn else '$0.00' }}</div>
+    </div>
+  </div>
+
+  {# ================= HEADER ================= #}
+  <div class="txn-section">
+    {% if sales_doc or t in ('payment', 'customer_refund') %}
+      <div class="form-row">
+        <div class="field"><label class="required" for="f-customer">Customer</label>
+          <select id="f-customer" name="customer_id" data-role="customer" required {% if ro %}disabled{% endif %}>
+            <option value="">Choose a customer</option>
+            {% for c in customers %}<option value="{{ c.id }}"{% if data.customer_id and c.id|string == data.customer_id|string %} selected{% endif %}>{{ c.full_name }}</option>{% endfor %}
+          </select>
+          <div class="hint"><a href="{{ url_for('names.customer_new', next=request.full_path) }}">+ Add new customer</a></div>
+        </div>
+        {% if t != 'payment' and t != 'customer_refund' %}
+        <div class="field"><label for="f-email">Customer email</label>
+          <input type="text" id="f-email" name="email_to" value="{{ data.email_to or '' }}" placeholder="Separate emails with commas"></div>
+        {% endif %}
+        {% if t == 'invoice' %}
+        <div class="field"><label>Online payments</label>
+          <input type="hidden" name="has_allow_online_card" value="1"><input type="hidden" name="has_allow_online_ach" value="1">
+          <label class="inline"><input type="checkbox" name="allow_online_card" value="1"{% if data.allow_online_card is none or data.allow_online_card %} checked{% endif %}> Cards</label>
+          <label class="inline"><input type="checkbox" name="allow_online_ach" value="1"{% if data.allow_online_ach is none or data.allow_online_ach %} checked{% endif %}> Bank (ACH)</label>
+          <div class="hint">Customers pay through Stripe from the invoice link.</div></div>
+        {% endif %}
+      </div>
+      <div id="customer-note" class="flash warning hidden"></div>
+      {% if t not in ('payment', 'customer_refund') %}
+      <div class="form-row">
+        <div class="field"><label for="f-bill">Billing address</label>
+          <textarea id="f-bill" name="billing_address" rows="4">{{ data.billing_address or '' }}</textarea></div>
+        {% if prefs.show_shipping_fields and t in ('invoice', 'estimate', 'sales_receipt') %}
+        <div class="field"><label for="f-ship">Shipping to</label>
+          <textarea id="f-ship" name="shipping_address" rows="4">{{ data.shipping_address or '' }}</textarea></div>
+        <div class="field">
+          <label for="f-shipvia">Ship via</label><input id="f-shipvia" name="ship_via" value="{{ data.ship_via or '' }}">
+          <label for="f-shipdate" style="margin-top:.5rem">Shipping date</label><input type="date" id="f-shipdate" name="ship_date" value="{{ data.ship_date or '' }}">
+          <label for="f-track" style="margin-top:.5rem">Tracking no.</label><input id="f-track" name="tracking_no" value="{{ data.tracking_no or '' }}">
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+      <div class="form-row narrow">
+        {% if t == 'invoice' %}
+        <div class="field"><label for="f-terms">Terms</label>
+          <select id="f-terms" name="terms_id" data-role="terms"><option value="">—</option>
+            {% for tm in terms %}<option value="{{ tm.id }}"{% if data.terms_id and tm.id|string == data.terms_id|string %} selected{% endif %}>{{ tm.name }}</option>{% endfor %}</select></div>
+        {% endif %}
+        <div class="field"><label for="f-date">{{ {'invoice': 'Invoice date', 'estimate': 'Estimate date', 'payment': 'Payment date', 'sales_receipt': 'Sales receipt date', 'credit_memo': 'Credit memo date', 'refund_receipt': 'Refund receipt date'}.get(t, 'Date') }}</label>
+          <input type="date" id="f-date" name="date" value="{{ data.date or '' }}" data-role="date" required></div>
+        {% if t == 'invoice' %}
+        <div class="field"><label for="f-due">Due date</label><input type="date" id="f-due" name="due_date" value="{{ data.due_date or '' }}"></div>
+        {% elif t == 'estimate' %}
+        <div class="field"><label for="f-exp">Expiration date</label><input type="date" id="f-exp" name="expiration_date" value="{{ data.expiration_date or '' }}"></div>
+        <div class="field"><label for="f-status">Status</label><select id="f-status" name="status">
+          {% for st in ('pending', 'accepted', 'rejected', 'closed') %}<option value="{{ st }}"{% if data.status == st %} selected{% endif %}>{{ st|title }}</option>{% endfor %}</select></div>
+        {% endif %}
+        {% if t in ('payment', 'sales_receipt', 'refund_receipt', 'customer_refund') %}
+        <div class="field"><label for="f-pm">Payment method</label>
+          <select id="f-pm" name="payment_method_id"><option value="">—</option>
+            {% for pm in payment_methods %}<option value="{{ pm.id }}"{% if data.payment_method_id and pm.id|string == data.payment_method_id|string %} selected{% endif %}>{{ pm.name }}</option>{% endfor %}</select></div>
+        <div class="field"><label for="f-ref">{{ 'Check / reference no.' }}</label><input id="f-ref" name="ref_no" value="{{ data.ref_no or '' }}"></div>
+        {% endif %}
+        {% if info.header_account %}
+        <div class="field"><label class="required" for="f-account">{{ info.header_account }}</label>
+          <select id="f-account" name="account_id" required><option value="">Choose an account</option>{{ account_options(header_accounts, data.account_id) }}</select></div>
+        {% endif %}
+        {% if t != 'payment' %}
+        <div class="field"><label for="f-number">{{ {'invoice': 'Invoice no.', 'estimate': 'Estimate no.', 'credit_memo': 'Credit no.', 'sales_receipt': 'Sales receipt no.', 'refund_receipt': 'Refund no.'}.get(t, 'Reference no.') }}</label>
+          <input id="f-number" name="number" value="{{ data.number or '' }}"></div>
+        {% endif %}
+        {% if t in ('payment', 'customer_refund') %}
+        <div class="field"><label class="required" for="f-amount">{{ 'Amount received' if t == 'payment' else 'Refund amount' }}</label>
+          <input id="f-amount" name="amount" class="num" inputmode="decimal" data-role="amount-received"
+                 value="{{ data.amount if data.amount is not none and data.amount != '' else (data.amount_cents|money_plain if data.amount_cents is not none else '') }}" {% if t == 'customer_refund' %}readonly{% endif %}></div>
+        {% endif %}
+        {% if prefs.track_classes == 'per_transaction' %}
+        <div class="field"><label for="f-class">Class</label><select id="f-class" name="class_id"><option value="">—</option>
+          {% for c in classes %}<option value="{{ c.id }}"{% if data.class_id and c.id|string == data.class_id|string %} selected{% endif %}>{{ c.full_name }}</option>{% endfor %}</select></div>
+        {% endif %}
+        {% if prefs.track_locations %}
+        <div class="field"><label for="f-loc">{{ prefs.location_label or 'Location' }}</label><select id="f-loc" name="location_id"><option value="">—</option>
+          {% for l in locations %}<option value="{{ l.id }}"{% if data.location_id and l.id|string == data.location_id|string %} selected{% endif %}>{{ l.full_name }}</option>{% endfor %}</select></div>
+        {% endif %}
+      </div>
+
+    {% elif purchase_doc or t in ('bill_payment',) %}
+      <div class="form-row">
+        {% if info.entity == 'payee' %}
+        <div class="field"><label for="f-payee">Payee</label>
+          <select id="f-payee" name="payee" data-role="payee"><option value="">Who did you pay?</option>
+            <optgroup label="Vendors">{% for v in vendors %}<option value="vendor:{{ v.id }}"{% if data.payee == 'vendor:' ~ v.id %} selected{% endif %}>{{ v.display_name }}</option>{% endfor %}</optgroup>
+            <optgroup label="Customers">{% for c in customers %}<option value="customer:{{ c.id }}"{% if data.payee == 'customer:' ~ c.id %} selected{% endif %}>{{ c.full_name }}</option>{% endfor %}</optgroup>
+            <optgroup label="Employees">{% for e in employees %}<option value="employee:{{ e.id }}"{% if data.payee == 'employee:' ~ e.id %} selected{% endif %}>{{ e.display_name }}</option>{% endfor %}</optgroup>
+          </select><div class="hint"><a href="{{ url_for('names.vendor_new', next=request.full_path) }}">+ Add new vendor</a></div></div>
+        {% else %}
+        <div class="field"><label class="required" for="f-vendor">Vendor</label>
+          <select id="f-vendor" name="vendor_id" data-role="vendor" required><option value="">Choose a vendor</option>
+            {% for v in vendors %}<option value="{{ v.id }}"{% if data.vendor_id and v.id|string == data.vendor_id|string %} selected{% endif %}>{{ v.display_name }}</option>{% endfor %}</select>
+          <div class="hint"><a href="{{ url_for('names.vendor_new', next=request.full_path) }}">+ Add new vendor</a></div></div>
+        {% endif %}
+        {% if info.header_account %}
+        <div class="field"><label class="required" for="f-account">{{ info.header_account }}</label>
+          <select id="f-account" name="account_id" required data-role="pay-account"><option value="">Choose an account</option>{{ account_options(header_accounts, data.account_id) }}</select></div>
+        {% endif %}
+        {% if t == 'purchase_order' %}
+        <div class="field"><label for="f-email">Vendor email</label><input id="f-email" name="email_to" value="{{ data.email_to or '' }}"></div>
+        {% endif %}
+      </div>
+      <div class="form-row narrow">
+        {% if t in ('bill', 'check', 'purchase_order', 'vendor_credit') %}
+        <div class="field"><label for="f-bill">Mailing address</label><textarea id="f-bill" name="billing_address" rows="3">{{ data.billing_address or '' }}</textarea></div>
+        {% endif %}
+        {% if t == 'purchase_order' %}
+        <div class="field"><label for="f-ship">Ship to</label><textarea id="f-ship" name="shipping_address" rows="3">{{ data.shipping_address or (company.name ~ '\n' ~ company.address_lines()|join('\n')) }}</textarea></div>
+        {% endif %}
+        {% if t == 'bill' %}
+        <div class="field"><label for="f-terms">Terms</label><select id="f-terms" name="terms_id" data-role="terms"><option value="">—</option>
+          {% for tm in terms %}<option value="{{ tm.id }}"{% if data.terms_id and tm.id|string == data.terms_id|string %} selected{% endif %}>{{ tm.name }}</option>{% endfor %}</select></div>
+        {% endif %}
+        <div class="field"><label for="f-date">{{ {'bill': 'Bill date', 'expense': 'Payment date', 'check': 'Payment date', 'purchase_order': 'Purchase order date', 'bill_payment': 'Payment date'}.get(t, 'Date') }}</label>
+          <input type="date" id="f-date" name="date" value="{{ data.date or '' }}" data-role="date" required></div>
+        {% if t == 'bill' %}
+        <div class="field"><label for="f-due">Due date</label><input type="date" id="f-due" name="due_date" value="{{ data.due_date or '' }}"></div>
+        {% endif %}
+        {% if t == 'purchase_order' %}
+        <div class="field"><label for="f-shipdate">Expected by</label><input type="date" id="f-shipdate" name="ship_date" value="{{ data.ship_date or '' }}"></div>
+        <div class="field"><label for="f-shipvia">Ship via</label><input id="f-shipvia" name="ship_via" value="{{ data.ship_via or '' }}"></div>
+        {% endif %}
+        {% if t == 'expense' %}
+        <div class="field"><label for="f-pm">Payment method</label><select id="f-pm" name="payment_method_id"><option value="">—</option>
+          {% for pm in payment_methods %}<option value="{{ pm.id }}"{% if data.payment_method_id and pm.id|string == data.payment_method_id|string %} selected{% endif %}>{{ pm.name }}</option>{% endfor %}</select></div>
+        {% endif %}
+        <div class="field"><label for="f-number">{{ {'bill': 'Bill no.', 'check': 'Check no.', 'bill_payment': 'Check / ref no.', 'purchase_order': 'P.O. no.'}.get(t, 'Ref no.') }}</label>
+          <input id="f-number" name="number" value="{{ data.number or '' }}"></div>
+        {% if t in ('check', 'bill_payment') %}
+        <div class="field"><label>&nbsp;</label><input type="hidden" name="has_print_later" value="1">
+          <label class="inline"><input type="checkbox" name="print_later" value="1"{% if data.print_later %} checked{% endif %}> Print later</label></div>
+        {% endif %}
+        {% if t == 'bill_payment' %}
+        <div class="field"><label class="required" for="f-amount">Amount</label>
+          <input id="f-amount" name="amount" class="num" data-role="amount-received" value="{{ data.amount if data.amount else (data.amount_cents|money_plain if data.amount_cents is not none else '') }}"></div>
+        {% endif %}
+        {% if t == 'purchase_order' and txn %}
+        <div class="field"><label for="f-status">Status</label><select id="f-status" name="status">
+          {% for st in ('open', 'closed') %}<option value="{{ st }}"{% if data.status == st %} selected{% endif %}>{{ st|title }}</option>{% endfor %}</select></div>
+        {% endif %}
+        {% if prefs.track_locations %}
+        <div class="field"><label for="f-loc">{{ prefs.location_label or 'Location' }}</label><select id="f-loc" name="location_id"><option value="">—</option>
+          {% for l in locations %}<option value="{{ l.id }}"{% if data.location_id and l.id|string == data.location_id|string %} selected{% endif %}>{{ l.full_name }}</option>{% endfor %}</select></div>
+        {% endif %}
+      </div>
+      <div id="po-note" class="flash info hidden"></div>
+
+    {% elif t == 'deposit' %}
+      <div class="form-row narrow">
+        <div class="field"><label class="required" for="f-account">Deposit to</label><select id="f-account" name="account_id" required><option value="">Choose an account</option>{{ account_options(header_accounts, data.account_id) }}</select></div>
+        <div class="field"><label for="f-date">Date</label><input type="date" id="f-date" name="date" value="{{ data.date or '' }}" required></div>
+        <div class="field"><label for="f-number">Reference no.</label><input id="f-number" name="number" value="{{ data.number or '' }}"></div>
+        {% if prefs.track_locations %}<div class="field"><label for="f-loc">{{ prefs.location_label or 'Location' }}</label><select id="f-loc" name="location_id"><option value="">—</option>{% for l in locations %}<option value="{{ l.id }}"{% if data.location_id and l.id|string == data.location_id|string %} selected{% endif %}>{{ l.full_name }}</option>{% endfor %}</select></div>{% endif %}
+      </div>
+
+    {% elif t in ('transfer', 'cc_payment') %}
+      <div class="form-row narrow">
+        {% if t == 'cc_payment' %}
+        <div class="field"><label class="required" for="f-to">Credit card</label><select id="f-to" name="to_account_id" required><option value="">Which card?</option>{{ account_options(accounts|selectattr('type', 'equalto', 'credit_card')|list, data.to_account_id) }}</select></div>
+        <div class="field"><label for="f-vendor">Payee (card issuer)</label><select id="f-vendor" name="vendor_id"><option value="">—</option>{% for v in vendors %}<option value="{{ v.id }}"{% if data.vendor_id and v.id|string == data.vendor_id|string %} selected{% endif %}>{{ v.display_name }}</option>{% endfor %}</select></div>
+        <div class="field"><label class="required" for="f-account">Bank account</label><select id="f-account" name="account_id" required><option value="">Paid from</option>{{ account_options(header_accounts, data.account_id) }}</select></div>
+        {% else %}
+        <div class="field"><label class="required" for="f-account">Transfer funds from</label><select id="f-account" name="account_id" required><option value="">Choose an account</option>{{ account_options(header_accounts, data.account_id) }}</select></div>
+        <div class="field"><label class="required" for="f-to">Transfer funds to</label><select id="f-to" name="to_account_id" required><option value="">Choose an account</option>{{ account_options(header_accounts, data.to_account_id) }}</select></div>
+        {% endif %}
+        <div class="field"><label class="required" for="f-amount">Amount</label><input id="f-amount" name="amount" class="num" data-role="simple-amount" required value="{{ data.amount if data.amount else (data.amount_cents|money_plain if data.amount_cents is not none else '') }}"></div>
+        <div class="field"><label for="f-date">Date</label><input type="date" id="f-date" name="date" value="{{ data.date or '' }}" required></div>
+      </div>
+
+    {% elif t in ('sales_tax_payment', 'sales_tax_adjustment') %}
+      <div class="form-row narrow">
+        <div class="field"><label class="required" for="f-agency">Tax agency</label><select id="f-agency" name="tax_agency_id" required><option value="">Choose an agency</option>{% for a in tax_agencies %}<option value="{{ a.id }}"{% if data.tax_agency_id and a.id|string == data.tax_agency_id|string %} selected{% endif %}>{{ a.name }}</option>{% endfor %}</select></div>
+        <div class="field"><label class="required" for="f-account">{{ info.header_account }}</label><select id="f-account" name="account_id" required><option value="">Choose an account</option>{{ account_options(header_accounts, data.account_id) }}</select></div>
+        <div class="field"><label class="required" for="f-amount">Amount</label><input id="f-amount" name="amount" class="num" data-role="simple-amount" required value="{{ data.amount if data.amount else (data.amount_cents|money_plain if data.amount_cents is not none else '') }}">
+          {% if t == 'sales_tax_adjustment' %}<div class="hint">Positive increases what you owe; use a negative amount for a credit or discount.</div>{% endif %}</div>
+        <div class="field"><label for="f-date">Date</label><input type="date" id="f-date" name="date" value="{{ data.date or '' }}" required></div>
+        <div class="field"><label for="f-number">Reference no.</label><input id="f-number" name="number" value="{{ data.number or '' }}"></div>
+      </div>
+
+    {% elif t == 'journal_entry' %}
+      <div class="form-row narrow">
+        <div class="field"><label for="f-date">Journal date</label><input type="date" id="f-date" name="date" value="{{ data.date or '' }}" required></div>
+        <div class="field"><label for="f-number">Journal no.</label><input id="f-number" name="number" value="{{ data.number or '' }}"></div>
+        {% if prefs.track_locations %}<div class="field"><label for="f-loc">{{ prefs.location_label or 'Location' }}</label><select id="f-loc" name="location_id"><option value="">—</option>{% for l in locations %}<option value="{{ l.id }}"{% if data.location_id and l.id|string == data.location_id|string %} selected{% endif %}>{{ l.full_name }}</option>{% endfor %}</select></div>{% endif %}
+      </div>
+
+    {% elif t == 'inventory_adjustment' %}
+      <div class="form-row narrow">
+        <div class="field"><label for="f-date">Adjustment date</label><input type="date" id="f-date" name="date" value="{{ data.date or '' }}" required></div>
+        <div class="field"><label class="required" for="f-account">Inventory adjustment account</label><select id="f-account" name="account_id" required>{{ account_options(header_accounts, data.account_id) }}</select></div>
+        <div class="field"><label for="f-number">Reference no.</label><input id="f-number" name="number" value="{{ data.number or '' }}"></div>
+      </div>
+    {% endif %}
+
+    {% if tags and t not in ('transfer',) %}
+    <div class="field"><input type="hidden" name="has_tags" value="1"><label>Tags</label>
+      <div class="toolbar">{% for tg in tags %}<label class="inline"><input type="checkbox" name="tag_ids" value="{{ tg.id }}"{% if tg.id in (data.tag_ids or []) or tg.id|string in (data.tag_ids or []) %} checked{% endif %}> {{ (tg.group_name ~ ': ') if tg.group_name }}{{ tg.name }}</label>{% endfor %}</div></div>
+    {% endif %}
+    {% if custom_fields %}
+    <div class="form-row narrow">{% for cf in custom_fields %}<div class="field"><label for="cf-{{ cf.id }}">{{ cf.name }}</label><input id="cf-{{ cf.id }}" name="cf_{{ cf.id }}" value="{{ cf_values.get(cf.id, '') }}"></div>{% endfor %}</div>
+    {% endif %}
+  </div>
+
+  {# ================= BODY ================= #}
+  {% if apply is not none %}{% include "txn/_apply.html" %}{% endif %}
+  {% if t == 'deposit' %}{% include "txn/_deposit.html" %}{% endif %}
+  {% if sales_doc or t == 'inventory_adjustment' %}{% include "txn/_lines_items.html" %}{% endif %}
+  {% if purchase_doc %}{% include "txn/_lines_purchase.html" %}{% endif %}
+  {% if t == 'journal_entry' %}{% include "txn/_lines_je.html" %}{% endif %}
+
+  {# ================= FOOTER: message, memo, totals ================= #}
+  <div class="txn-section">
+    <div class="row">
+      <div class="grow" style="max-width:560px">
+        {% if t in ('invoice', 'estimate', 'sales_receipt', 'credit_memo', 'refund_receipt', 'purchase_order') %}
+        <div class="field"><label for="f-message">Message {{ 'on ' ~ info.label|lower if t != 'purchase_order' else 'to vendor' }}</label>
+          <textarea id="f-message" name="message" rows="2">{{ data.message or '' }}</textarea></div>
+        {% endif %}
+        {% if t == 'invoice' %}
+        <div class="field"><label for="f-stmemo">Message on statement</label><input id="f-stmemo" name="statement_memo" value="{{ data.statement_memo or '' }}"></div>
+        {% endif %}
+        <div class="field"><label for="f-memo">Memo <span class="faint">(internal)</span></label>
+          <textarea id="f-memo" name="memo" rows="2">{{ data.memo or '' }}</textarea></div>
+        <div class="field"><label>Attachments</label>
+          {% if attachments %}<ul class="attach-list">{% for a in attachments %}<li>{{ icon('paperclip') }} <a href="{{ url_for('attachments.download', att_id=a.id) }}">{{ a.filename }}</a> <span class="faint small">{{ (a.size / 1024)|round(1) }} KB</span></li>{% endfor %}</ul>{% endif %}
+          <input type="file" name="attachments" multiple>
+        </div>
+      </div>
+      {% include "txn/_totals.html" %}
+    </div>
+    {% if related %}
+    <div class="card" style="margin-top:1rem"><div class="card-head"><h3>Linked transactions</h3></div>
+      <table class="data compact"><tbody>
+        {% for r in related %}<tr><td>{{ r.type.replace('_', ' ')|title }}</td><td><a href="{{ url_for('txn.go', txn_id=r.txn.id) }}">{{ r.txn.info.label }} {{ r.txn.number or '' }}</a></td><td>{{ r.txn.date|date }}</td><td class="num">{{ r.amount|money if r.amount else '' }}</td></tr>{% endfor %}
+      </tbody></table></div>
+    {% endif %}
+  </div>
+
+  {% if closing_date and not ro %}
+  <div class="txn-section hidden" id="closing-box">
+    <div class="flash warning">The books are closed through {{ closing_date|date }}.
+      {% if company.closing_password_hash %}<label for="f-cpw" style="margin-top:.5rem">Closing password</label><input type="password" id="f-cpw" name="closing_password" autocomplete="off" style="max-width:260px">
+      {% else %}<label class="inline"><input type="checkbox" name="confirm_closed" value="1"> I understand; save the change to the closed period anyway.</label>{% endif %}</div>
+  </div>
+  <script>window.BOOKS_CLOSING_DATE = "{{ closing_date|date_input }}";</script>
+  {% endif %}
+
+  <div class="footer-bar">
+    <div class="toolbar">
+      <a class="btn" href="{{ request.args.get('next') or request.referrer or url_for('dashboard.home') }}">Cancel</a>
+      {% if txn %}
+      <details class="menu left"><summary class="btn">More {{ icon('chevron') }}</summary>
+        <div class="menu-panel" style="bottom:calc(100% + 6px);top:auto">
+          <a href="{{ url_for('txn.copy', txn_id=txn.id) }}">Copy</a>
+          <a href="{{ url_for('txn.history', txn_id=txn.id) }}">Audit history</a>
+          {% if info.customer_facing or info.vendor_facing %}<a href="{{ url_for('txn.pdf', txn_id=txn.id, inline=1) }}" target="_blank">Print or preview PDF</a>{% endif %}
+          {% if t in ('check', 'bill_payment', 'customer_refund') %}<a href="{{ url_for('txn.print_check', txn_id=txn.id) }}" target="_blank">Print check</a>{% endif %}
+          {% if t == 'estimate' and not txn.voided %}<a href="{{ url_for('txn.new', slug='invoices', from_estimate=txn.id) }}">Convert to invoice</a>{% endif %}
+          {% if t == 'purchase_order' and txn.status == 'open' %}<a href="{{ url_for('txn.new', slug='bills', from_po=txn.id) }}">Copy to bill</a>{% endif %}
+          {% if t == 'invoice' and txn.balance_cents > 0 and not txn.voided %}<a href="{{ url_for('txn.new', slug='payments', invoice_id=txn.id) }}">Receive payment</a>{% endif %}
+          {% if t == 'bill' and txn.balance_cents > 0 and not txn.voided %}<a href="{{ url_for('txn.new', slug='bill-payments', bill_id=txn.id) }}">Make payment</a>{% endif %}
+          {% if t == 'payment' and txn.source == 'stripe' and can('payments.refund') %}<a href="{{ url_for('payments.refund', txn_id=txn.id) }}">Refund through Stripe</a>{% endif %}
+          {% if info.posts and not txn.voided and not ro %}<button type="submit" form="void-form">Void</button>{% endif %}
+          {% if not ro %}<button type="submit" form="delete-form">Delete</button>{% endif %}
+        </div>
+      </details>
+      {% endif %}
+      {% if txn and (info.customer_facing) and not txn.voided %}<a class="btn" href="{{ url_for('txn.send', txn_id=txn.id) }}">{{ icon('mail') }} Send</a>{% endif %}
+    </div>
+    {% if not ro %}
+    <div class="toolbar">
+      <button type="submit" class="" data-action="save">Save</button>
+      <div class="split-btn">
+        <button type="submit" class="primary" data-action="{{ 'save_send' if (info.customer_facing or info.vendor_facing) and t not in ('payment',) else 'save_close' }}">
+          {{ 'Save and send' if (info.customer_facing or info.vendor_facing) and t not in ('payment',) else 'Save and close' }}</button>
+        <details class="menu"><summary class="btn primary">{{ icon('chevron') }}</summary>
+          <div class="menu-panel">
+            <button type="submit" data-action="save_new">Save and new</button>
+            <button type="submit" data-action="save_close">Save and close</button>
+            {% if info.customer_facing or info.vendor_facing %}<button type="submit" data-action="save_print">Save and print</button>{% endif %}
+          </div></details>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</form>
+{% if txn %}
+<form id="void-form" method="post" action="{{ url_for('txn.void', txn_id=txn.id) }}" onsubmit="return confirm('Void this {{ info.label|lower }}? Its amounts drop to zero but it stays on record.')"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"></form>
+<form id="delete-form" method="post" action="{{ url_for('txn.delete', txn_id=txn.id) }}" onsubmit="return confirm('Delete this {{ info.label|lower }} permanently?')"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"></form>
+{% endif %}
+{% endblock %}

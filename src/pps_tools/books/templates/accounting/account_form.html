@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import account_options %}
+{% block title %}{{ acct.full_name if acct.id else 'New account' }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="crumbs"><a href="{{ url_for('accounting.chart') }}">Chart of accounts</a></div><h1>{{ acct.full_name if acct.id else 'New account' }}</h1></div>
+  {% if acct.id and not acct.system_key and not in_use %}<div class="actions"><form method="post" action="{{ url_for('accounting.account_delete', account_id=acct.id) }}" onsubmit="return confirm('Delete this account?')"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="danger" type="submit">Delete</button></form></div>{% endif %}</div>
+<form method="post" class="card" style="max-width:860px"><div class="card-body">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <script type="application/json" id="detail-types">{{ detail_types|tojson }}</script>
+  <div class="form-row">
+    <div class="field"><label class="required">Account type</label><select name="type" id="acct-type"{% if acct.system_key %} disabled{% endif %}>{% for code, t in types.items() %}<option value="{{ code }}"{% if acct.type == code %} selected{% endif %}>{{ t.label }}</option>{% endfor %}</select>
+      {% if acct.system_key %}<input type="hidden" name="type" value="{{ acct.type }}"><div class="hint">The software relies on this account, so its type is fixed.</div>{% endif %}</div>
+    <div class="field"><label>Detail type</label><select name="detail_type" id="acct-detail">{% for d in detail_types[acct.type] %}<option{% if acct.detail_type == d %} selected{% endif %}>{{ d }}</option>{% endfor %}</select></div>
+  </div>
+  <div class="form-row">
+    <div class="field"><label class="required">Name</label><input name="name" value="{{ acct.name or '' }}" required></div>
+    <div class="field"><label>Number</label><input name="number" value="{{ acct.number or '' }}"></div>
+    <div class="field"><label>Sub-account of</label><select name="parent_id"><option value="">— None —</option>{{ account_options(parents, acct.parent_id) }}</select><div class="hint">Must be the same type.</div></div>
+  </div>
+  <div class="field"><label>Description</label><input name="description" value="{{ acct.description or '' }}"></div>
+  {% if acct.type in ('bank', 'credit_card') %}
+  <div class="form-row narrow">
+    <div class="field"><label>Bank name</label><input name="bank_name" value="{{ acct.bank_name or '' }}"></div>
+    <div class="field"><label>Last 4 digits</label><input name="bank_last4" value="{{ acct.bank_last4 or '' }}" maxlength="4"></div>
+    {% if acct.type == 'bank' %}<div class="field"><label>Next check no.</label><input name="next_check_number" value="{{ acct.next_check_number or '' }}"></div>{% endif %}
+  </div>
+  {% endif %}
+  {% if not acct.id %}
+  <div class="form-row narrow" id="opening-row">
+    <div class="field"><label>Opening balance</label><input class="num" name="opening_balance" placeholder="0.00"><div class="hint">For balance sheet accounts: what it held on the start date. Offsets Opening Balance Equity.</div></div>
+    <div class="field"><label>As of</label><input type="date" name="opening_balance_date" value="{{ today|date_input }}"></div>
+  </div>
+  {% endif %}
+  <details><summary class="small">Tax mapping</summary>
+    <div class="form-row" style="margin-top:.6rem">
+      <div class="field"><label>Tax form line</label><input name="tax_line" value="{{ acct.tax_line or '' }}" placeholder="Schedule C: Line 8 Advertising"></div>
+      <div class="field"><label>1099 box for payments to this account</label><select name="form_1099_box"><option value="">Not reported on 1099</option>{% for k, label in boxes.items() %}<option value="{{ k }}"{% if acct.form_1099_box == k %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+    </div></details>
+  {% if acct.id %}<label class="inline" style="margin-top:.6rem"><input type="checkbox" name="active" value="1"{% if acct.active %} checked{% endif %}{% if acct.system_key %} disabled{% endif %}> Active</label>
+    {% if acct.system_key %}<input type="hidden" name="active" value="1">{% endif %}{% endif %}
+  <div class="toolbar" style="margin-top:1rem"><button type="submit" class="primary">Save</button><a class="btn" href="{{ url_for('accounting.chart') }}">Cancel</a></div>
+</div></form>
+<script>
+(function () {
+  var types = JSON.parse(document.getElementById("detail-types").textContent);
+  var t = document.getElementById("acct-type"), d = document.getElementById("acct-detail");
+  t.addEventListener("change", function () {
+    d.innerHTML = "";
+    (types[t.value] || []).forEach(function (x) { var o = document.createElement("option"); o.textContent = x; d.appendChild(o); });
+  });
+})();
+</script>
+{% endblock %}

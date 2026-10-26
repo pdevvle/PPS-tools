@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import pager %}
+{% block title %}{{ acct.full_name }} register{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="crumbs"><a href="{{ url_for('accounting.chart') }}">Chart of accounts</a></div>
+    <h1>{{ acct.full_name }}</h1><div class="muted">{{ acct.type_label }} · Ending balance {{ balance|money }}</div></div>
+  <div class="actions">
+    {% if acct.type in ('bank', 'credit_card') %}<a class="btn" href="{{ url_for('banking.reconcile_start', account_id=acct.id) }}">Reconcile</a>{% endif %}
+    <a class="btn" href="{{ url_for('reports.view', key='general_ledger', account_id=acct.id, preset='this_year_to_date') }}">General ledger</a>
+    {% if can('accounting.edit') %}<a class="btn" href="{{ url_for('accounting.account_edit', account_id=acct.id) }}">Edit account</a>{% endif %}
+  </div>
+</div>
+<div class="card">
+  <form class="filters" method="get">
+    <div class="field"><label>From</label><input type="date" name="start" value="{{ start|date_input }}"></div>
+    <div class="field"><label>To</label><input type="date" name="end" value="{{ end|date_input }}"></div>
+    {% if acct.type in ('bank', 'credit_card') %}<div class="field"><label>Cleared</label><select name="cleared" data-autosubmit><option value="">All</option><option value="uncleared"{% if cleared == 'uncleared' %} selected{% endif %}>Uncleared</option><option value="cleared"{% if cleared == 'cleared' %} selected{% endif %}>Cleared</option></select></div>{% endif %}
+    <button type="submit">Apply</button>
+  </form>
+  <div class="table-wrap"><table class="data">
+    <thead><tr><th>Date</th><th>Ref no.</th><th>Type</th><th>Payee / name</th><th>Account (split)</th><th>Memo</th>
+      <th class="num">{{ 'Payment' if acct.type == 'bank' else ('Charge' if acct.type == 'credit_card' else 'Decrease') }}</th>
+      <th class="num">{{ 'Deposit' if acct.type == 'bank' else ('Payment' if acct.type == 'credit_card' else 'Increase') }}</th>
+      {% if acct.type in ('bank', 'credit_card') %}<th class="center" title="Cleared / Reconciled">✓</th>{% endif %}<th class="num">Balance</th></tr></thead>
+    <tbody>
+      {% for e, running in rows %}{% set t = txns[e.txn_id] %}{% set signed = e.amount_cents * acct.normal %}
+      <tr class="clickable" data-href="{{ url_for('txn.go', txn_id=t.id) }}">
+        <td class="nowrap">{{ e.date|date }}</td><td>{{ t.number or t.ref_no or '' }}</td><td>{{ t.info.label }}</td><td>{{ t.entity_name }}</td>
+        <td class="small">{{ splits.get(t.id, {}).get(e.account_id, '') }}</td><td class="small muted">{{ (e.memo or t.memo or '')[:60] }}</td>
+        {% if acct.type == 'credit_card' %}
+        <td class="num">{{ (-signed)|money if signed > 0 else '' }}</td><td class="num">{{ (-signed)|money if signed < 0 else '' }}</td>
+        {% else %}
+        <td class="num">{{ (-signed)|money if signed < 0 else '' }}</td><td class="num">{{ signed|money if signed > 0 else '' }}</td>
+        {% endif %}
+        {% if acct.type in ('bank', 'credit_card') %}<td class="center">
+          {% if e.cleared == 'R' %}<span class="badge reconciled" title="Reconciled">R</span>
+          {% elif can('reconcile') %}<form method="post" action="{{ url_for('accounting.toggle_cleared', account_id=acct.id, entry_id=e.id) }}" style="display:inline"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="small ghost" type="submit" title="Toggle cleared">{{ 'C' if e.cleared == 'C' else '·' }}</button></form>
+          {% else %}{{ e.cleared }}{% endif %}</td>{% endif %}
+        <td class="num">{{ running|money }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="10" class="muted">No transactions in this account{% if start or end %} for these dates{% endif %}.</td></tr>
+      {% endfor %}
+    </tbody></table></div>
+  {% if start %}<div class="card-body small muted">Balance before {{ start|date }}: {{ opening|money }}</div>{% endif %}
+  {{ pager(page, pages) }}
+</div>
+{% endblock %}
