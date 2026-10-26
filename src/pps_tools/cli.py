@@ -12,6 +12,7 @@ from pps_tools.commands.export import export
 from pps_tools.commands.export_comp_js import export_comp_js
 from pps_tools.commands.import_data import import_group
 from pps_tools.commands.qb_categorize import qb_categorize
+from pps_tools.switchboard.cli import switchboard_group
 
 
 @click.group()
@@ -44,6 +45,7 @@ main.add_command(export)
 main.add_command(export_comp_js)
 main.add_command(import_group, "import")
 main.add_command(qb_categorize)
+main.add_command(switchboard_group, "switchboard")
 
 
 if __name__ == "__main__":

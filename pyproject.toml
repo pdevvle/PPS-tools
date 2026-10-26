@@ -35,5 +35,14 @@ pps = "pps_tools.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+pps_tools = [
+    "templates/*.j2",
+    "quickbooks/templates/*.html",
+    "switchboard/schema/*.sql",
+    "switchboard/static/*",
+    "switchboard/static/**/*",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
