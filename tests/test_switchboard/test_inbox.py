@@ -395,3 +395,101 @@ def test_global_search_finds_conversation(client):
 def test_badges_count_unread_inbox(client):
     receive(make_channel())
     assert client.get("/api/badges")["badges"]["inbox"] == 1
+
+
+def test_team_conversations_hidden_from_non_members(client, owner, make_user):
+    team = client.post("/api/teams", {"name": "Production", "member_ids": [owner["id"]]})["team"]
+    ch = make_channel(team_id=team["id"])
+    cid = receive(ch)["conversation_id"]
+    outsider, outsider_client = make_user("agent")
+    outsider_client.get(f"/api/conversations/{cid}", expect=404)
+    outsider_client.post("/api/conversations/actions", {"ids": [cid], "action": "close"}, expect=404)
+    assert outsider_client.get("/api/conversations?mailbox=all")["items"] == []
+    # admins see every team
+    _, admin_client = make_user("admin")
+    assert admin_client.get(f"/api/conversations/{cid}")["conversation"]["id"] == cid
+
+
+def test_reply_all_excludes_our_own_addresses(client):
+    ch = make_channel(address="orders@shop.test")
+    make_channel(address="billing@shop.test")
+    msg = inbox.deliver_inbound(Inbound(
+        channel=ch, kind="email", from_handle="ann@cust.test", from_name="Ann", subject="Order",
+        body_text="hi", to=[{"name": None, "handle": "orders@shop.test"}],
+        cc=[{"name": "Bob", "handle": "bob@cust.test"}, {"name": None, "handle": "billing@shop.test"}],
+        external_id="<ra@x>",
+    ))
+    d = client.post("/api/drafts", {"conversation_id": msg["conversation_id"], "mode": "reply_all"})["draft"]
+    assert [p["handle"] for p in d["to"]] == ["ann@cust.test"]
+    assert [p["handle"] for p in d["cc"]] == ["bob@cust.test"]
+
+
+def test_reply_uses_reply_to_header(client):
+    ch = make_channel()
+    msg = inbox.deliver_inbound(Inbound(channel=ch, kind="email", from_handle="noreply@shop.example",
+                                        reply_to="Help <help@shop.example>", subject="Order", body_text="x",
+                                        external_id="<rt@x>"))
+    d = client.post("/api/drafts", {"conversation_id": msg["conversation_id"]})["draft"]
+    assert d["to"] == [{"name": "Help", "handle": "help@shop.example"}]
+
+
+def test_forward_copies_attachments_and_quotes(client):
+    ch = make_channel()
+    msg = inbox.deliver_inbound(Inbound(channel=ch, kind="email", from_handle="ann@cust.test", subject="Art",
+                                        body_text="see file", external_id="<fw@x>",
+                                        attachments=[{"filename": "logo.pdf", "content_type": "application/pdf", "data": b"%PDF"}]))
+    d = client.post("/api/drafts", {"conversation_id": msg["conversation_id"], "mode": "forward",
+                                    "reply_to_message_id": msg["id"]})["draft"]
+    assert d["subject"] == "Fwd: Art"
+    assert d["to"] == []
+    assert "Forwarded message" in d["body_html"]
+    assert [a["filename"] for a in d["attachments"]] == ["logo.pdf"]
+
+
+def test_drafts_mailbox_and_new_drafts(client):
+    ch = make_channel()
+    cid = receive(ch)["conversation_id"]
+    client.post("/api/drafts", {"conversation_id": cid, "body_html": "<p>wip</p>"})
+    client.post("/api/drafts", {"mode": "new", "channel_id": ch["id"], "to": "z@z.test", "body_html": "<p>new</p>"})
+    assert [c["id"] for c in client.get("/api/conversations?mailbox=drafts")["items"]] == [cid]
+    assert len(client.get("/api/drafts")["items"]) == 1
+    assert client.get("/api/counts")["drafts"] == 2
+
+
+def test_contact_history(client):
+    ch = make_channel()
+    a = receive(ch, subject="First order", sender="repeat@cust.test")["conversation_id"]
+    b = receive(ch, subject="Second order", sender="repeat@cust.test")["conversation_id"]
+    hist = client.get(f"/api/conversations/{b}/history")["items"]
+    assert [c["id"] for c in hist] == [a]
+
+
+def test_cannot_send_from_someone_elses_personal_channel(client, owner, make_user):
+    agent, agent_client = make_user("agent")
+    ch = make_channel(address="olivia@shop.test", visibility="personal", owner=owner["id"])
+    agent_client.post("/api/drafts", {"mode": "new", "channel_id": ch["id"], "to": "x@y.test"}, expect=403)
+
+
+def test_internal_discussion_lifecycle(client, make_user):
+    agent, agent_client = make_user("agent")
+    conv = client.post("/api/conversations", {"subject": "Plan the gala job", "user_ids": [agent["id"]],
+                                              "body": "<p>Thoughts?</p>"})["conversation"]
+    assert conv["channel"] is None
+    assert agent_client.get("/api/conversations?mailbox=inbox")["items"][0]["id"] == conv["id"]
+    client.post("/api/conversations/actions", {"ids": [conv["id"]], "action": "close"})
+    assert agent_client.get("/api/conversations?mailbox=inbox")["items"] == []
+
+
+def test_label_counts_ignore_closed_and_respect_privacy(client, make_user):
+    ch = make_channel()
+    a = receive(ch, subject="Open one", sender="a@x.test")["conversation_id"]
+    b = receive(ch, subject="Closed one", sender="b@x.test")["conversation_id"]
+    label = client.post("/api/labels", {"name": "Wholesale"})["label"]
+    client.post("/api/conversations/actions", {"ids": [a, b], "action": "label", "add": [label["id"]]})
+    client.post("/api/conversations/actions", {"ids": [b], "action": "close"})
+    assert client.get("/api/counts")["labels"][str(label["id"])] == 1
+    assert len(client.get(f"/api/conversations?mailbox=label:{label['id']}&include_closed=1")["items"]) == 2
+    _, other = make_user("agent")
+    mine = other.post("/api/labels", {"name": "Secret", "visibility": "personal"})["label"]
+    other.post("/api/conversations/actions", {"ids": [a], "action": "label", "add": [mine["id"]]})
+    assert mine["id"] not in client.get(f"/api/conversations/{a}")["conversation"]["label_ids"]
