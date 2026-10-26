@@ -45,6 +45,8 @@ def create_app(config: Optional[Config] = None) -> Flask:
     app.extensions["books"] = {"config": cfg, "engine": engine, "session_factory": make_session_factory(engine)}
 
     filters.register(app)
+    # Globals (not just context values) so macros imported without context can use them.
+    app.jinja_env.globals.update(csrf_token=core.csrf_token, txn_status=txn_service.status, can=core.can)
     _register_blueprints(app)
 
     @app.before_request

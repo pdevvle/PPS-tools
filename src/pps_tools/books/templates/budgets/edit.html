@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}{{ budget.name }}{% endblock %}
+{% block content_class %} wide{% endblock %}
+{% block content %}
+<form method="post" id="budget-form">
+<input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+{% if sub_id %}<input type="hidden" name="sub" value="{{ sub_id }}">{% endif %}
+<div class="page-head"><div><div class="crumbs"><a href="{{ url_for('budgets.index') }}">Budgets</a></div>
+  <h1><input name="name" value="{{ budget.name }}" class="title-input" aria-label="Budget name"></h1>
+  <div class="muted small">Fiscal year {{ budget.fiscal_year }} · {{ months[0][0]|date }} – {{ months[-1][1]|date }}
+    · <label class="inline"><input type="checkbox" name="active" value="1"{% if budget.active %} checked{% endif %}> Active</label></div></div>
+  <div class="actions"><a class="btn" href="{{ url_for('reports.view', key='budget_vs_actuals', budget_id=budget.id) }}">Budget vs. actuals</a>
+    {% if can('accounting.edit') %}<button type="submit" class="primary">Save</button>{% endif %}</div></div>
+
+{% if budget.subdivide_by != 'none' %}
+<div class="card" style="margin-bottom:1rem"><div class="card-body toolbar">
+  <label for="sub-pick">{{ subdivisions[budget.subdivide_by] }}</label>
+  <select id="sub-pick" onchange="location.href='{{ url_for('budgets.edit', budget_id=budget.id) }}?sub=' + this.value">
+    {% for x in subs %}<option value="{{ x.id }}"{% if x.id == sub_id %} selected{% endif %}>{{ x.full_name }}</option>{% endfor %}</select>
+  <span class="muted small">Each {{ subdivisions[budget.subdivide_by]|lower }} has its own grid; reports add them up. Save before switching.</span></div></div>
+{% endif %}
+
+<div class="card"><div class="table-wrap">
+<table class="data budget-grid" data-budget-grid>
+  <thead><tr><th class="sticky-col">Account</th>{% for _, _, label in months %}<th class="num">{{ label }}</th>{% endfor %}<th class="num">Total</th><th></th></tr></thead>
+  <tbody>
+  {% for label, accts in sections %}
+    <tr class="section-row"><td colspan="{{ months|length + 3 }}"><strong>{{ label }}</strong></td></tr>
+    {% for a in accts %}{% set vals = grid[a.id] %}
+    <tr data-kind="{{ 'in' if a.type in credit_normal else 'out' }}">
+      <td class="sticky-col"{% if a.depth %} style="padding-left:{{ 0.75 + a.depth * 1.1 }}rem"{% endif %}>{{ a.display_name if a.depth == 0 else a.name }}</td>
+      {% for i in range(12) %}<td class="num"><input name="b-{{ a.id }}-{{ i + 1 }}" value="{{ vals[i]|money_plain if vals[i] else '' }}" inputmode="decimal" class="num cell"{% if not can('accounting.edit') %} readonly{% endif %}></td>{% endfor %}
+      <td class="num row-total">{{ vals|sum|money }}</td>
+      <td>{% if can('accounting.edit') %}<button type="button" class="small" data-fill-row title="Copy the first month to every month">Fill →</button>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  {% endfor %}
+  </tbody>
+  <tfoot><tr><th class="sticky-col">Net income</th>{% for i in range(12) %}<th class="num" data-col-net="{{ i }}"></th>{% endfor %}<th class="num" data-col-net="total"></th><th></th></tr></tfoot>
+</table></div></div>
+<p class="muted small" style="margin-top:.75rem">Enter income and expenses as positive amounts. Blank cells are zero.</p>
+</form>
+{% endblock %}

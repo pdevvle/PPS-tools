@@ -5,12 +5,10 @@ from __future__ import annotations
 import hashlib
 import secrets
 
-from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
+from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, url_for
 from sqlalchemy import func, select
 
-from pps_tools.books import money
-from pps_tools.books.models import (ROLES, Account, ApiToken, CustomFieldDef, EmailMessage, PaymentMethod, Terms,
-                                    User)
+from pps_tools.books.models import ROLES, ApiToken, CustomFieldDef, EmailMessage, Terms, User
 from pps_tools.books.services import attachments as attach_service
 from pps_tools.books.services import audit, numbering, prefs
 from pps_tools.books.services import users as user_service
@@ -389,3 +387,207 @@ def api_tokens():
         new_token = raw
     rows = s.scalars(select(ApiToken).order_by(ApiToken.created_at.desc())).all()
     return render_template("settings/api.html", rows=rows, new_token=new_token)
+
+
+# -- import and export ----------------------------------------------------------------------------------
+
+
+def _imports_dir():
+    path = core.config().data_dir / "imports"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+@bp.route("/settings/import", methods=["GET", "POST"])
+@core.requires("settings.edit")
+def import_data():
+    from pps_tools.books.services.importers import lists as importer
+
+    kind = request.values.get("kind") or "customers"
+    if kind not in importer.SPECS:
+        kind = "customers"
+    if request.method == "POST":
+        fs = request.files.get("file")
+        if not fs or not fs.filename:
+            flash("Choose a CSV file.", "error")
+            return redirect(url_for("settings.import_data", kind=kind))
+        data = fs.read()
+        try:
+            importer.preview(kind, data)
+        except BooksError as exc:
+            flash(str(exc), "error")
+            return redirect(url_for("settings.import_data", kind=kind))
+        token = secrets.token_urlsafe(16)
+        (_imports_dir() / f"{token}.csv").write_bytes(data)
+        return redirect(url_for("settings.import_map", kind=kind, token=token))
+    return render_template("settings/import.html", kind=kind, specs=importer.SPECS, qbo=_qbo_status())
+
+
+def _upload(token: str) -> bytes:
+    if not token or not token.replace("-", "").replace("_", "").isalnum():
+        abort(404)
+    path = _imports_dir() / f"{token}.csv"
+    if not path.exists():
+        flash("That upload has expired. Choose the file again.", "error")
+        abort(404)
+    return path.read_bytes()
+
+
+@bp.route("/settings/import/map", methods=["GET", "POST"])
+@core.requires("settings.edit")
+def import_map():
+    from pps_tools.books.services.dates import parse_date
+    from pps_tools.books.services.importers import lists as importer
+
+    s = core.db()
+    kind = request.values.get("kind") or "customers"
+    if kind not in importer.SPECS:
+        abort(404)
+    token = request.values.get("token", "")
+    data = _upload(token)
+    pv = importer.preview(kind, data)
+    if request.method == "POST":
+        mapping = {}
+        for fl in importer.SPECS[kind].fields:
+            raw = request.form.get(f"map_{fl.key}", "")
+            mapping[fl.key] = int(raw) if raw.isdigit() else None
+        try:
+            default_date = parse_date(core.f("default_date"), core.today())
+        except ValueError:
+            default_date = core.today()
+        try:
+            result = importer.run(s, kind, data, mapping, core.current_user(),
+                                  on_duplicate="update" if core.f("on_duplicate") == "update" else "skip",
+                                  default_date=default_date)
+            s.commit()
+        except BooksError as exc:
+            s.rollback()
+            flash(str(exc), "error")
+            return render_template("settings/import_map.html", kind=kind, spec=importer.SPECS[kind], pv=pv,
+                                   token=token, mapping=mapping), 422
+        (_imports_dir() / f"{token}.csv").unlink(missing_ok=True)
+        return render_template("settings/import_done.html", kind=kind, spec=importer.SPECS[kind], result=result)
+    return render_template("settings/import_map.html", kind=kind, spec=importer.SPECS[kind], pv=pv, token=token,
+                           mapping=pv.mapping)
+
+
+def _qbo_auth():
+    import os
+
+    from pps_tools.quickbooks.qbo_client import QBOAuth
+
+    if not (os.environ.get("QBO_CLIENT_ID") and os.environ.get("QBO_CLIENT_SECRET")):
+        return None
+    base = (core.config().base_url or request.host_url).rstrip("/")
+    return QBOAuth(redirect_uri=f"{base}{url_for('settings.qbo_callback')}",
+                   environment=os.environ.get("QBO_ENVIRONMENT", "production"),
+                   token_path=core.config().data_dir / "qbo_tokens.json")
+
+
+def _qbo_status() -> dict:
+    auth = _qbo_auth()
+    state = prefs.get(core.db(), "qbo_import") or {}
+    return {"configured": auth is not None, "connected": bool(auth and auth.load()), "state": state}
+
+
+@bp.route("/settings/import/qbo", methods=["GET", "POST"])
+@core.requires("settings.edit")
+def qbo_import():
+    from pps_tools.books.services.dates import parse_date
+    from pps_tools.books.services.importers.qbo import Migration
+    from pps_tools.quickbooks.qbo_client import QBOAPIError, QBOClient
+
+    auth = _qbo_auth()
+    if auth is None:
+        flash("Set QBO_CLIENT_ID and QBO_CLIENT_SECRET (from your Intuit developer app) to connect.", "error")
+        return redirect(url_for("settings.import_data"))
+    if request.method == "POST":
+        if core.f("action") == "connect":
+            url, state = auth.authorize_url()
+            from flask import session
+
+            session["qbo_state"] = state
+            return redirect(url)
+        if core.f("action") == "disconnect":
+            auth.clear()
+            flash("Disconnected from QuickBooks.", "success")
+            return redirect(url_for("settings.import_data"))
+        s = core.db()
+        try:
+            when = parse_date(core.f("conversion_date"))
+            if when is None:
+                raise ValidationError("Choose the conversion date.")
+            client = QBOClient(auth)
+            report = Migration(s, client, when, core.current_user()).run(
+                lists=core.f_bool("lists"), open_items=core.f_bool("open_items"), balances=core.f_bool("balances"))
+            s.commit()
+        except (BooksError, ValueError) as exc:
+            s.rollback()
+            flash(str(exc), "error")
+            return redirect(url_for("settings.import_data"))
+        except (QBOAPIError, RuntimeError) as exc:
+            s.rollback()
+            flash(f"QuickBooks said: {exc}", "error")
+            return redirect(url_for("settings.import_data"))
+        return render_template("settings/qbo_done.html", report=report, when=when)
+    return redirect(url_for("settings.import_data"))
+
+
+@bp.route("/settings/import/qbo/callback")
+@core.requires("settings.edit")
+def qbo_callback():
+    from flask import session
+
+    auth = _qbo_auth()
+    if auth is None:
+        abort(404)
+    if not request.args.get("state") or request.args.get("state") != session.pop("qbo_state", None):
+        abort(400, "That QuickBooks sign-in didn't come from this page. Try connecting again.")
+    if request.args.get("error"):
+        flash(f"QuickBooks didn't connect: {request.args.get('error')}", "error")
+        return redirect(url_for("settings.import_data"))
+    try:
+        auth.exchange_code(request.args.get("code", ""), request.args.get("realmId", ""))
+    except Exception as exc:  # network or Intuit error
+        flash(f"Couldn't finish connecting to QuickBooks: {exc}", "error")
+        return redirect(url_for("settings.import_data"))
+    audit.record(core.db(), core.current_user(), "settings", "company", 1, summary="Connected QuickBooks Online for import")
+    core.db().commit()
+    flash("Connected to QuickBooks Online. Choose a conversion date and import.", "success")
+    return redirect(url_for("settings.import_data", _anchor="qbo"))
+
+
+@bp.route("/settings/export")
+@core.requires("settings.edit")
+def export_data():
+    s = core.db()
+    engine = current_app.extensions["books"]["engine"]
+    from pps_tools.books.models import Transaction
+
+    return render_template("settings/export.html", sqlite=engine.url.get_backend_name() == "sqlite",
+                           txn_count=s.scalar(select(func.count(Transaction.id))) or 0)
+
+
+@bp.route("/settings/export/<what>")
+@core.requires("settings.edit")
+def export_download(what: str):
+    from flask import Response
+
+    from pps_tools.books.services import exporter
+
+    s = core.db()
+    stamp = core.today().isoformat()
+    if what == "zip":
+        body, name, mime = exporter.export_zip(s), f"books-export-{stamp}.zip", "application/zip"
+    elif what == "backup":
+        try:
+            body = exporter.sqlite_backup(current_app.extensions["books"]["engine"])
+        except ValueError as exc:
+            flash(str(exc), "error")
+            return redirect(url_for("settings.export_data"))
+        name, mime = f"books-backup-{stamp}.sqlite", "application/vnd.sqlite3"
+    else:
+        abort(404)
+    audit.record(s, core.current_user(), "export", "company", 1, summary=f"Downloaded {name}")
+    s.commit()
+    return Response(body, mimetype=mime, headers={"Content-Disposition": f'attachment; filename="{name}"'})

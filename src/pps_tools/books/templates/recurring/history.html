@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import status_badge %}
+{% block title %}{{ tpl.name }} history{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="crumbs"><a href="{{ url_for('recurring.index') }}">Recurring transactions</a></div><h1>{{ tpl.name }}</h1>
+  <div class="muted small">{{ txn_types[tpl.txn_type].label }} · {{ tpl|schedule_text }}</div></div>
+  <div class="actions"><a class="btn" href="{{ url_for('recurring.edit', tpl_id=tpl.id) }}">Edit template</a></div></div>
+<div class="card"><table class="data">
+  <thead><tr><th>Date</th><th>No.</th><th>Name</th><th class="num">Total</th><th class="num">Balance</th><th>Status</th></tr></thead>
+  <tbody>{% for t in rows %}<tr class="clickable" data-href="{{ url_for('txn.go', txn_id=t.id) }}"><td>{{ t.date|date }}</td><td>{{ t.number or '' }}</td><td>{{ t.entity_name }}</td>
+    <td class="num">{{ t.total_cents|money }}</td><td class="num">{{ t.balance_cents|money if t.info.open_item else '' }}</td><td>{{ status_badge(t) }}</td></tr>
+  {% else %}<tr><td colspan="6" class="muted">Nothing created from this template yet.</td></tr>{% endfor %}</tbody>
+</table></div>
+{% endblock %}

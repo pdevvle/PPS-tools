@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Import finished{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="crumbs"><a href="{{ url_for('settings.import_data', kind=kind) }}">Import data</a></div><h1>{{ spec.label }} imported</h1></div></div>
+<div class="kpis">
+  <div class="kpi"><div class="label">Added</div><div class="value">{{ result.created }}</div></div>
+  <div class="kpi"><div class="label">Updated</div><div class="value">{{ result.updated }}</div></div>
+  <div class="kpi"><div class="label">Skipped (already here)</div><div class="value">{{ result.skipped }}</div></div>
+  <div class="kpi"><div class="label">Rows with problems</div><div class="value">{{ result.errors|length }}</div></div>
+</div>
+{% if result.errors %}
+<div class="card"><div class="card-head"><h3>Rows that weren't imported</h3></div>
+  <table class="data compact"><thead><tr><th class="num">Row</th><th>Problem</th></tr></thead>
+    <tbody>{% for n, msg in result.errors %}<tr><td class="num">{{ n }}</td><td>{{ msg }}</td></tr>{% endfor %}</tbody></table>
+  <div class="card-body small muted">Fix these rows in the spreadsheet and import it again; rows already imported are skipped.</div></div>
+{% endif %}
+<div class="toolbar" style="margin-top:1rem">
+  {% set dest = {'customers': url_for('names.customers'), 'vendors': url_for('names.vendors'), 'items': url_for('items.index'), 'accounts': url_for('accounting.chart'), 'journal': url_for('accounting.journal_entries')} %}
+  <a class="btn primary" href="{{ dest[kind] }}">See {{ spec.label|lower }}</a><a class="btn" href="{{ url_for('settings.import_data') }}">Import something else</a></div>
+{% endblock %}

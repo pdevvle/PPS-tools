@@ -17,7 +17,7 @@ from pps_tools.books.models import (Account, AuditLog, CustomFieldDef, CustomFie
 from pps_tools.books.services import applications, audit
 from pps_tools.books.services import transactions as tx
 from pps_tools.books.services.accounts import ordered_accounts, system_account_id
-from pps_tools.books.services.errors import BooksError, ClosedPeriodError, ValidationError
+from pps_tools.books.services.errors import BooksError, ClosedPeriodError
 from pps_tools.books.services import users as user_service
 from pps_tools.books.txn_types import BY_SLUG, TXN_TYPES, TxnType
 from pps_tools.books.web import core
@@ -80,6 +80,8 @@ def parse_form(info: TxnType, txn: Optional[Transaction]) -> dict[str, Any]:
         data["source_estimate_id"] = core.f("source_estimate_id")
     if "source_po_id" in request.form:
         data["source_po_id"] = core.f("source_po_id")
+    if core.f_int("recurring_template_id"):
+        data["recurring_template_id"] = core.f_int("recurring_template_id")
     if core.f_bool("allow_duplicate"):
         data["allow_duplicate"] = True
 
@@ -237,7 +239,7 @@ def _related(s, txn: Transaction) -> list[dict]:
     return out
 
 
-def render_form(info: TxnType, txn: Optional[Transaction], data: dict, status: int = 200):
+def render_form(info: TxnType, txn: Optional[Transaction], data: dict, status: int = 200, **extra):
     s = core.db()
     ctx = _choices(s)
     lines = _display_lines(data)
@@ -269,13 +271,16 @@ def render_form(info: TxnType, txn: Optional[Transaction], data: dict, status: i
     billable = []
     if info.code == "invoice" and party_id:
         billable = _billable_for(s, party_id, txn)
+    from pps_tools.books.services.recurring import RECURRABLE
+
     return render_template(
         "txn/form.html", info=info, txn=txn, data=data, lines=lines, apply=apply, deposits=deposits,
+        recurrable=RECURRABLE,
         selected_deposits=selected_deposits, header_accounts=_header_accounts(s, info), custom_fields=custom_fields,
         cf_values=cf_values, attachments=attachments, history=history, billable=billable,
         related=_related(s, txn) if txn is not None and txn.id else [],
         closing_date=core.company().closing_date, readonly=bool(txn and txn.voided)
-        or not user_service.can_edit_type(core.current_user(), info.code), **ctx), status
+        or not user_service.can_edit_type(core.current_user(), info.code), **ctx, **extra), status
 
 
 def _billable_for(s, customer_id: int, txn: Optional[Transaction]) -> list[dict]:
@@ -330,9 +335,24 @@ def _new_defaults(info: TxnType) -> dict:
     s = core.db()
     args = request.args
     data: dict[str, Any] = {"type": info.code, "date": date.today().isoformat(), "lines": []}
-    for key in ("customer_id", "vendor_id", "account_id", "to_account_id", "tax_agency_id", "payee"):
+    for key in ("customer_id", "vendor_id", "account_id", "to_account_id", "tax_agency_id", "payee", "amount", "memo"):
         if args.get(key):
             data[key] = args.get(key)
+    if args.get("from_template"):
+        from pps_tools.books.models import RecurringTemplate
+
+        tpl = s.get(RecurringTemplate, int(args["from_template"]))
+        if tpl is not None and tpl.txn_type == info.code:
+            data = dict(tpl.payload or {})
+            data["type"] = info.code
+            data["date"] = date.today().isoformat()
+            data["recurring_template_id"] = tpl.id
+            data["lines"] = [{k: v for k, v in ln.items() if k != "id"} for ln in data.get("lines") or []]
+            if info.number_seq:
+                from pps_tools.books.services import numbering
+
+                data["number"] = numbering.peek(s, info.number_seq)
+            return data
     if args.get("copy_of"):
         src = s.get(Transaction, int(args["copy_of"]))
         if src is not None and src.type == info.code:
@@ -456,6 +476,8 @@ def _save(info: TxnType, txn: Optional[Transaction]):
             password = ""
         saved = tx.save(s, data, txn=txn, user=user, closing_password=password)
         _attach_uploads(s, saved)
+        if txn is None and data.get("recurring_template_id"):
+            _advance_reminder(s, int(data["recurring_template_id"]))
         s.commit()
     except ClosedPeriodError as exc:
         s.rollback()
@@ -477,6 +499,16 @@ def _save(info: TxnType, txn: Optional[Transaction]):
     if action == "save_close":
         return redirect(core.safe_next(_list_url(info)))
     return redirect(url_for("txn.edit", slug=info.slug, txn_id=saved.id))
+
+
+def _advance_reminder(s, tpl_id: int) -> None:
+    """Creating the transaction a reminder template asked for moves the reminder to its next date."""
+    from pps_tools.books.models import RecurringTemplate
+    from pps_tools.books.services import recurring as recurring_service
+
+    tpl = s.get(RecurringTemplate, tpl_id)
+    if tpl is not None and tpl.mode == "reminder" and tpl.active and tpl.next_date:
+        recurring_service.advance(tpl)
 
 
 def _attach_uploads(s, txn: Transaction) -> None:

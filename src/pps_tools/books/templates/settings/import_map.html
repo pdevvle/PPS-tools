@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Match columns{% endblock %}
+{% block content_class %} wide{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="crumbs"><a href="{{ url_for('settings.import_data', kind=kind) }}">Import data</a></div><h1>Import {{ spec.label|lower }}: match columns</h1>
+  <div class="muted small">{{ pv.rows }} row{{ '' if pv.rows == 1 else 's' }} found. Fields with a column picked are imported; the rest are left blank.</div></div></div>
+<form method="post" class="card"><div class="card-body">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="kind" value="{{ kind }}"><input type="hidden" name="token" value="{{ token }}">
+  <div class="grid cols-3">
+  {% for fl in spec.fields %}
+    <div class="field"><label{% if fl.required %} class="required"{% endif %}>{{ fl.label }}</label>
+      <select name="map_{{ fl.key }}"{% if fl.required %} required{% endif %}><option value="">(don't import)</option>
+        {% for h in pv.header %}<option value="{{ loop.index0 }}"{% if mapping.get(fl.key) == loop.index0 %} selected{% endif %}>{{ h or 'Column ' ~ loop.index }}</option>{% endfor %}</select>
+      {% if fl.hint %}<div class="hint">{{ fl.hint }}</div>{% endif %}</div>
+  {% endfor %}
+  </div>
+  <div class="form-row" style="margin-top:.5rem">
+    {% if kind != 'journal' %}<div class="field"><label>If a record with the same name exists</label><select name="on_duplicate"><option value="skip">Leave it alone</option><option value="update">Fill in and update it</option></select></div>{% endif %}
+    {% if kind in ('customers', 'vendors', 'accounts', 'items') %}<div class="field"><label>Date for balances without one</label><input type="date" name="default_date" value="{{ today|date_input }}"></div>{% endif %}
+  </div>
+  <h3 style="margin-top:1rem">Preview</h3>
+  <div class="table-wrap"><table class="data compact"><thead><tr>{% for h in pv.header %}<th>{{ h }}</th>{% endfor %}</tr></thead>
+    <tbody>{% for row in pv.sample %}<tr>{% for c in row[:pv.header|length] %}<td class="small">{{ c }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>
+  <div class="toolbar" style="margin-top:1rem"><a class="btn" href="{{ url_for('settings.import_data', kind=kind) }}">Back</a><button type="submit" class="primary">Import {{ pv.rows }} row{{ '' if pv.rows == 1 else 's' }}</button></div>
+</div></form>
+{% endblock %}

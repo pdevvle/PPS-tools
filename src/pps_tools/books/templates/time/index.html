@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import icon %}
+{% block title %}Time{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="crumbs">Time</div><h1>Time entries</h1></div>
+  <div class="actions"><a class="btn" href="{{ url_for('time.timesheet', worker=worker or None) }}">Weekly timesheet</a>
+    {% if can('time.edit') %}<a class="btn primary" href="{{ url_for('time.new') }}">{{ icon('plus') }} Add time</a>{% endif %}</div></div>
+<div class="kpis">
+  <div class="kpi"><div class="label">Hours</div><div class="value">{{ hours_of(total) }}</div><div class="sub">{{ start|date if start else 'All dates' }}{% if end %} – {{ end|date }}{% endif %}</div></div>
+  <div class="kpi"><div class="label">Billable hours</div><div class="value">{{ hours_of(billable) }}</div><div class="sub">{{ ((billable * 100 / total)|round|int if total else 0) }}% of the total</div></div>
+  <div class="kpi"><div class="label">Not yet invoiced</div><div class="value">{{ unbilled_amount|money }}</div><div class="sub">Add it from the invoice form</div></div>
+</div>
+<div class="card">
+  <form class="filters" method="get">
+    <div class="field"><label>Dates</label><select name="preset" data-autosubmit>{% for k, v in presets %}<option value="{{ k }}"{% if preset == k %} selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+    {% if preset == 'custom' %}<div class="field"><label>From</label><input type="date" name="start" value="{{ start|date_input if start else '' }}"></div>
+    <div class="field"><label>To</label><input type="date" name="end" value="{{ end|date_input if end else '' }}"></div>{% endif %}
+    {% if own is none %}<div class="field"><label>Who</label><select name="worker" data-autosubmit><option value="">Everyone</option>
+      <optgroup label="Employees">{% for e in employees %}<option value="employee:{{ e.id }}"{% if worker == 'employee:' ~ e.id %} selected{% endif %}>{{ e.display_name }}</option>{% endfor %}</optgroup>
+      <optgroup label="Vendors">{% for v in vendors %}<option value="vendor:{{ v.id }}"{% if worker == 'vendor:' ~ v.id %} selected{% endif %}>{{ v.display_name }}</option>{% endfor %}</optgroup></select></div>{% endif %}
+    <div class="field"><label>Customer</label><select name="customer_id" data-autosubmit><option value="">All</option>{% for c in customers %}<option value="{{ c.id }}"{% if request.args.get('customer_id') == c.id|string %} selected{% endif %}>{{ c.full_name }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Status</label><select name="status" data-autosubmit>{% for k, v in [('', 'All'), ('unbilled', 'Billable, not invoiced'), ('billed', 'Invoiced'), ('nonbillable', 'Not billable')] %}<option value="{{ k }}"{% if status == k %} selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+    {% if preset == 'custom' %}<button type="submit">Apply</button>{% endif %}
+  </form>
+  <div class="table-wrap"><table class="data">
+    <thead><tr><th>Date</th><th>Who</th><th>Customer</th><th>Service</th><th>Description</th><th class="num">Hours</th><th class="num">Rate</th><th class="num">Amount</th><th>Status</th></tr></thead>
+    <tbody>{% for t in rows %}<tr class="clickable" data-href="{{ url_for('time.edit', ta_id=t.id) }}">
+      <td class="nowrap">{{ t.date|date }}</td><td>{{ t.worker_name }}</td><td>{{ t.customer.full_name if t.customer else '' }}</td>
+      <td>{{ t.item.name if t.item else '' }}</td><td class="small">{{ t.description or '' }}</td>
+      <td class="num">{{ t.minutes|hm }}</td><td class="num">{{ t.hourly_rate|rate if t.hourly_rate is not none else '' }}</td>
+      <td class="num">{{ time_amount(t)|money if t.billable and t.hourly_rate is not none else '' }}</td>
+      <td>{% if t.billed_txn_id %}<a class="badge paid" href="{{ url_for('txn.go', txn_id=t.billed_txn_id) }}">Invoiced</a>{% elif t.billable %}<span class="badge open">Billable</span>{% else %}<span class="faint small">Not billable</span>{% endif %}</td></tr>
+    {% else %}<tr><td colspan="9"><div class="empty"><h3>No time in this period</h3><p>Track hours by customer, then add billable time to invoices.</p></div></td></tr>{% endfor %}</tbody>
+    {% if rows %}<tfoot><tr><th colspan="5">Total</th><th class="num">{{ total|hm }}</th><th colspan="3"></th></tr></tfoot>{% endif %}
+  </table></div>
+</div>
+{% endblock %}

@@ -8,34 +8,40 @@ from typing import Any, Optional
 from urllib.parse import urlencode
 
 from flask import request
+from jinja2 import Undefined
 from markupsafe import Markup, escape
 
 from pps_tools.books import money
 
 
+def _blank(value: Any) -> bool:
+    """None, "", or a name the template doesn't have: all print as nothing."""
+    return value is None or isinstance(value, Undefined) or (isinstance(value, str) and value == "")
+
+
 def money_filter(cents: Any, blank_zero: bool = False, parens: bool = False) -> str:
-    if cents is None or cents == "":
+    if _blank(cents):
         return ""
     return money.fmt(int(cents), blank_zero=blank_zero, parens=parens)
 
 
 def money_plain(cents: Any) -> str:
-    if cents is None or cents == "":
+    if _blank(cents):
         return ""
     return money.fmt_plain(int(cents))
 
 
 def qty_filter(value: Any) -> str:
-    return money.fmt_qty(value) if value is not None else ""
+    return "" if _blank(value) else money.fmt_qty(value)
 
 
 def rate_filter(value: Any) -> str:
-    return money.fmt_rate(value) if value is not None else ""
+    return "" if _blank(value) else money.fmt_rate(value)
 
 
 def plain_decimal(value: Any) -> str:
     """Decimal for an <input>: no thousands separators, no trailing zeros."""
-    if value is None:
+    if _blank(value):
         return ""
     d = Decimal(value)
     if d == d.to_integral_value():
@@ -60,7 +66,7 @@ def date_input(value: Any) -> str:
 
 
 def pct_filter(value: Any) -> str:
-    if value is None:
+    if _blank(value):
         return ""
     return f"{Decimal(value):,.2f}%"
 

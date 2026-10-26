@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
-from decimal import Decimal
-from typing import Any, Optional
+from typing import Optional
 
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from sqlalchemy import func, or_, select

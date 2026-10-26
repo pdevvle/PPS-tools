@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import io
 import re
-from datetime import date
 from typing import Iterable, Optional
 
 from reportlab.lib import colors
@@ -42,7 +41,6 @@ def _esc(text) -> str:
 class _Styles:
     def __init__(self, accent: str, font: str = "Helvetica"):
         self.accent = colors.HexColor(accent) if accent.startswith("#") else colors.HexColor("#1d7f3a")
-        bold = "Helvetica-Bold" if font.startswith("Helvetica") else f"{font}-Bold"
         self.font, self.bold = "Helvetica", "Helvetica-Bold"
         self.body = ParagraphStyle("body", fontName=self.font, fontSize=9.5, leading=12.5)
         self.small = ParagraphStyle("small", fontName=self.font, fontSize=8, leading=10, textColor=colors.HexColor("#555555"))

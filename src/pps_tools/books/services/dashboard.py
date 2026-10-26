@@ -48,7 +48,6 @@ class Snapshot:
 def build(s: Session, start: Optional[date], end: Optional[date], basis: str = "accrual",
           today: Optional[date] = None) -> Snapshot:
     today = today or date.today()
-    company = s.get(Company, 1)
     snap = Snapshot(start, end, basis)
     pl = pl_summary(s, start, end, basis)
     snap.income = pl["income"] + pl["other_income"]
