@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Weekly timesheet{% endblock %}
+{% block content_class %} wide{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="crumbs"><a href="{{ url_for('time.index') }}">Time</a></div><h1>Weekly timesheet</h1></div></div>
+<div class="card">
+  <form class="filters" method="get">
+    {% if own is none %}<div class="field"><label>Whose time</label><select name="worker" data-autosubmit><option value="">Choose a person</option>
+      <optgroup label="Employees">{% for e in employees %}<option value="employee:{{ e.id }}"{% if worker == 'employee:' ~ e.id %} selected{% endif %}>{{ e.display_name }}</option>{% endfor %}</optgroup>
+      <optgroup label="Vendors">{% for x in vendors %}<option value="vendor:{{ x.id }}"{% if worker == 'vendor:' ~ x.id %} selected{% endif %}>{{ x.display_name }}</option>{% endfor %}</optgroup></select></div>{% endif %}
+    <div class="field"><label>Week of</label><input type="date" name="week" value="{{ week_start|date_input }}" data-autosubmit></div>
+    <div class="field"><label>&nbsp;</label><div class="toolbar">
+      <a class="btn small" href="{{ url_for('time.timesheet', worker=worker or None, week=prev_week|date_input) }}">‹ Previous</a>
+      <a class="btn small" href="{{ url_for('time.timesheet', worker=worker or None, week=next_week|date_input) }}">Next ›</a></div></div>
+  </form>
+  {% if not worker %}
+  <div class="empty"><h3>Choose whose time to enter</h3></div>
+  {% else %}
+  <form method="post" data-timesheet>
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="worker" value="{{ worker }}"><input type="hidden" name="week" value="{{ week_start|date_input }}">
+    <div class="table-wrap"><table class="data timesheet">
+      <thead><tr><th>Customer</th><th>Service</th><th>Description</th><th class="center">Billable</th>
+        {% for d in days %}<th class="num">{{ d.strftime('%a') }}<div class="faint small">{{ d.strftime('%m/%d') }}</div></th>{% endfor %}<th class="num">Total</th></tr></thead>
+      <tbody data-rows>
+      {% for row in rows %}{% set i = loop.index0 %}
+        <tr{% if row.locked %} class="locked" title="Some of this time is on an invoice"{% endif %}><td><input type="hidden" name="r-{{ i }}-pos" value="{{ i }}">
+          <select name="r-{{ i }}-customer_id"><option value=""></option>{% for c in customers %}<option value="{{ c.id }}"{% if row.customer_id == c.id %} selected{% endif %}>{{ c.full_name }}</option>{% endfor %}</select></td>
+          <td><select name="r-{{ i }}-item_id"><option value=""></option>{% for it in services %}<option value="{{ it.id }}"{% if row.item_id == it.id %} selected{% endif %}>{{ it.name }}</option>{% endfor %}</select></td>
+          <td><input name="r-{{ i }}-description" value="{{ row.description }}"></td>
+          <td class="center"><input type="checkbox" name="r-{{ i }}-billable" value="1"{% if row.billable %} checked{% endif %}></td>
+          {% for ta in row.cells %}<td class="num">{% if ta %}<input type="hidden" name="r-{{ i }}-id{{ loop.index0 }}" value="{{ ta.id }}">{% endif %}
+            <input name="r-{{ i }}-d{{ loop.index0 }}" value="{{ ta.minutes|hm if ta else '' }}" class="num cell" inputmode="decimal"{% if ta and ta.billed_txn_id %} readonly title="Invoiced"{% endif %}></td>{% endfor %}
+          <td class="num row-total">{{ time_total_minutes(row.cells)|hm }}</td></tr>
+      {% endfor %}
+      {% for j in range(blank_rows) %}{% set i = rows|length + j %}
+        <tr><td><input type="hidden" name="r-{{ i }}-pos" value="{{ i }}"><select name="r-{{ i }}-customer_id"><option value=""></option>{% for c in customers %}<option value="{{ c.id }}">{{ c.full_name }}</option>{% endfor %}</select></td>
+          <td><select name="r-{{ i }}-item_id"><option value=""></option>{% for it in services %}<option value="{{ it.id }}">{{ it.name }}</option>{% endfor %}</select></td>
+          <td><input name="r-{{ i }}-description"></td>
+          <td class="center"><input type="checkbox" name="r-{{ i }}-billable" value="1"{% if billable_default %} checked{% endif %}></td>
+          {% for d in days %}<td class="num"><input name="r-{{ i }}-d{{ loop.index0 }}" class="num cell" inputmode="decimal"></td>{% endfor %}
+          <td class="num row-total"></td></tr>
+      {% endfor %}
+      </tbody>
+      <tfoot><tr><th colspan="4">Total</th>{% for d in days %}<th class="num" data-day-total="{{ loop.index0 }}"></th>{% endfor %}<th class="num" data-day-total="all"></th></tr></tfoot>
+    </table></div>
+    <div class="toolbar" style="justify-content:space-between;margin-top:.75rem"><button type="button" data-add-row>+ Add a row</button>
+      {% if can('time.edit') %}<button type="submit" class="primary">Save timesheet</button>{% endif %}</div>
+    <p class="small muted">Enter hours as 1:30 or 1.5. Clearing a cell deletes that day's entry.</p>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

@@ -19,14 +19,14 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from pps_tools.books.db import atomic, utcnow
-from pps_tools.books.models import (Account, BankFeedItem, BankImportBatch, BankRule, Customer, LedgerEntry,
-                                    Reconciliation, Transaction, TransactionLink, User, Vendor)
+from pps_tools.books.models import (Account, BankFeedItem, BankImportBatch, BankRule, LedgerEntry, Reconciliation,
+                                    Transaction, User, Vendor)
 from pps_tools.books.money import allocate, round_cents
 from pps_tools.books.services import audit
 from pps_tools.books.services import transactions as tx
 from pps_tools.books.services.accounts import system_account_id
 from pps_tools.books.services.errors import ValidationError
-from pps_tools.books.services.importers.bankfiles import BankLine, Statement, clean_payee
+from pps_tools.books.services.importers.bankfiles import Statement, clean_payee
 
 
 # -- import -------------------------------------------------------------------------------------

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Projects{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="crumbs">Projects</div><h1>Projects</h1></div>
+  <div class="actions"><a class="btn" href="{{ url_for('reports.view', key='project_profitability') }}">Profitability report</a></div></div>
+<div class="grid" style="grid-template-columns:minmax(0,3fr) minmax(260px,1fr)">
+<div class="card">
+  <form class="filters" method="get">
+    <div class="field"><label>Status</label><select name="status" data-autosubmit><option value="open"{% if status == 'open' %} selected{% endif %}>Open</option>
+      {% for k, v in statuses.items() %}<option value="{{ k }}"{% if status == k %} selected{% endif %}>{{ v }}</option>{% endfor %}<option value="all"{% if status == 'all' %} selected{% endif %}>All</option></select></div>
+    <div class="field"><label>Search</label><input name="q" value="{{ request.args.get('q', '') }}" placeholder="Project name"></div>
+  </form>
+  <div class="table-wrap"><table class="data">
+    <thead><tr><th>Project</th><th>Customer</th><th>Status</th><th class="num">Income</th><th class="num">Costs</th><th class="num">Profit</th><th class="num">Margin</th><th class="num">Unbilled</th></tr></thead>
+    <tbody>{% for p in projects %}{% set f = fin.get(p.id, {}) %}<tr class="clickable" data-href="{{ url_for('projects.view', pid=p.id) }}">
+      <td><strong>{{ p.display_name }}</strong>{% if p.project_end %}<div class="faint small">Due {{ p.project_end|date }}</div>{% endif %}</td>
+      <td>{{ p.parent.display_name if p.parent else '' }}</td>
+      <td><span class="badge {{ 'in_progress' if p.project_status == 'in_progress' else ('closed' if p.project_status == 'completed' else '') }}">{{ statuses.get(p.project_status or 'in_progress') }}</span></td>
+      <td class="num">{{ f.get('income', 0)|money }}</td><td class="num">{{ (f.get('costs', 0) + f.get('labor', 0))|money }}</td>
+      <td class="num">{{ f.get('profit', 0)|money }}</td><td class="num">{{ (f.margin ~ '%') if f.get('margin') is not none else '' }}</td>
+      <td class="num">{{ (f.get('unbilled_time', 0) + f.get('unbilled_expenses', 0))|money if (f.get('unbilled_time', 0) + f.get('unbilled_expenses', 0)) else '' }}</td></tr>
+    {% else %}<tr><td colspan="8"><div class="empty"><h3>No projects here</h3><p>Group a job's invoices, expenses and time to see if it made money.</p></div></td></tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+{% if can('sales.edit') %}
+<form method="post" class="card"><div class="card-body">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <h3>New project</h3>
+  <div class="field"><label class="required">Project name</label><input name="name" required></div>
+  <div class="field"><label class="required">Customer</label><select name="customer_id" required><option value="">Choose a customer</option>{% for c in customers %}<option value="{{ c.id }}">{{ c.full_name }}</option>{% endfor %}</select></div>
+  <div class="form-row"><div class="field"><label>Start</label><input type="date" name="project_start" value="{{ today|date_input }}"></div><div class="field"><label>Due</label><input type="date" name="project_end"></div></div>
+  <div class="field"><label>Notes</label><textarea name="project_description" rows="3"></textarea></div>
+  <button type="submit" class="primary">Create project</button>
+</div></form>
+{% endif %}
+</div>
+{% endblock %}

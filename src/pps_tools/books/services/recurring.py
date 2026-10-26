@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Optional
 
@@ -21,7 +21,7 @@ from pps_tools.books.models import RecurringTemplate, SavedReport, Transaction, 
 from pps_tools.books.money import cents, percent_of
 from pps_tools.books.services import prefs
 from pps_tools.books.services import transactions as tx
-from pps_tools.books.services.dates import add_months, next_occurrence
+from pps_tools.books.services.dates import next_occurrence
 from pps_tools.books.services.errors import BooksError, ValidationError
 from pps_tools.books.txn_types import TXN_TYPES
 

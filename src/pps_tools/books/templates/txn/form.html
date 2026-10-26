@@ -4,11 +4,12 @@
 {% set sales_doc = t in ('estimate', 'invoice', 'sales_receipt', 'credit_memo', 'refund_receipt', 'delayed_charge', 'delayed_credit') %}
 {% set purchase_doc = t in ('bill', 'vendor_credit', 'expense', 'check', 'cc_credit', 'purchase_order') %}
 {% set ro = readonly %}
+{% set tmode = tpl is defined and tpl is not none %}
 {% block title %}{{ info.label }}{% if txn and txn.number %} {{ txn.number }}{% endif %}{% endblock %}
 {% block content_class %} wide{% endblock %}
 {% block content %}
-<form method="post" enctype="multipart/form-data" id="txn-form" class="txn-form"
-      action="{{ url_for('txn.edit', slug=info.slug, txn_id=txn.id) if txn else url_for('txn.new', slug=info.slug) }}"
+<form method="post" enctype="multipart/form-data" id="txn-form" class="txn-form{% if tmode %} template-mode{% endif %}"
+      action="{{ form_action if form_action is defined else (url_for('txn.edit', slug=info.slug, txn_id=txn.id) if txn else url_for('txn.new', slug=info.slug)) }}"
       data-type="{{ t }}" data-txn-id="{{ txn.id if txn else '' }}" data-shipping-taxable="{{ '1' if prefs.shipping_taxable else '0' }}"
       data-paid="{{ (txn.total_cents - txn.balance_cents) if txn and info.open_item and info.open_sign == 1 else 0 }}"
       data-ui-customer="{{ url_for('txn.ui_customer', cid=0) }}" data-ui-vendor="{{ url_for('txn.ui_vendor', vid=0) }}"
@@ -17,13 +18,14 @@
   <input type="hidden" name="next_action" value="save" id="next-action">
   {% if data.source_estimate_id %}<input type="hidden" name="source_estimate_id" value="{{ data.source_estimate_id }}">{% endif %}
   {% if data.source_po_id %}<input type="hidden" name="source_po_id" value="{{ data.source_po_id }}">{% endif %}
+  {% if data.recurring_template_id and not tmode %}<input type="hidden" name="recurring_template_id" value="{{ data.recurring_template_id }}">{% endif %}
   <script type="application/json" id="items-json">{{ items_json|tojson }}</script>
   <script type="application/json" id="terms-json">{{ terms_json|tojson }}</script>
 
   <div class="txn-top">
     <div>
-      <div class="crumbs muted small">{{ info.section|title }}{% if txn %} · <a href="{{ url_for('txn.history', txn_id=txn.id) }}">History</a>{% endif %}</div>
-      <h1>{{ info.label }}{% if txn and txn.number %} #{{ txn.number }}{% endif %}
+      <div class="crumbs muted small">{% if tmode %}<a href="{{ url_for('recurring.index') }}">Recurring transactions</a>{% else %}{{ info.section|title }}{% endif %}{% if txn %} · <a href="{{ url_for('txn.history', txn_id=txn.id) }}">History</a>{% endif %}</div>
+      <h1>{% if tmode %}Recurring {{ info.label|lower }}{% if tpl.name %}: {{ tpl.name }}{% endif %}{% else %}{{ info.label }}{% endif %}{% if txn and txn.number %} #{{ txn.number }}{% endif %}
         {% if txn %}{{ status_badge(txn) }}{% endif %}
         {% if txn and txn.voided %}<span class="void-stamp">VOID</span>{% endif %}
         {% if txn and txn.needs_review %}<span class="badge review">Needs review</span>{% endif %}
@@ -35,6 +37,8 @@
       <div class="value" id="big-amount">{{ ((txn.balance_cents if t == 'invoice' else txn.total_cents)|money) if txn else '$0.00' }}</div>
     </div>
   </div>
+
+  {% if tmode %}{% include "recurring/_schedule.html" %}{% endif %}
 
   {# ================= HEADER ================= #}
   <div class="txn-section">
@@ -301,6 +305,7 @@
           {% if t == 'purchase_order' and txn.status == 'open' %}<a href="{{ url_for('txn.new', slug='bills', from_po=txn.id) }}">Copy to bill</a>{% endif %}
           {% if t == 'invoice' and txn.balance_cents > 0 and not txn.voided %}<a href="{{ url_for('txn.new', slug='payments', invoice_id=txn.id) }}">Receive payment</a>{% endif %}
           {% if t == 'bill' and txn.balance_cents > 0 and not txn.voided %}<a href="{{ url_for('txn.new', slug='bill-payments', bill_id=txn.id) }}">Make payment</a>{% endif %}
+          {% if t in recurrable and not txn.voided %}<a href="{{ url_for('recurring.new', from_txn=txn.id) }}">Make recurring</a>{% endif %}
           {% if t == 'payment' and txn.source == 'stripe' and can('payments.refund') %}<a href="{{ url_for('payments.refund', txn_id=txn.id) }}">Refund through Stripe</a>{% endif %}
           {% if info.posts and not txn.voided and not ro %}<button type="submit" form="void-form">Void</button>{% endif %}
           {% if not ro %}<button type="submit" form="delete-form">Delete</button>{% endif %}
@@ -309,7 +314,9 @@
       {% endif %}
       {% if txn and (info.customer_facing) and not txn.voided %}<a class="btn" href="{{ url_for('txn.send', txn_id=txn.id) }}">{{ icon('mail') }} Send</a>{% endif %}
     </div>
-    {% if not ro %}
+    {% if tmode %}
+    <div class="toolbar"><button type="submit" class="primary" data-action="save">Save template</button></div>
+    {% elif not ro %}
     <div class="toolbar">
       <button type="submit" class="" data-action="save">Save</button>
       <div class="split-btn">

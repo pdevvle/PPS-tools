@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
-from typing import Iterable, Optional
+from datetime import timedelta
+from typing import Iterable
 
 from flask import Blueprint, Response, abort, flash, redirect, render_template, request, url_for
 from sqlalchemy import func, or_, select
 
 from pps_tools.books.db import utcnow
-from pps_tools.books.models import Customer, Statement, Transaction
+from pps_tools.books.models import Customer, Transaction
 from pps_tools.books.services import dates as D
-from pps_tools.books.services import transactions as tx
 from pps_tools.books.services.errors import BooksError
 from pps_tools.books.services.reports.financial import pl_summary
 from pps_tools.books.txn_types import TXN_TYPES
@@ -75,9 +74,9 @@ def filtered_txns(types: Iterable[str], party: str = "customer"):
     total = s.scalar(select(func.count()).select_from(q.subquery())) or 0
     page, offset, pages = core.paginate(total, 50)
     rows = s.scalars(q.order_by(*order).offset(offset).limit(50)).all()
-    sums = s.execute(select(func.coalesce(func.sum(Transaction.total_cents), 0),
-                            func.coalesce(func.sum(Transaction.balance_cents), 0)).select_from(
-        q.where(Transaction.voided.is_(False)).subquery())).one()
+    live = q.where(Transaction.voided.is_(False)).subquery()
+    sums = s.execute(select(func.coalesce(func.sum(live.c.total_cents), 0),
+                            func.coalesce(func.sum(live.c.balance_cents), 0))).one()
     return rows, total, page, pages, {"total": int(sums[0]), "balance": int(sums[1])}
 
 
