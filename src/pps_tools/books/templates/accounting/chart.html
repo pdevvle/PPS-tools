@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import icon %}
+{% block title %}Chart of accounts{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="crumbs">Accounting</div><h1>Chart of accounts</h1></div>
+  <div class="actions">
+    <a class="btn" href="{{ url_for('reports.view', key='account_list') }}">Run report</a>
+    {% if can('accounting.edit') %}<a class="btn" href="{{ url_for('settings.import_data', kind='accounts') }}">Import</a>
+    <a class="btn primary" href="{{ url_for('accounting.account_new') }}">{{ icon('plus') }} New account</a>{% endif %}
+  </div>
+</div>
+<div class="card">
+  <form class="filters" method="get">
+    <div class="field"><label>Search</label><input type="search" name="q" value="{{ request.args.get('q', '') }}" placeholder="Name or number"></div>
+    <div class="field"><label>Type</label><select name="type" data-autosubmit><option value="">All types</option>{% for code, t in types.items() %}<option value="{{ code }}"{% if request.args.get('type') == code %} selected{% endif %}>{{ t.label }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Show</label><select name="show" data-autosubmit><option value="active"{% if show == 'active' %} selected{% endif %}>Active</option><option value="inactive"{% if show == 'inactive' %} selected{% endif %}>Inactive</option><option value="all"{% if show == 'all' %} selected{% endif %}>All</option></select></div>
+    <button type="submit">Filter</button>
+  </form>
+  <div class="table-wrap"><table class="data">
+    <thead><tr><th>Number</th><th>Name</th><th>Type</th><th>Detail type</th><th class="num">Balance</th><th></th></tr></thead>
+    <tbody>
+      {% for a in accounts %}
+      <tr>
+        <td class="mono">{{ a.number or '' }}</td>
+        <td style="padding-left:{{ 0.75 + a.depth * 1.4 }}rem"><strong>{{ a.name }}</strong>{% if a.system_key %} <span class="badge" title="Used by the software">System</span>{% endif %}{% if not a.active %} <span class="badge">Inactive</span>{% endif %}
+          {% if a.description %}<div class="small muted">{{ a.description }}</div>{% endif %}</td>
+        <td>{{ a.type_label }}</td><td class="muted">{{ a.detail_type or '' }}</td>
+        <td class="num">{{ (bals.get(a.id, 0) * a.normal)|money if a.is_balance_sheet else '' }}</td>
+        <td class="actions">
+          {% if a.is_balance_sheet %}<a class="btn small" href="{{ url_for('accounting.register', account_id=a.id) }}">View register</a>
+          {% else %}<a class="btn small" href="{{ url_for('reports.view', key='transaction_detail_by_account', account_id=a.id, preset='this_year_to_date') }}">Run report</a>{% endif %}
+          {% if can('accounting.edit') %}<a class="btn small ghost" href="{{ url_for('accounting.account_edit', account_id=a.id) }}">Edit</a>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody></table></div>
+</div>
+{% endblock %}

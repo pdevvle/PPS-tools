@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import account_options %}
+{% block title %}Pay bills{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="crumbs">Expenses</div><h1>Pay bills</h1></div>
+  <form class="actions" method="get">
+    <select name="due" data-autosubmit><option value="all"{% if due == 'all' %} selected{% endif %}>All unpaid</option><option value="week"{% if due == 'week' %} selected{% endif %}>Due within a week</option><option value="overdue"{% if due == 'overdue' %} selected{% endif %}>Overdue</option></select>
+    <select name="vendor_id" data-autosubmit><option value="">All vendors</option>{% for v in vendors %}<option value="{{ v.id }}"{% if vendor_id == v.id %} selected{% endif %}>{{ v.display_name }}</option>{% endfor %}</select>
+  </form>
+</div>
+<form method="post" class="card" id="pay-bills">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <div class="filters">
+    <div class="field" style="min-width:240px"><label class="required">Payment account</label><select name="account_id" required>{{ account_options(pay_accounts, default_account.id if default_account else None) }}</select></div>
+    <div class="field"><label>Payment date</label><input type="date" name="date" value="{{ today|date_input }}"></div>
+    <div class="field"><label>Payment method</label><select name="payment_method_id"><option value="">—</option>{% for m in methods %}<option value="{{ m.id }}">{{ m.name }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Starting check no.</label><input name="starting_check" value="{{ default_account.next_check_number or 1001 if default_account else '' }}"></div>
+    <div class="field"><label>&nbsp;</label><label class="inline"><input type="checkbox" name="print_later" value="1"> Print later</label></div>
+  </div>
+  <div class="table-wrap"><table class="data">
+    <thead><tr><th class="sel"><input type="checkbox" id="pay-all"></th><th>Payee</th><th>Ref no.</th><th>Due date</th><th class="num">Open balance</th><th class="num">Credit available</th><th class="num">Payment</th></tr></thead>
+    <tbody>
+      {% for b in bills %}
+      <tr>
+        <td class="sel"><input type="checkbox" name="b-{{ loop.index0 }}-pay" value="1" class="pay-cb" data-open="{{ b.balance_cents|money_plain }}"><input type="hidden" name="b-{{ loop.index0 }}-txn_id" value="{{ b.id }}"></td>
+        <td><a href="{{ url_for('txn.go', txn_id=b.id) }}">{{ b.entity_name }}</a></td><td>{{ b.number or '' }}</td>
+        <td class="{{ 'neg' if b.due_date and b.due_date < today }}">{{ b.due_date|date }}</td>
+        <td class="num">{{ b.balance_cents|money }}</td>
+        <td class="num">{{ credits.get(b.vendor_id, 0)|money if credits.get(b.vendor_id) else '' }}</td>
+        <td class="num"><input class="num pay-amt" name="b-{{ loop.index0 }}-amount" value="" style="max-width:130px;margin-left:auto"></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7"><div class="empty"><h3>No unpaid bills</h3><p>Bills you enter will show up here when they're due.</p></div></td></tr>
+      {% endfor %}
+    </tbody>
+    <tfoot><tr><td colspan="6" class="right">Total payment</td><td class="num" id="pay-total">$0.00</td></tr></tfoot>
+  </table></div>
+  {% if credits %}<div class="card-body small muted">Vendor credits are applied from each bill payment's own screen after saving, or open the bill and use Make payment.</div>{% endif %}
+  <div class="card-body toolbar">
+    <button type="submit" class="primary" name="then" value="">Save and close</button>
+    <button type="submit" name="then" value="print" formtarget="_blank">Save and print checks</button>
+  </div>
+</form>
+<script>
+(function () {
+  var form = document.getElementById("pay-bills");
+  function total() {
+    var t = 0;
+    form.querySelectorAll(".pay-amt").forEach(function (i) { t += Books.parseCents(i.value); });
+    document.getElementById("pay-total").textContent = Books.fmt(t);
+  }
+  form.addEventListener("change", function (e) {
+    if (e.target.classList.contains("pay-cb")) {
+      var amt = e.target.closest("tr").querySelector(".pay-amt");
+      amt.value = e.target.checked ? e.target.dataset.open : "";
+    }
+    if (e.target.id === "pay-all") {
+      form.querySelectorAll(".pay-cb").forEach(function (c) {
+        c.checked = e.target.checked;
+        c.closest("tr").querySelector(".pay-amt").value = c.checked ? c.dataset.open : "";
+      });
+    }
+    total();
+  });
+  form.addEventListener("input", function (e) {
+    if (e.target.classList.contains("pay-amt")) {
+      e.target.closest("tr").querySelector(".pay-cb").checked = !!e.target.value;
+      total();
+    }
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import account_options %}
+{% block title %}{{ rule.name or 'New rule' }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="crumbs"><a href="{{ url_for('banking.rules') }}">Rules</a></div><h1>{{ rule.name or 'New rule' }}</h1></div></div>
+<form method="post" class="card" style="max-width:900px"><div class="card-body">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <div class="form-row">
+    <div class="field"><label class="required">Rule name</label><input name="name" value="{{ rule.name or '' }}" required></div>
+    <div class="field"><label>Apply to</label><select name="direction">{% for v, l in [('out', 'Money out'), ('in', 'Money in'), ('both', 'Money in or out')] %}<option value="{{ v }}"{% if rule.direction == v %} selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Priority</label><input name="position" value="{{ rule.position or '' }}" inputmode="numeric"><div class="hint">Lower runs first.</div></div>
+  </div>
+  <div class="field"><label>In these accounts</label><div class="toolbar">{% for a in feed_accounts %}<label class="inline"><input type="checkbox" name="account_ids" value="{{ a.id }}"{% if a.id in (rule.account_ids or []) %} checked{% endif %}> {{ a.name }}</label>{% endfor %}</div><div class="hint">None checked = all accounts.</div></div>
+  <fieldset><legend>When a transaction matches <select name="match" style="width:auto;display:inline;min-height:28px"><option value="all"{% if rule.match_all %} selected{% endif %}>all</option><option value="any"{% if not rule.match_all %} selected{% endif %}>any</option></select> of these</legend>
+    {% set conds = rule.conditions or [] %}
+    {% for i in range([conds|length + 1, 3]|max) %}{% set c = conds[i] if i < conds|length else {} %}
+    <div class="form-row narrow">
+      <input type="hidden" name="cond-{{ i }}-pos" value="{{ i }}">
+      <div class="field"><select name="cond-{{ i }}-field">{% for v, l in [('description', 'Description'), ('payee', 'Payee'), ('bank_text', 'Bank text'), ('memo', 'Memo'), ('amount', 'Amount')] %}<option value="{{ v }}"{% if c.field == v %} selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+      <div class="field"><select name="cond-{{ i }}-op">{% for v, l in [('contains', 'contains'), ('not_contains', "doesn't contain"), ('equals', 'is exactly'), ('starts_with', 'starts with'), ('ends_with', 'ends with'), ('regex', 'matches pattern'), ('gt', 'is greater than'), ('lt', 'is less than'), ('between', 'is between')] %}<option value="{{ v }}"{% if c.op == v %} selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+      <div class="field"><input name="cond-{{ i }}-value" value="{{ c.value or '' }}" placeholder="Text or amount"></div>
+      <div class="field"><input name="cond-{{ i }}-value2" value="{{ c.value2 or '' }}" placeholder="and (for between)"></div>
+    </div>{% endfor %}
+  </fieldset>
+  <fieldset><legend>Then</legend>
+    <div class="form-row">
+      <div class="field"><label>Action</label><select name="action">{% for v, l in [('expense', 'Categorize'), ('deposit', 'Categorize as income'), ('transfer', 'Record as a transfer'), ('exclude', 'Exclude it')] %}<option value="{{ v }}"{% if rule.action == v %} selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+      <div class="field"><label>Category / account</label><select name="category_id"><option value="">—</option>{{ account_options(categories, rule.account_id) }}</select></div>
+      <div class="field"><label>Payee</label><select name="payee"><option value="">—</option>
+        <optgroup label="Vendors">{% for v in vendors %}<option value="vendor:{{ v.id }}"{% if rule.vendor_id == v.id %} selected{% endif %}>{{ v.display_name }}</option>{% endfor %}</optgroup>
+        <optgroup label="Customers">{% for c in customers %}<option value="customer:{{ c.id }}"{% if rule.customer_id == c.id %} selected{% endif %}>{{ c.full_name }}</option>{% endfor %}</optgroup></select></div>
+      {% if classes %}<div class="field"><label>Class</label><select name="class_id"><option value="">—</option>{% for c in classes %}<option value="{{ c.id }}"{% if rule.class_id == c.id %} selected{% endif %}>{{ c.full_name }}</option>{% endfor %}</select></div>{% endif %}
+      <div class="field"><label>Memo</label><input name="memo" value="{{ rule.memo or '' }}"></div>
+    </div>
+    <details{% if rule.splits %} open{% endif %}><summary class="small">Split by percentage</summary>
+      {% set splits = rule.splits or [] %}
+      {% for i in range(4) %}{% set sp = splits[i] if i < splits|length else {} %}
+      <div class="form-row narrow"><input type="hidden" name="split-{{ i }}-pos" value="{{ i }}">
+        <div class="field"><select name="split-{{ i }}-account_id"><option value="">—</option>{{ account_options(categories, sp.account_id) }}</select></div>
+        <div class="field"><input name="split-{{ i }}-percent" value="{{ sp.percent or '' }}" placeholder="%"></div></div>{% endfor %}
+    </details>
+    <label class="inline" style="margin-top:.6rem"><input type="checkbox" name="auto_add" value="1"{% if rule.auto_add %} checked{% endif %}> Add automatically (skip For review)</label>
+  </fieldset>
+  {% if rule.id %}<label class="inline"><input type="checkbox" name="active" value="1"{% if rule.active %} checked{% endif %}> Rule is on</label>{% endif %}
+  <div class="toolbar" style="margin-top:1rem"><button type="submit" class="primary">Save rule</button><a class="btn" href="{{ url_for('banking.rules') }}">Cancel</a>
+    {% if rule.id %}<span class="grow"></span><button type="submit" name="delete" value="1" class="danger" onclick="return confirm('Delete this rule?')">Delete</button>{% endif %}</div>
+</div></form>
+{% endblock %}

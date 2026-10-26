@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% from "partials/macros.html" import account_options, icon %}
+{% block title %}{{ it.name if it.id else 'New ' ~ types[it.type]|lower }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="crumbs"><a href="{{ url_for('items.index') }}">Products and services</a></div>
+    <h1>{{ it.name if it.id else 'New ' ~ types[it.type]|lower }}</h1></div>
+  {% if it.id and it.is_inventory %}<div class="actions">
+    <a class="btn" href="{{ url_for('txn.new', slug='inventory-adjustments') }}">Adjust quantity</a>
+    <a class="btn" href="{{ url_for('txn.new', slug='purchase-orders', vendor_id=it.preferred_vendor_id) }}">Reorder</a>
+    <a class="btn" href="{{ url_for('reports.view', key='inventory_valuation_detail', item_id=it.id, preset='this_year') }}">Stock history</a></div>{% endif %}
+</div>
+<div class="grid" style="grid-template-columns:minmax(0, 2fr) minmax(0, 1fr)">
+<form method="post" class="card"><div class="card-body">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <div class="form-row">
+    <div class="field"><label class="required">Name</label><input name="name" value="{{ it.name or '' }}" required></div>
+    <div class="field"><label>SKU</label><input name="sku" value="{{ it.sku or '' }}"></div>
+    <div class="field"><label>Type</label><select name="type">{% for t, label in types.items() %}<option value="{{ t }}"{% if it.type == t %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+  </div>
+  <div class="form-row">
+    <div class="field"><label>Category</label><select name="category_id"><option value="">—</option>{% for c in categories %}<option value="{{ c.id }}"{% if it.category_id == c.id %} selected{% endif %}>{{ c.full_name }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Unit</label><input name="unit" value="{{ it.unit or '' }}" placeholder="each, sheet, box, hour"></div>
+  </div>
+  {% if it.type == 'bundle' %}
+  <fieldset><legend>Products and services in this bundle</legend>
+    <table class="lines"><thead><tr><th>Product/service</th><th class="num">Qty</th></tr></thead><tbody>
+      {% set comps = it.components|list %}
+      {% for i in range([comps|length + 3, 5]|max) %}{% set comp = comps[i] if i < comps|length else none %}
+      <tr><td><input type="hidden" name="c-{{ i }}-pos" value="{{ i }}"><select name="c-{{ i }}-item_id"><option value="">—</option>{% for ci in component_items %}<option value="{{ ci.id }}"{% if comp and comp.item_id == ci.id %} selected{% endif %}>{{ ci.name }}</option>{% endfor %}</select></td>
+        <td class="qty"><input class="num" name="c-{{ i }}-qty" value="{{ comp.qty|plain_decimal if comp else '' }}"></td></tr>{% endfor %}
+    </tbody></table>
+    <label class="inline" style="margin-top:.6rem"><input type="checkbox" name="show_bundle_components" value="1"{% if it.show_bundle_components %} checked{% endif %}> Show the products in the bundle on forms</label>
+  </fieldset>
+  {% else %}
+  <fieldset><legend>Sales information</legend>
+    <div class="field"><label>Description on sales forms</label><textarea name="description" rows="2">{{ it.description or '' }}</textarea></div>
+    <div class="form-row">
+      <div class="field"><label>Sales price / rate</label><input class="num" name="sales_price" value="{{ it.sales_price|plain_decimal if it.sales_price is not none else '' }}" inputmode="decimal"></div>
+      <div class="field"><label>Income account</label><select name="income_account_id"><option value="">—</option>{{ account_options(income_accounts, it.income_account_id) }}</select></div>
+      <div class="field"><label>&nbsp;</label><label class="inline"><input type="checkbox" name="taxable" value="1"{% if it.taxable %} checked{% endif %}> Taxable</label></div>
+    </div>
+  </fieldset>
+  <fieldset><legend>Purchasing information</legend>
+    <div class="field"><label>Description on purchase forms</label><textarea name="purchase_description" rows="2">{{ it.purchase_description or '' }}</textarea></div>
+    <div class="form-row">
+      <div class="field"><label>Cost</label><input class="num" name="cost" value="{{ it.cost|plain_decimal if it.cost is not none else '' }}" inputmode="decimal"></div>
+      <div class="field"><label>{{ 'Cost of goods sold account' if it.type == 'inventory' else 'Expense account' }}</label><select name="expense_account_id"><option value="">—</option>{{ account_options(expense_accounts, it.expense_account_id) }}</select></div>
+      <div class="field"><label>Preferred vendor</label><select name="preferred_vendor_id"><option value="">—</option>{% for v in vendors %}<option value="{{ v.id }}"{% if it.preferred_vendor_id == v.id %} selected{% endif %}>{{ v.display_name }}</option>{% endfor %}</select></div>
+    </div>
+  </fieldset>
+  {% if it.type == 'inventory' %}
+  <fieldset><legend>Inventory</legend>
+    <div class="form-row">
+      {% if not it.id %}<div class="field"><label>Initial quantity on hand</label><input class="num" name="initial_qty"></div>
+      <div class="field"><label>As of</label><input type="date" name="as_of" value="{{ today|date_input }}"></div>{% else %}
+      <div class="field"><label>Quantity on hand</label><input class="num" readonly value="{{ it.qty_on_hand|qty }}"><div class="hint">Change it with an inventory adjustment.</div></div>
+      <div class="field"><label>FIFO value</label><input class="num" readonly value="{{ it.inventory_value_cents|money }}"></div>{% endif %}
+      <div class="field"><label>Reorder point</label><input class="num" name="reorder_point" value="{{ it.reorder_point|plain_decimal if it.reorder_point is not none else '' }}"></div>
+      <div class="field"><label>Inventory asset account</label><select name="asset_account_id">{{ account_options(asset_accounts, it.asset_account_id) }}</select></div>
+    </div>
+  </fieldset>
+  {% endif %}
+  {% endif %}
+  {% if it.id %}<label class="inline"><input type="checkbox" name="active" value="1"{% if it.active %} checked{% endif %}> Active</label>{% endif %}
+  {% if can('lists.edit') %}<div class="toolbar" style="margin-top:1rem"><button type="submit" class="primary">Save</button><a class="btn" href="{{ url_for('items.index') }}">Cancel</a></div>{% endif %}
+</div></form>
+{% if history %}
+<div class="card"><div class="card-head"><h3>Recent stock movements</h3></div>
+  <table class="data compact"><thead><tr><th>Date</th><th>Transaction</th><th class="num">Qty</th><th class="num">On hand</th></tr></thead><tbody>
+  {% for m in history %}<tr class="clickable" data-href="{{ url_for('txn.go', txn_id=m.txn_id) }}"><td>{{ m.date|date }}</td><td>{{ txn_types[m.txn_type].label }} {{ m.number or '' }}</td><td class="num">{{ m.qty|qty }}</td><td class="num">{{ m.qty_on_hand|qty }}</td></tr>{% endfor %}
+  </tbody></table></div>
+{% endif %}
+</div>
+{% endblock %}

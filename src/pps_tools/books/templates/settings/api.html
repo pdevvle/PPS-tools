@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}API access{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="crumbs"><a href="{{ url_for('settings.index') }}">Settings</a></div><h1>API access</h1>
+  <div class="muted small">Use the REST API at <code>{{ public_base }}/api/v1</code> with <code>Authorization: Bearer &lt;token&gt;</code>. A token acts as the user who created it.</div></div></div>
+{% if new_token %}<div class="flash success">Your new token (shown once): <code id="tok">{{ new_token }}</code> <button type="button" class="small" data-copy="tok">Copy</button></div>{% endif %}
+<div class="grid cols-2">
+<div class="card"><table class="data"><thead><tr><th>Name</th><th>Token</th><th>Created</th><th>Last used</th><th></th></tr></thead><tbody>
+  {% for t in rows %}<tr><td>{{ t.name }}</td><td class="mono small">{{ t.prefix }}…</td><td class="small">{{ t.created_at|date }}</td><td class="small">{{ t.last_used_at|date if t.last_used_at else 'Never' }}</td>
+    <td class="actions">{% if t.revoked %}<span class="badge">Revoked</span>{% else %}<form method="post"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="small danger" name="revoke" value="{{ t.id }}" type="submit">Revoke</button></form>{% endif %}</td></tr>
+  {% else %}<tr><td colspan="5" class="muted">No tokens.</td></tr>{% endfor %}
+</tbody></table></div>
+<form method="post" class="card"><div class="card-body">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <h3>Create a token</h3>
+  <div class="field"><label>Name</label><input name="name" placeholder="Zapier, website, …"></div>
+  <button type="submit" class="primary">Create token</button>
+  <h3 style="margin-top:1.25rem">Endpoints</h3>
+  <ul class="small mono">
+    <li>GET /api/v1/customers · vendors · items · accounts</li>
+    <li>POST /api/v1/customers · vendors · items</li>
+    <li>GET /api/v1/transactions?type=invoice&amp;since=2026-01-01</li>
+    <li>GET /api/v1/transactions/&lt;id&gt;</li>
+    <li>POST /api/v1/transactions (same fields as the forms)</li>
+    <li>DELETE /api/v1/transactions/&lt;id&gt;</li>
+    <li>GET /api/v1/reports/&lt;key&gt;?preset=this_month</li>
+  </ul>
+</div></form>
+</div>
+{% endblock %}
