@@ -1,9 +1,6 @@
 /* Jobs module: board, list, job page, production schedule, panels, settings. */
 
 .jobs-page { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; background: var(--surface); }
-/* On phones the shell sizes .app-main from its content; size containment keeps a tall jobs
-   page from growing it (which pushed the page header above the screen). */
-@media (max-width: 760px) { .jobs-page { contain: size; } }
 .jobs-toolbar { gap: 8px; }
 .jobs-search { width: min(320px, 100%); }
 @media (max-width: 760px) { .jobs-search { width: 100%; } }

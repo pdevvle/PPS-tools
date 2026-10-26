@@ -1,7 +1,7 @@
 /* App shell: rail, module layout, sidebars, page headers, auth screens, palette. */
 
 .app { display: flex; height: 100%; overflow: hidden; }
-.app-main { flex: 1; min-width: 0; display: flex; flex-direction: column; height: 100%; }
+.app-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; height: 100%; }
 .app-outlet { flex: 1; min-height: 0; display: flex; }
 .app-outlet > * { flex: 1; min-width: 0; }
 .module-placeholder { display: flex; align-items: center; justify-content: center; flex: 1; }
@@ -62,10 +62,10 @@
     gap: 0; border-top: 1px solid rgba(255, 255, 255, 0.06);
   }
   .rail-logo, .rail-avatar { display: none; }
-  .rail-items, .rail-bottom { flex-direction: row; width: auto; gap: 0; }
-  .rail-items { flex: 1; overflow-x: auto; overflow-y: hidden; justify-content: flex-start; }
-  .rail-item { width: 60px; flex: none; height: 50px; }
-  .rail-item.is-active::before { left: 18px; right: 18px; top: -4px; bottom: auto; width: auto; height: 3px; border-radius: 0 0 3px 3px; }
+  .rail-items { flex-direction: row; width: 100%; gap: 0; flex: 1; overflow: visible; justify-content: space-around; }
+  .rail-item { flex: 1 1 0; min-width: 0; max-width: 84px; width: auto; height: 50px; }
+  .rail-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rail-item.is-active::before { left: 30%; right: 30%; top: -4px; bottom: auto; width: auto; height: 3px; border-radius: 0 0 3px 3px; }
   .rail [data-tip]:hover::after { display: none; }
 }
 
