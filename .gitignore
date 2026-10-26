@@ -29,3 +29,7 @@ htmlcov/
 *.swp
 *.swo
 *~
+
+# PPS Books data (database, attachments, session key)
+books-data/
+books-demo/

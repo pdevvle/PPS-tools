@@ -208,3 +208,22 @@ def test_csv_import_wizard(client, db):
 
     casey = db().scalar(select(Vendor).where(Vendor.display_name == "Casey Freelance"))
     assert casey.track_1099 and casey.email == "casey@example.com"
+
+
+def test_quickbooks_import_page_runs_the_migration(client, db, monkeypatch):
+    from types import SimpleNamespace
+
+    import pps_tools.quickbooks.qbo_client as qbo_client
+    from pps_tools.books.web import settings as settings_views
+    from tests.test_books.test_imports import FakeQBO, _qbo_company
+
+    data, tb = _qbo_company()
+    monkeypatch.setattr(settings_views, "_qbo_auth", lambda: SimpleNamespace(load=lambda: object()))
+    monkeypatch.setattr(qbo_client, "QBOClient", lambda auth: FakeQBO(data, tb))
+    page = client.get("/settings/import")
+    assert page.status_code == 200 and b"Conversion date" in page.data
+    r = client.post("/settings/import/qbo", data={"_csrf": _csrf(client), "conversion_date": "2025-12-31",
+                                                  "lists": "1", "open_items": "1", "balances": "1"})
+    assert r.status_code == 200, _error_text(r)
+    assert b"Imported from QuickBooks Online" in r.data and b"balance sheet as of 12/31/2025" in r.data
+    assert db().scalar(select(Customer).where(Customer.display_name == "Spring Menu")).is_project

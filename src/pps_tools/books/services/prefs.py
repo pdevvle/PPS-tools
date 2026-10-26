@@ -66,6 +66,7 @@ DEFAULTS: dict[str, Any] = {
     "email_reminder_body": ("Dear {customer},\n\nJust a reminder that invoice {number} for {amount} "
                             "was due {due_date}.\n\nPay online: {link}\n\nThank you,\n{company}"),
     # Automations
+    "progress_invoicing": True,  # several invoices from one estimate, each for part of it
     "reminders_enabled": False,
     "reminder_days": [3, 15, 30],  # days after due date
     "late_fees_enabled": False,

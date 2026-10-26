@@ -273,6 +273,10 @@ def render_form(info: TxnType, txn: Optional[Transaction], data: dict, status: i
         billable = _billable_for(s, party_id, txn)
     from pps_tools.books.services.recurring import RECURRABLE
 
+    if txn is not None and txn.id and txn.type == "estimate":
+        done = tx.estimate_progress(s, txn)
+        extra.setdefault("estimate_invoiced", sum(done.values()))
+        extra.setdefault("estimate_remaining", tx.estimate_remaining(s, txn))
     return render_template(
         "txn/form.html", info=info, txn=txn, data=data, lines=lines, apply=apply, deposits=deposits,
         recurrable=RECURRABLE,
@@ -331,6 +335,49 @@ def _billable_for(s, customer_id: int, txn: Optional[Transaction]) -> list[dict]
 # -- defaults for new transactions ---------------------------------------------------------
 
 
+def _progress_lines(s, est: Transaction, rows: list[dict], pct: Optional[str]) -> list[dict]:
+    """Invoice lines for what's left of an estimate, or ``pct`` percent of each line.
+
+    Each line remembers the estimate line it came from, so later invoices
+    know what's already been billed.
+    """
+    from pps_tools.books.services import prefs
+
+    progress = prefs.get(s, "progress_invoicing")
+    try:
+        share = Decimal(str(pct).strip().rstrip("%")) if pct and progress else None
+    except ArithmeticError:
+        share = None
+    if share is not None and not Decimal(0) < share <= Decimal(100):
+        share = None
+    done = tx.estimate_progress(s, est) if progress else {}
+    out = []
+    for ln, row in zip(est.lines, rows):
+        if ln.kind not in ("item", "account"):
+            out.append(row)
+            continue
+        row = dict(row, source_type="estimate_line", source_id=ln.id)
+        remaining = ln.amount_cents - done.get(ln.id, 0)
+        target = remaining if share is None else min(remaining, money.percent_of(ln.amount_cents, share))
+        if target <= 0:
+            continue
+        if target != ln.amount_cents:
+            qty = ln.qty or Decimal(1)
+            if ln.kind == "item" and qty != 1 and ln.amount_cents:
+                # Part of the quantity at the same price: 250 of 500 cards.
+                part = (qty * Decimal(target) / Decimal(ln.amount_cents)).quantize(Decimal("0.0001"))
+                row["qty"] = format(part.normalize(), "f")
+            else:
+                row["qty"] = "1" if ln.kind == "item" else row.get("qty")
+                row["rate"] = money.fmt_plain(target)
+            row["amount_cents"] = target
+            row.pop("amount", None)
+            if share is not None:
+                row["description"] = f"{row.get('description') or ''} ({format(share.normalize(), 'f')}% of estimate {est.number})".strip()
+        out.append(row)
+    return out
+
+
 def _new_defaults(info: TxnType) -> dict:
     s = core.db()
     args = request.args
@@ -368,6 +415,11 @@ def _new_defaults(info: TxnType) -> dict:
             data["date"] = date.today().isoformat()
             data["message"] = None
             data.pop("expiration_date", None)
+            data["lines"] = _progress_lines(s, est, data["lines"], args.get("pct"))
+            if info.number_seq:
+                from pps_tools.books.services import numbering
+
+                data["number"] = numbering.peek(s, info.number_seq)
             return data
     if args.get("from_po") and info.code in ("bill", "check", "expense"):
         po = s.get(Transaction, int(args["from_po"]))

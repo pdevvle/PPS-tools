@@ -65,7 +65,8 @@ def company():
 
 SALES_BOOLS = ["show_shipping_fields", "show_discount_field", "discount_before_tax", "shipping_taxable",
                "show_service_date", "deposit_to_undeposited_funds", "auto_apply_credits", "auto_apply_payments",
-               "invoice_show_logo", "invoice_show_payment_link", "reminders_enabled", "late_fees_enabled"]
+               "invoice_show_logo", "invoice_show_payment_link", "reminders_enabled", "late_fees_enabled",
+               "progress_invoicing"]
 SALES_TEXT = ["default_invoice_message", "default_estimate_message", "default_statement_message",
               "invoice_accent_color", "invoice_footer", "late_fee_type", "late_fee_value",
               "email_invoice_subject", "email_invoice_body", "email_estimate_subject", "email_estimate_body",
