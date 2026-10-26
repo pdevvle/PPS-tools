@@ -135,6 +135,17 @@ def test_new_transaction_forms_render_for_every_type(client):
         assert r.status_code == 200, (info.slug, r.status_code)
 
 
+def test_new_invoice_for_a_customer_offers_unbilled_time(app, client):
+    s = _db(app)
+    cid = s.scalar(select(TimeActivity.customer_id).where(TimeActivity.billable.is_(True),
+                                                          TimeActivity.billed_txn_id.is_(None)).limit(1))
+    s.close()
+    assert cid, "the demo company has unbilled time"
+    r = client.get(f"/t/invoices/new?customer_id={cid}")
+    assert r.status_code == 200, _error_text(r)
+    assert b"Add billable charges" in r.data and b"data-billable=" in r.data
+
+
 def test_create_invoice_through_the_form(app, client):
     s = _db(app)
     cust = s.scalar(select(Customer).where(Customer.is_project.is_(False)).limit(1))

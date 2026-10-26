@@ -313,7 +313,7 @@ def _billable_for(s, customer_id: int, txn: Optional[Transaction]) -> list[dict]
         rate = ta.hourly_rate or Decimal(0)
         out.append({"kind": "time", "source_type": "time", "source_id": ta.id, "date": ta.date,
                     "description": f"{ta.date:%m/%d} {ta.worker_name}: {ta.description or (ta.item.name if ta.item else 'Time')}",
-                    "item_id": ta.item_id, "qty": hours, "rate": rate,
+                    "item_id": ta.item_id, "account_id": None, "qty": hours, "rate": rate,
                     "amount": money.line_amount(hours, rate), "label": f"Time · {ta.worker_name}",
                     "taxable": ta.taxable})
     for dc in s.scalars(select(Transaction).where(Transaction.customer_id == customer_id,
@@ -325,6 +325,7 @@ def _billable_for(s, customer_id: int, txn: Optional[Transaction]) -> list[dict]
                 continue
             out.append({"kind": "delayed", "source_type": "delayed_line", "source_id": ln.id, "date": dc.date,
                         "description": ln.description or (ln.item.name if ln.item else ""), "item_id": ln.item_id,
+                        "account_id": None,
                         "qty": (ln.qty or Decimal(1)) * sign if ln.qty is not None else None, "rate": ln.rate,
                         "amount": sign * ln.amount_cents, "label": f"{dc.info.label} {dc.number or ''}",
                         "taxable": ln.taxable})
