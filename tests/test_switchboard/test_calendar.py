@@ -136,7 +136,9 @@ def test_moving_an_occurrence_with_scope_all_shifts_the_series(client):
 def _seed_overlays(owner_id):
     stamp = now_iso()
     with db.transaction():
-        pos = db.insert("positions", {"name": "Press Operator", "color": "#e8590c", "created_at": stamp})
+        # The staffing module seeds default positions at setup when it's enabled.
+        found = db.one("SELECT id FROM positions WHERE name = ?", "Press Operator")
+        pos = found["id"] if found else db.insert("positions", {"name": "Press Operator", "color": "#e8590c", "created_at": stamp})
         db.insert("shifts", {"user_id": owner_id, "position_id": pos, "start_at": "2026-11-03T15:00:00.000Z",
                              "end_at": "2026-11-03T23:00:00.000Z", "status": "published", "created_at": stamp})
         db.insert("shifts", {"user_id": owner_id, "start_at": "2026-11-04T15:00:00.000Z", "end_at": "2026-11-04T23:00:00.000Z",
@@ -307,5 +309,20 @@ def test_agenda_and_search(client):
     client.post("/api/calendar/events", {"title": "Paper vendor visit", "start_at": iso(now() + timedelta(hours=3))})
     agenda = client.get("/api/calendar/agenda")["items"]
     assert [e["title"] for e in agenda] == ["Paper vendor visit"]
+    client.post("/api/calendar/events", {"title": "Press check", "start_at": "2026-12-01T19:00:00Z"})  # noon in Phoenix
+    day = client.get("/api/calendar/agenda", query_string={"date": "2026-12-01", "days": 1})
+    assert day["today"] == "2026-12-01" and [e["title"] for e in day["items"]] == ["Press check"]
+    assert client.get("/api/calendar/agenda", query_string={"date": "2026-12-02", "days": 1})["items"] == []
+    client.get("/api/calendar/agenda", query_string={"days": "soon"}, expect=400)
     items = client.get("/api/search", query_string={"q": "vendor visit"})["items"]
     assert any(i["type"] == "event" for i in items)
+
+
+def test_moving_an_all_day_occurrence_shifts_the_series(client):
+    ev = client.post("/api/calendar/events", {"title": "Inventory", "all_day": True, "start_date": "2026-11-02",
+                                              "rrule": "FREQ=WEEKLY;COUNT=3"})["event"]
+    second = events(client, "2026-11-08T00:00:00Z", "2026-11-12T00:00:00Z")[0]
+    client.patch(f"/api/calendar/events/{ev['id']}?scope=all&original_start={second['original_start']}",
+                 {"all_day": True, "start_date": "2026-11-10", "end_date": "2026-11-10"})
+    days = [e["start_date"] for e in events(client, "2026-11-01T00:00:00Z", "2026-11-30T00:00:00Z")]
+    assert days == ["2026-11-03", "2026-11-10", "2026-11-17"]

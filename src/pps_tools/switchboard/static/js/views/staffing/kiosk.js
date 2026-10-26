@@ -5,7 +5,7 @@ import { html, useEffect, useRef, useState } from '../../lib/preact.js';
 import { api } from '../../lib/api.js';
 import { useFetch, useInterval } from '../../lib/hooks.js';
 import { navigate } from '../../lib/router.js';
-import { fmtTime, fmtDuration, fmtDateLong } from '../../lib/format.js';
+import { fmtDuration } from '../../lib/format.js';
 import { Avatar, Icon, cx } from '../../ui/components.js';
 import { useHotkeys } from '../../lib/shortcuts.js';
 import * as S from './shared.js';
@@ -63,25 +63,25 @@ export function Kiosk() {
     else document.documentElement.requestFullscreen?.().catch(() => {});
   };
   const clockedIn = live.data?.items || [];
-  const time = now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const time = S.orgTime(now);
   const seconds = String(now.getSeconds()).padStart(2, '0');
 
   return html`<div class="kiosk" role="application" aria-label="Time clock kiosk">
     <div class="kiosk-top">
       <span class="kiosk-brand"><span class="logo-mark"></span> Time clock</span>
       <span class="grow"></span>
-      <button type="button" class="kiosk-ghost" onClick=${fullscreen}><${Icon} name="maximize-2" size=${16} /> Full screen</button>
-      <button type="button" class="kiosk-ghost" onClick=${() => navigate('/schedule')}><${Icon} name="x" size=${16} /> Exit</button>
+      <button type="button" class="kiosk-ghost" onClick=${fullscreen} aria-label="Full screen"><${Icon} name="maximize-2" size=${16} /><span>Full screen</span></button>
+      <button type="button" class="kiosk-ghost" onClick=${() => navigate('/schedule')} aria-label="Exit kiosk"><${Icon} name="x" size=${16} /><span>Exit</span></button>
     </div>
     <div class="kiosk-body">
       <div class="kiosk-clock">
         <div class="kiosk-time">${time}<span class="kiosk-seconds">${seconds}</span></div>
-        <div class="kiosk-date">${fmtDateLong(now)}</div>
+        <div class="kiosk-date">${S.orgDateLong(now)}</div>
         ${result ? html`<div class=${cx('kiosk-result', result.action === 'in' ? 'is-in' : 'is-out')} role="status">
           <${Avatar} user=${{ id: result.user_id, name: result.name, color: result.color }} size=${64} />
           <div class="kiosk-result-text">
             <strong>${result.name}</strong>
-            <span>${result.action === 'in' ? 'clocked in' : 'clocked out'} at ${fmtTime(result.at)}</span>
+            <span>${result.action === 'in' ? 'clocked in' : 'clocked out'} at ${S.orgTime(result.at)}</span>
             ${result.action === 'out' && result.worked_minutes ? html`<span class="kiosk-result-sub">${fmtDuration(result.worked_minutes)} on this punch — have a good one!</span>` : null}
             ${result.action === 'in' && result.shift ? html`<span class="kiosk-result-sub">Shift ${S.shiftRange(result.shift)} · ${S.positionOf(result.shift.position_id)?.name || ''}</span>` : null}
           </div>
@@ -104,8 +104,8 @@ export function Kiosk() {
     </div>
     <div class="kiosk-live">
       <span class="kiosk-live-label">On the clock</span>
-      ${clockedIn.length ? clockedIn.map((e) => html`<span class="kiosk-live-person" key=${e.id} title=${`since ${fmtTime(e.clock_in)}`}>
-        <${Avatar} user=${e.user_id} size=${24} /><span>${e.on_break ? 'break' : fmtTime(e.clock_in)}</span>
+      ${clockedIn.length ? clockedIn.map((e) => html`<span class="kiosk-live-person" key=${e.id} title=${`since ${S.orgTime(e.clock_in)}`}>
+        <${Avatar} user=${e.user_id} size=${24} /><span>${e.on_break ? 'break' : S.orgTime(e.clock_in)}</span>
       </span>`) : html`<span class="kiosk-live-empty">Nobody yet</span>`}
     </div>
   </div>`;

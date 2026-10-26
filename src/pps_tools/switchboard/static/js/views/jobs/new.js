@@ -14,6 +14,21 @@ import { PRIORITIES, stages } from './common.js';
 
 let aiMissing = false; // remember a 404 so we stop offering it
 
+// Spec values read from an email: skip blanks (keep what the template filled in) and
+// turn yes/no and number answers, which may arrive as text, into real values.
+function aiSpecs(raw) {
+  const fields = boot('job_fields');
+  const out = {};
+  for (const [key, v] of Object.entries(raw)) {
+    if (v === null || v === undefined || v === '') continue;
+    const type = (fields.find((f) => f.key === key) || {}).type;
+    if (type === 'checkbox') out[key] = typeof v === 'boolean' ? v : /^(true|yes|y|1)$/i.test(String(v).trim());
+    else if (type === 'number') { const n = Number(v); if (!Number.isNaN(n)) out[key] = n; }
+    else out[key] = v;
+  }
+  return out;
+}
+
 export function SpecFields({ value, onChange, compact }) {
   const fields = boot('job_fields');
   const set = (key, v) => onChange({ ...value, [key]: v });
@@ -134,10 +149,10 @@ function NewJobForm({ close, conversation, contact, stageId, onCreated, navigate
         due_at: res.due_at || f.due_at,
         priority: PRIORITIES.some((p) => p.value === res.priority) ? res.priority : f.priority,
       }));
-      if (res.specs) setSpecs((s) => ({ ...s, ...res.specs }));
+      if (res.specs) setSpecs((s) => ({ ...s, ...aiSpecs(res.specs) }));
       setAiNote('Filled in from the email — check it over before saving.');
     } catch (err) {
-      if (err.status === 404) { aiMissing = true; setAiNote('The AI assistant isn\'t installed.'); }
+      if (err.status === 404 || err.status === 405) { aiMissing = true; setAiNote('The AI assistant isn\'t installed.'); }
       else if (err.code === 'ai_not_configured') setAiNote('Turn on the AI assistant in Settings → AI assistant to use this.');
       else toastError(err);
     } finally { setAiBusy(false); }

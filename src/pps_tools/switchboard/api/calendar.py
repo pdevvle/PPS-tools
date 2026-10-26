@@ -8,9 +8,9 @@ from flask import Blueprint, Response, request
 
 from pps_tools.switchboard import config, db, realtime
 from pps_tools.switchboard.services import calendars as cal_svc
-from pps_tools.switchboard.util import iso, now, now_iso, parse_iso, pick_color
+from pps_tools.switchboard.util import iso, now, now_iso, parse_date, parse_iso, pick_color
 from pps_tools.switchboard.web import (
-    as_bool, bad_request, body, current_user, forbidden, login_required, not_found, ok, require_fields,
+    as_bool, as_int, bad_request, body, current_user, forbidden, login_required, not_found, ok, require_fields,
 )
 from pps_tools.switchboard.worker import Task
 
@@ -161,9 +161,11 @@ def my_agenda():
     tz = cal_svc.org_tz()
     from datetime import datetime, time
 
-    today = now().astimezone(tz).date()
+    # ?date=YYYY-MM-DD lets the browser say which day "today" is for it.
+    today = parse_date(request.args.get("date")) or now().astimezone(tz).date()
+    days = min(max(as_int(request.args.get("days"), "days") or 2, 1), 14)
     start = datetime.combine(today, time(0, 0), tzinfo=tz)
-    end = start + timedelta(days=int(request.args.get("days") or 2))
+    end = start + timedelta(days=days)
     items = cal_svc.list_occurrences(user, start, end, None)
     items += cal_svc.overlay_items(user, start, end, ["shifts", "operations"])
     items.sort(key=lambda o: (o["start"], not o.get("all_day"), o["title"]))

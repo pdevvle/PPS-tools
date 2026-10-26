@@ -40,6 +40,25 @@ def _at(ctx, n: int, hour: int, minute: int = 0) -> str:
     return iso(datetime.combine(_workdays(ctx, n), time(hour, minute), tzinfo=ctx.tz))
 
 
+def _slot(ctx, uid: int, n: int, hour: int, minute: int, minutes: int) -> tuple[str, str]:
+    """Preferred time on the n-th working day, nudged inside the person's published
+    shift that day when staffing has one (so the demo starts without stray conflicts)."""
+    start = datetime.combine(_workdays(ctx, n), time(hour, minute), tzinfo=ctx.tz)
+    end = start + timedelta(minutes=minutes)
+    day0 = datetime.combine(start.date(), time(0, 0), tzinfo=ctx.tz)
+    shifts = db.query(
+        "SELECT start_at, end_at FROM shifts WHERE user_id = ? AND status = 'published' AND start_at < ? AND end_at > ? "
+        "ORDER BY start_at", uid, iso(day0 + timedelta(days=1)), iso(day0),
+    )
+    spans = [(datetime.fromisoformat(r["start_at"].replace("Z", "+00:00")), datetime.fromisoformat(r["end_at"].replace("Z", "+00:00")))
+             for r in shifts]
+    if spans and not any(a <= start and end <= b for a, b in spans):
+        a, b = spans[0]
+        start = min(max(start, a), b - timedelta(minutes=minutes))
+        end = start + timedelta(minutes=minutes)
+    return iso(start), iso(end)
+
+
 def _saturday(ctx, hour: int) -> str:
     day = ctx.now.astimezone(ctx.tz).date() + timedelta(days=2)
     while day.weekday() != 5:
@@ -64,7 +83,10 @@ def _org(name, domain=None, phone=None):
 
 
 def seed_jobs(ctx) -> None:
+    from pps_tools.switchboard.api.jobs import link_template_skills
+
     u = ctx.uid
+    link_template_skills()  # staffing's demo has created its skills by now
     stages = {s["name"]: s["id"] for s in jobs_svc.stages()}
     resources = {r["name"]: r["id"] for r in jobs_svc.resources()}
     templates = {t["name"]: t["id"] for t in jobs_svc.templates()}
@@ -75,8 +97,9 @@ def seed_jobs(ctx) -> None:
     # Who can do what, for the auto-scheduler (shared with staffing; ignore duplicates).
     for key, names in {
         "designer": [("Prepress", 3)], "press": [("Digital press", 3), ("Wide format", 2)],
-        "parttime": [("Digital press", 1), ("Bindery", 1)], "bindery": [("Bindery", 3), ("Cutting", 3)],
-        "driver": [("Delivery", 3)], "manager": [("Digital press", 2), ("Bindery", 2), ("Cutting", 2)],
+        "parttime": [("Digital press", 1), ("Finishing", 1)],
+        "bindery": [("Guillotine cutter", 3), ("Folder", 3), ("Saddle stitch", 3), ("Finishing", 3)],
+        "driver": [("Delivery", 3)], "manager": [("Digital press", 2), ("Finishing", 2)],
     }.items():
         for name, level in names:
             if name in skills:
@@ -116,14 +139,18 @@ def seed_jobs(ctx) -> None:
         if conversation and convs.get(conversation):
             data["conversation_id"] = convs[conversation]
         job = jobs_svc.create(sam, data)
-        stamp =ctx.ago(days=days_ago, hours=ctx.rng.randint(0, 6))
-        db.update("jobs", job["id"], {"created_at": stamp, "updated_at": stamp, "stage_entered_at": ctx.ago(days=max(0, days_ago - 1))})
+        stamp = ctx.ago(days=days_ago, hours=ctx.rng.randint(0, 6))
+        entered = ctx.ago(days=days_ago - 1) if days_ago > 1 else stamp
+        db.update("jobs", job["id"], {"created_at": stamp, "updated_at": stamp, "stage_entered_at": entered})
         db.execute("UPDATE job_activity SET created_at = ? WHERE job_id = ?", stamp, job["id"])
         for p in people:
             db.execute("INSERT OR IGNORE INTO job_assignees (job_id, user_id) VALUES (?, ?)", job["id"], u(p))
         created[key] = job["id"]
         jobs_svc.reindex(job["id"])
         return job["id"]
+
+    def at(person, n, hour, minute, minutes):
+        return _slot(ctx, u(person), n, hour, minute, minutes)
 
     def plan(job_id, steps):
         """steps: {sequence: (start, end, person key, status)}; status done/in_progress."""
@@ -141,6 +168,12 @@ def seed_jobs(ctx) -> None:
             db.update("job_operations", op["id"], values)
 
     def history(job_id, names, start, step_hours=20):
+        # Keep the timeline in order: the job exists before its first move.
+        created_at = db.one("SELECT created_at FROM jobs WHERE id = ?", job_id)["created_at"]
+        if created_at > iso(start):
+            earlier = iso(start - timedelta(minutes=40))
+            db.execute("UPDATE job_activity SET created_at = ? WHERE job_id = ? AND created_at = ?", earlier, job_id, created_at)
+            db.update("jobs", job_id, {"created_at": earlier})
         t = start
         prev = None
         for name in names:
@@ -149,6 +182,7 @@ def seed_jobs(ctx) -> None:
                                            "data_json": db.jdump({"from": prev, "to": name, "from_id": stages[prev],
                                                                   "to_id": stages[name]}),
                                            "created_at": iso(t)})
+                db.update("jobs", job_id, {"stage_entered_at": iso(t)})
                 t += timedelta(hours=step_hours)
             prev = name
 
@@ -170,10 +204,10 @@ def seed_jobs(ctx) -> None:
                  conversation="cards", due=_at(ctx, 2, 17), qty=1500, quote=187.50, people=("designer", "frontdesk"),
                  days_ago=1, specs={"finished_size": "3.5 × 2 in", "paper_stock": "16pt silk, spot UV logo"},
                  description="Same layout as the 2025 cards. Ana Ruiz, Ben Cho (Realtors), Kayla Moss (Office Manager). 500 each.")
-    plan(cards, {1: (_at(ctx, -1, 10), _at(ctx, -1, 10, 45), "designer", "done"),
-                 2: (_at(ctx, 1, 9), _at(ctx, 1, 9, 30), "press", None),
-                 3: (_at(ctx, 1, 10), _at(ctx, 1, 10, 20), "bindery", None),
-                 4: (_at(ctx, 1, 10, 30), _at(ctx, 1, 10, 40), "bindery", None)})
+    plan(cards, {1: (*at("designer", -1, 10, 0, 45), "designer", "done"),
+                 2: (*at("press", 1, 13, 0, 30), "press", None),
+                 3: (*at("bindery", 1, 13, 40, 20), "bindery", None),
+                 4: (*at("bindery", 1, 14, 0, 10), "bindery", None)})
     proof = files.save_bytes(PDF, "saguaro-cards-proof-v1.pdf", "application/pdf", u("designer"), owner_type="job", owner_id=cards)
     db.insert("job_proofs", {"attachment_id": proof["id"], "job_id": cards, "created_at": ctx.ago(hours=20)})
     db.update("jobs", cards, {"public_token": token(18), "proof_status": "pending"})
@@ -197,20 +231,20 @@ def seed_jobs(ctx) -> None:
               {"duration_minutes": 300})
     jobs_svc.add_operation(sam, jobs_svc.get(banners), {"name": "Deliver to the ballpark", "resource_id": resources["Delivery Van"],
                                                         "skill_id": skills.get("Delivery"), "duration_minutes": 45})
-    plan(banners, {1: (_at(ctx, 0, 13), _at(ctx, 0, 13, 30), "designer", None),
-                   2: (_at(ctx, 1, 7, 30), _at(ctx, 1, 12, 30), "press", None),
-                   3: (_at(ctx, 1, 13), _at(ctx, 1, 16), "bindery", None),
-                   5: (_at(ctx, 2, 8), _at(ctx, 2, 8, 45), "driver", None)})
+    plan(banners, {1: (*at("designer", 0, 13, 0, 30), "designer", None),
+                   2: (*at("press", 1, 7, 30, 300), "press", None),
+                   3: (*at("bindery", 1, 14, 15, 120), "bindery", None),
+                   5: (*at("driver", 2, 9, 30, 45), "driver", None)})
     check(banners, {"Proof approved"})
 
     # 4. Gala programs: files arrive later this week.
     programs = make("programs", "Fall Gala programs — 500 booklets", "Prepress", contact=priya, template="Saddle-stitched booklet",
                     conversation="programs", due=_at(ctx, 4, 12), qty=500, quote=1640.00, people=("manager", "designer"),
                     days_ago=2, po="PAC-2026-118", specs={"finished_size": "5.5 × 8.5 in, 16 pp + cover"})
-    plan(programs, {1: (_at(ctx, 2, 9), _at(ctx, 2, 10, 30), "designer", None),
-                    2: (_at(ctx, 3, 7), _at(ctx, 3, 9), "press", None),
-                    3: (_at(ctx, 3, 10), _at(ctx, 3, 11, 30), "bindery", None),
-                    4: (_at(ctx, 3, 13), _at(ctx, 3, 13, 30), "bindery", None)})
+    plan(programs, {1: (*at("designer", 2, 9, 0, 90), "designer", None),
+                    2: (*at("press", 3, 7, 0, 120), "press", None),
+                    3: (*at("bindery", 3, 10, 0, 90), "bindery", None),
+                    4: (*at("bindery", 3, 13, 0, 30), "bindery", None)})
     comment(programs, "manager", f"<p>Press 1 is held Friday morning. {mention('press', 'Alex Kim')} please stage the 100lb cover stock Thursday.</p>",
             30, mentions=("press",))
 
@@ -235,9 +269,16 @@ def seed_jobs(ctx) -> None:
     loyalty = make("loyalty", "Loyalty punch cards — 1,000", "Printing", contact=lena, template="Business cards", qty=1000,
                    quote=96.00, due=_at(ctx, 1, 12), people=("press",), days_ago=4,
                    specs={"product": "Punch cards", "paper_stock": "14pt uncoated (writable)", "ink": "4/1"})
-    plan(loyalty, {1: (_at(ctx, -2, 9), _at(ctx, -2, 9, 30), "designer", "done"),
-                   2: (iso(ctx.now - timedelta(minutes=20)), iso(ctx.now + timedelta(minutes=25)), "parttime", "in_progress"),
-                   3: (iso(ctx.now + timedelta(minutes=45)), iso(ctx.now + timedelta(minutes=65)), "bindery", None)})
+    # On press right now if the shop is open; otherwise first thing next working day.
+    local_now = ctx.now.astimezone(ctx.tz)
+    live = local_now.weekday() < 5 and 8 <= local_now.hour < 14
+    if live:
+        print_step = (iso(ctx.now - timedelta(minutes=20)), iso(ctx.now + timedelta(minutes=25)), "press", "in_progress")
+        cut_step = (iso(ctx.now + timedelta(minutes=45)), iso(ctx.now + timedelta(minutes=65)), "bindery", None)
+    else:
+        print_step = (*at("press", 0, 10, 0, 45), "press", None)
+        cut_step = (*at("bindery", 0, 11, 0, 20), "bindery", None)
+    plan(loyalty, {1: (*at("designer", -2, 9, 0, 30), "designer", "done"), 2: print_step, 3: cut_step})
     db.update("job_operations", db.one("SELECT id FROM job_operations WHERE job_id = ? AND sequence = 2", loyalty)["id"],
               {"resource_id": resources["Digital Press 2"]})
     check(loyalty, {"Files received", "Proof approved", "Stock pulled"})
@@ -247,9 +288,9 @@ def seed_jobs(ctx) -> None:
                  due=_at(ctx, 1, 16), people=("bindery",), days_ago=5,
                  specs={"product": "Yard signs", "paper_stock": "4mm coroplast", "finished_size": "18 × 24 in", "ink": "4/4",
                         "finishing": "H-stakes"})
-    for i, (name, res, who, start, end, status) in enumerate([
-        ("Print", "Wide Format Printer", "press", _at(ctx, -1, 13), _at(ctx, -1, 15), "done"),
-        ("Install H-stakes", None, "bindery", _at(ctx, 0, 13), _at(ctx, 0, 16), None),
+    for i, (name, res, who, (start, end), status) in enumerate([
+        ("Print", "Wide Format Printer", "press", at("press", -1, 12, 0, 120), "done"),
+        ("Install H-stakes", None, "bindery", at("bindery", 0, 13, 0, 180), None),
     ], start=1):
         db.insert("job_operations", {"job_id": signs, "name": name, "sequence": i, "resource_id": resources.get(res),
                                      "user_id": u(who), "duration_minutes": 120 if i == 1 else 180, "start_at": start,
@@ -281,9 +322,9 @@ def seed_jobs(ctx) -> None:
     dental_job = make("dental", "Appointment cards — 2,500", "Printing", contact=maya, template="Business cards", qty=2500,
                       quote=210.00, due=_at(ctx, 1, 17), people=("press", "bindery"), days_ago=3,
                       specs={"product": "Appointment cards", "paper_stock": "14pt uncoated", "ink": "4/1"})
-    plan(dental_job, {1: (_at(ctx, -1, 8), _at(ctx, -1, 8, 30), "designer", "done"),
-                      2: (_at(ctx, 0, 14), _at(ctx, 0, 15), "press", None),
-                      3: (_at(ctx, 0, 15, 15), _at(ctx, 0, 15, 45), "bindery", None)})
+    plan(dental_job, {1: (*at("designer", -1, 9, 0, 30), "designer", "done"),
+                      2: (*at("press", 0, 13, 45, 60), "press", None),
+                      3: (*at("bindery", 0, 15, 0, 30), "bindery", None)})  # clashes with the H-stakes: one to fix
 
     # 13. Food bank flyers, delivered.
     flyers = make("flyers", "Volunteer drive flyers — 500", "Delivered", contact=luis, qty=500, quote=118.00, people=("press",),

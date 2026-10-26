@@ -7,6 +7,7 @@ import { connect, disconnect, onStatus } from '../lib/events.js';
 import { loadBootstrap, reloadBadgesSoon, setState, useStore, can, getState } from '../lib/store.js';
 import { navigate, useRoute } from '../lib/router.js';
 import { useHotkeys, keyLabel } from '../lib/shortcuts.js';
+import { useIsMobile } from '../lib/hooks.js';
 import { MODULES, BOTTOM_MODULES, ALL_MODULES, homePath } from '../modules.js';
 import { Avatar, Button, Empty, Icon, IconButton, Kbd, Loading, cx } from '../ui/components.js';
 import { OverlayHost, openModal, Modal, showMenu, showPopover, toastError } from '../ui/overlay.js';
@@ -64,7 +65,7 @@ function ModuleOutlet({ route }) {
   const allowed = mod && (!mod.perm || (me.permissions || []).includes(mod.perm));
   const { component: Component, loading, error } = useModule(allowed ? mod : null);
   if (!mod || !allowed) {
-    return html`<div class="module-placeholder"><${Empty} icon="compass" title="Nothing here"
+    return html`<div class="module-placeholder"><${Empty} icon="search" title="Nothing here"
       action=${html`<${Button} variant="primary" onClick=${() => navigate(homePath(me))}>Go home</${Button}>`}>
       ${mod ? "You don't have access to this area." : "This page doesn't exist."}</${Empty}></div>`;
   }
@@ -110,15 +111,50 @@ async function signOut() {
   window.location.href = '/login';
 }
 
+function openNotifications(anchor, placement = 'right-end') {
+  showPopover(anchor, (close) => html`<${NotificationsPanel} close=${close} />`,
+    { placement, width: Math.min(380, window.innerWidth - 16), class: 'popover-flush' });
+}
+
+// Phones get a bottom tab bar: home plus the next three areas, and "More" for the rest.
+const PHONE_TABS = 4;
+
+function PhoneTabs({ me, active, badges, unread, visible }) {
+  const home = homePath(me).slice(1);
+  const all = ALL_MODULES.filter(visible);
+  const ordered = [...all.filter((m) => m.id === home), ...all.filter((m) => m.id !== home && m.id !== 'settings')];
+  const tabs = ordered.slice(0, PHONE_TABS);
+  const more = all.filter((m) => !tabs.includes(m));
+  const moreBadge = (unread || 0) + more.reduce((n, m) => n + (badges[m.id] || 0), 0);
+  const openMore = (e) => {
+    const anchor = e.currentTarget;
+    showMenu(anchor, [
+      ...more.map((m) => ({ label: m.label, icon: m.icon, count: badges[m.id], onSelect: () => navigate('/' + m.id) })),
+      { divider: true },
+      { label: 'Notifications', icon: 'bell', count: unread, onSelect: () => openNotifications(anchor, 'top-end') },
+      { label: 'Sign out', icon: 'log-out', onSelect: signOut },
+    ], { placement: 'top-end', width: 230 });
+  };
+  return html`<nav class="rail" aria-label="Main">
+    <div class="rail-items">
+      ${tabs.map((m) => html`<${RailItem} key=${m.id} mod=${m} active=${active === m.id} badge=${badges[m.id]} />`)}
+      <button type="button" class=${cx('rail-item', more.some((m) => m.id === active) && 'is-active')} aria-label="More" onClick=${openMore}>
+        <${Icon} name="ellipsis" size=${20} strokeWidth=${1.8} />
+        <span class="rail-label">More</span>
+        ${moreBadge ? html`<span class="rail-badge">${moreBadge > 99 ? '99+' : moreBadge}</span>` : null}
+      </button>
+    </div>
+  </nav>`;
+}
+
 function Rail({ route }) {
   const me = useStore((s) => s.me);
   const badges = useStore((s) => s.badges);
   const unread = useStore((s) => s.unreadNotifications);
+  const phone = useIsMobile();
   const active = route.segments[0];
   const visible = (m) => !m.perm || (me.permissions || []).includes(m.perm);
-  const openNotifications = (e) => {
-    showPopover(e.currentTarget, (close) => html`<${NotificationsPanel} close=${close} />`, { placement: 'right-end', width: 380, class: 'popover-flush' });
-  };
+  if (phone) return html`<${PhoneTabs} me=${me} active=${active} badges=${badges} unread=${unread} visible=${visible} />`;
   return html`<nav class="rail" aria-label="Main">
     <a href=${homePath(me)} class="rail-logo" aria-label="Switchboard home"><span class="logo-mark"></span></a>
     <div class="rail-items">
@@ -126,7 +162,7 @@ function Rail({ route }) {
     </div>
     <div class="rail-bottom">
       ${BOTTOM_MODULES.filter(visible).map((m) => html`<${RailItem} key=${m.id} mod=${m} active=${active === m.id} badge=${badges[m.id]} />`)}
-      <button type="button" class="rail-item" aria-label="Notifications" data-tip="Notifications" data-tip-pos="right" onClick=${openNotifications}>
+      <button type="button" class="rail-item" aria-label="Notifications" data-tip="Notifications" data-tip-pos="right" onClick=${(e) => openNotifications(e.currentTarget)}>
         <${Icon} name="bell" size=${20} strokeWidth=${1.8} />
         <span class="rail-label">Alerts</span>
         ${unread ? html`<span class="rail-badge">${unread > 99 ? '99+' : unread}</span>` : null}

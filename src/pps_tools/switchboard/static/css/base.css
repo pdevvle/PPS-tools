@@ -509,6 +509,10 @@ input[type="color"] { width: 34px; height: 34px; padding: 2px; border: 1px solid
 .menu-label { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 6px 0; }
 .menu-hint { font-size: 11.5px; color: var(--text-3); }
 .menu-shortcut { color: var(--text-3); font-size: 12px; }
+.menu-count {
+  min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--red); color: #fff;
+  font-size: 11px; font-weight: 700; line-height: 18px; text-align: center;
+}
 .menu-check { width: 14px; display: flex; color: var(--accent); }
 .menu-divider { height: 1px; background: var(--divider); margin: 4px 0; }
 .menu-header { padding: 8px 10px 4px; font-size: 11.5px; font-weight: 650; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.04em; }

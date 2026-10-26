@@ -453,7 +453,7 @@ export function WeekGrid({ route }) {
     actions=${html`
       <div class="btn-group">
         <${Button} size="sm" icon="chevron-left" onClick=${() => goWeek(-1)} aria-label="Previous week" />
-        <${Button} size="sm" onClick=${() => setQuery({ week: null }, { replace: false })} disabled=${isThisWeek}>Today</${Button}>
+        <${Button} size="sm" icon="calendar-check" onClick=${() => setQuery({ week: null }, { replace: false })} disabled=${isThisWeek}>Today</${Button}>
         <${Button} size="sm" icon="chevron-right" onClick=${() => goWeek(1)} aria-label="Next week" />
       </div>
       ${!isMobile && html`<${Segmented} size="sm" value=${groupBy} onChange=${setGroupBy}
@@ -485,7 +485,7 @@ export function WeekGrid({ route }) {
       </div>`;
   }
 
-  const cols = `minmax(190px, 220px) repeat(${days.length}, minmax(118px, 1fr))`;
+  const cols = `minmax(176px, 210px) repeat(${days.length}, minmax(104px, 1fr))`;
   const renderCell = (person, day) => {
     const uid = person ? person.user.id : null;
     const key = `${uid || 'open'}|${day}`;
@@ -533,9 +533,11 @@ export function WeekGrid({ route }) {
 
           ${model.groups.map((g) => html`
             <div class="sg-group" key=${'g' + g.key} style=${{ gridColumn: `1 / span ${days.length + 1}` }}>
-              ${g.ref && g.ref.color && html`<span class="sg-group-dot" style=${{ background: g.ref.color }}></span>`}
-              <span>${g.ref ? g.ref.name : groupBy === 'location' ? 'No location' : 'Other'}</span>
-              <span class="muted">${g.people.length}</span>
+              <div class="sg-group-label">
+                ${g.ref && g.ref.color && html`<span class="sg-group-dot" style=${{ background: g.ref.color }}></span>`}
+                <span>${g.ref ? g.ref.name : groupBy === 'location' ? 'No location' : 'Other'}</span>
+                <span class="muted">${g.people.length}</span>
+              </div>
             </div>
             ${g.people.map((p) => {
     const t = data.totals[String(p.user.id)];
@@ -561,7 +563,7 @@ export function WeekGrid({ route }) {
   })}
           `)}
 
-          <div class="sg-foot">Totals</div>
+          <div class="sg-foot sg-foot-label">Totals</div>
           ${days.map((d) => {
     const t = data.day_totals[d];
     return html`<div key=${'f' + d} class="sg-foot sg-foot-day">
@@ -592,7 +594,7 @@ function DayList({ day, data, model, me, manager, onOpen, onAdd }) {
   const total = data.day_totals[day];
   return html`<div class="sg-daylist">
     <div class="sg-daylist-head">
-      <div><strong>${S.dayLong(day)}</strong><div class="muted text-sm">${total ? `${S.hours(total.minutes)} · ${total.shifts} shifts` : 'Nothing scheduled'}</div></div>
+      <div><strong>${S.dayLong(day)}</strong>${total && total.shifts ? html`<div class="muted text-sm">${S.hours(total.minutes)} · ${total.shifts} ${total.shifts === 1 ? 'shift' : 'shifts'}</div>` : null}</div>
       ${manager && html`<${Button} size="sm" icon="plus" onClick=${onAdd}>Add shift</${Button}>`}
     </div>
     ${openShifts.length > 0 && html`<div class="sg-daylist-section">Open shifts</div>`}

@@ -179,8 +179,10 @@ export function Composer({ conversation, initialDraft, initialFields, onClose, o
 
   const channel = channels?.find((c) => c.id === fields.channel_id) || null;
   const kind = channel?.type || (conversation?.channel?.type) || 'email';
-  const isEmail = kind === 'email';
+  // API/form channels reply by email (or their webhook), so they compose like email.
+  const isEmail = kind === 'email' || kind === 'api';
   const isText = kind === 'sms' || kind === 'whatsapp';
+  const isChat = kind === 'chat';
 
   // Default the From account for new messages (shared accounts first). Not a user
   // edit, so it doesn't create a draft by itself.
@@ -200,7 +202,9 @@ export function Composer({ conversation, initialDraft, initialFields, onClose, o
   const channelOptions = useMemo(() => {
     if (!channels) return [];
     const type = conversation?.channel?.type;
-    return channels.filter((c) => !conversation || !type || c.type === type || (type === 'email' && c.type === 'email'));
+    // Replies stay on the conversation's kind of channel; form/API conversations can
+    // also be answered from an email account.
+    return channels.filter((c) => !conversation || !type || c.type === type || (type === 'api' && c.type === 'email'));
   }, [channels, conversation]);
 
   // -- saving ---------------------------------------------------------------------
@@ -310,7 +314,7 @@ export function Composer({ conversation, initialDraft, initialFields, onClose, o
   const send = async ({ sendAt = null, close = false } = {}) => {
     if (sending) return;
     if (empty) { toast('Write a message first'); return; }
-    if (!fields.to.length && !fields.cc.length && !fields.bcc.length) { toast('Add a recipient'); return; }
+    if (!isChat && !fields.to.length && !fields.cc.length && !fields.bcc.length) { toast('Add a recipient'); return; }
     setSending(true);
     try {
       dirtyKeys.current = new Set(Object.keys(fieldsRef.current));
@@ -433,8 +437,14 @@ export function Composer({ conversation, initialDraft, initialFields, onClose, o
     </div>`}
     ${channels && !channels.length && html`<div class="composer-remote"><${Icon} name="plug" size=${14} /> No connected account you can send from. An admin can add one in Settings → Channels.</div>`}
     <div class="composer-fields">
-      <${RecipientsInput} label="To" value=${fields.to} onChange=${(to) => update({ to })} kind=${isEmail ? 'email' : 'phone'}
-        autoFocus=${autoFocus && !fields.to.length} placeholder=${isEmail ? 'Name or email' : 'Phone number'} />
+      ${isChat
+    ? html`<div class="recipients"><span class="recipients-label">To</span><span class="muted text-sm">${conversation?.contact?.display_name || 'Website visitor'} · replies appear in their chat window</span></div>`
+    : conversation && isText
+      ? html`<div class="recipients"><span class="recipients-label">To</span><div class="recipients-chips">
+          ${fields.to.map((p) => html`<${Chip} key=${p.handle} icon="smartphone">${conversation.contact?.display_name || p.name || p.handle}${conversation.contact?.display_name ? ` · ${p.handle}` : ''}</${Chip}>`)}
+        </div></div>`
+      : html`<${RecipientsInput} label="To" value=${fields.to} onChange=${(to) => update({ to })} kind=${isEmail ? 'email' : 'phone'}
+          autoFocus=${autoFocus && !fields.to.length} placeholder=${isEmail ? 'Name or email' : 'Phone number'} />`}
       ${isEmail && !showCc && html`<button type="button" class="composer-cc-toggle" onClick=${() => setShowCc(true)}>Cc/Bcc</button>`}
       ${isEmail && showCc && html`<${RecipientsInput} label="Cc" value=${fields.cc} onChange=${(cc) => update({ cc })} />
         <${RecipientsInput} label="Bcc" value=${fields.bcc} onChange=${(bcc) => update({ bcc })} />`}

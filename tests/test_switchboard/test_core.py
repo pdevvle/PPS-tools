@@ -165,3 +165,35 @@ def test_spa_fallback_and_api_404(client):
     page = client.raw("get", "/inbox/inbox")
     assert page.status_code == 200 and b"<div id=\"app\"" in page.data
     assert client.raw("get", "/api/nope").status_code == 404
+
+
+def _failed_logins_from_spoofed_ips(api, count):
+    """Wrong-password sign-ins, each claiming a different X-Forwarded-For address."""
+    codes = []
+    for i in range(count):
+        resp = api.raw("post", "/api/auth/login", json={"email": f"nobody{i}@pps.test", "password": "wrong-password"},
+                       headers={"X-Forwarded-For": f"203.0.113.{i}"})
+        codes.append(resp.status_code)
+    return codes
+
+
+def test_forwarded_for_is_ignored_unless_a_proxy_is_configured(app, client):
+    from pps_tools.switchboard.api import auth as auth_api
+    from tests.test_switchboard.conftest import ApiClient
+
+    auth_api._failures.clear()
+    try:
+        # Faking X-Forwarded-For must not dodge the per-address sign-in throttle.
+        codes = _failed_logins_from_spoofed_ips(ApiClient(app.test_client()), auth_api.MAX_FAILURES + 1)
+        assert codes[-1] == 429 and set(codes[:-1]) == {401}
+
+        # Behind a configured proxy the forwarded address is the client's real one.
+        auth_api._failures.clear()
+        app.extensions["switchboard"].proxy_count = 1
+        from werkzeug.middleware.proxy_fix import ProxyFix
+
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
+        codes = _failed_logins_from_spoofed_ips(ApiClient(app.test_client()), auth_api.MAX_FAILURES + 1)
+        assert set(codes) == {401}
+    finally:
+        auth_api._failures.clear()

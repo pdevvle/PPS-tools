@@ -601,13 +601,22 @@ def update_event(user: dict, event_id: int, data: dict, scope: str = "all", orig
     with db.transaction():
         if scope == "all":
             shifted = dict(data)
-            if ev["rrule"] and original_start and data.get("start_at") and not data.get("all_day") and not ev["all_day"]:
-                # moving one occurrence of a series with scope=all shifts the whole series
-                delta = parse_iso(data["start_at"]) - parse_iso(original_start)
-                new_len = (parse_iso(data["end_at"]) - parse_iso(data["start_at"])) if data.get("end_at") else \
-                    (parse_iso(ev["end_at"]) - parse_iso(ev["start_at"]))
-                shifted["start_at"] = iso(parse_iso(ev["start_at"]) + delta)
-                shifted["end_at"] = iso(parse_iso(shifted["start_at"]) + new_len)
+            # Moving one occurrence of a series with scope=all shifts the whole series by
+            # the same amount (instead of re-anchoring the series on that occurrence).
+            if ev["rrule"] and original_start and parse_iso(original_start):
+                if data.get("start_at") and not data.get("all_day") and not ev["all_day"]:
+                    delta = parse_iso(data["start_at"]) - parse_iso(original_start)
+                    new_len = (parse_iso(data["end_at"]) - parse_iso(data["start_at"])) if data.get("end_at") else \
+                        (parse_iso(ev["end_at"]) - parse_iso(ev["start_at"]))
+                    shifted["start_at"] = iso(parse_iso(ev["start_at"]) + delta)
+                    shifted["end_at"] = iso(parse_iso(shifted["start_at"]) + new_len)
+                elif data.get("start_date") and ev["all_day"] and data.get("all_day", True):
+                    occ_day = parse_iso(original_start).astimezone(tz).date()
+                    new_start = parse_date(data["start_date"])
+                    new_end = parse_date(data.get("end_date")) or new_start
+                    series_start = parse_iso(ev["start_at"]).astimezone(tz).date()
+                    shifted["start_date"] = (series_start + (new_start - occ_day)).isoformat()
+                    shifted["end_date"] = (series_start + (new_start - occ_day) + (new_end - new_start)).isoformat()
             values = _event_values(user, shifted, ev)
             if values:
                 values["updated_at"] = now_iso()

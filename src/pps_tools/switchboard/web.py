@@ -193,6 +193,12 @@ def require(*perms: str) -> Callable:
     return deco
 
 
+def client_ip() -> str:
+    """The caller's address. Behind a proxy, set SWITCHBOARD_PROXY_COUNT so this
+    comes from X-Forwarded-For; the raw header is never trusted on its own."""
+    return request.remote_addr or "?"
+
+
 def audit(action: str, entity_type: str | None = None, entity_id: int | None = None, data: dict | None = None) -> None:
     user = current_user()
     db.insert("audit_log", {
@@ -201,7 +207,7 @@ def audit(action: str, entity_type: str | None = None, entity_id: int | None = N
         "entity_type": entity_type,
         "entity_id": entity_id,
         "data_json": db.jdump(data) if data else None,
-        "ip": request.headers.get("X-Forwarded-For", request.remote_addr) if request else None,
+        "ip": client_ip() if request else None,
         "created_at": now_iso(),
     })
 

@@ -106,7 +106,7 @@ function MultiPick({ items, value, onChange, placeholder, emptyText }) {
   const selected = items.filter((i) => (value || []).map(String).includes(String(i.id)));
   const open = (e) => pickFromList(e.currentTarget, {
     items: items.map((i) => ({ id: i.id, label: i.name || i.title || i.label, color: i.color, hint: i.hint })),
-    selected: (value || []).map((x) => (typeof x === 'string' && !Number.isNaN(Number(x)) && items.some((i) => i.id === Number(x)) ? Number(x) : x)),
+    selected: value || [],
     multi: true,
     onChange: (ids) => onChange(ids),
     emptyText: emptyText || 'Nothing to choose from',
@@ -122,7 +122,7 @@ function MultiPick({ items, value, onChange, placeholder, emptyText }) {
 function UserPick({ value, onChange, placeholder }) {
   const ids = value || [];
   return html`<button type="button" class="input rl-pick" onClick=${(e) => pickUsers(e.currentTarget, {
-    selected: ids, multi: true, onChange, filter: (u) => u.role !== 'staff' || true,
+    selected: ids, multi: true, onChange,
   })}>
     ${ids.length ? ids.map((id) => html`<${Chip} key=${id} size="sm" color=${user(id).color}>${user(id).name}</${Chip}>`)
     : html`<span class="muted">${placeholder || 'Choose people…'}</span>`}
@@ -293,6 +293,7 @@ function RuleTester({ rule, opts }) {
     setOutcome(null);
     try {
       setOutcome(await api.post(`/rules/${rule.id}/test`, { conversation_id: conv.id }));
+      setTimeout(() => document.querySelector('.rl-outcome')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 30);
     } catch (err) {
       toastError(err);
     }

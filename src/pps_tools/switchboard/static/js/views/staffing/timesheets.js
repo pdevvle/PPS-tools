@@ -6,8 +6,7 @@ import { api } from '../../lib/api.js';
 import { useFetch } from '../../lib/hooks.js';
 import { navigate } from '../../lib/router.js';
 import { useStore, user as lookupUser, getState } from '../../lib/store.js';
-import { fmtTime, fmtDuration } from '../../lib/format.js';
-import { toLocalInput, fromLocalInput } from '../../lib/dates.js';
+import { fmtDuration } from '../../lib/format.js';
 import {
   Avatar, Banner, Button, Chip, Empty, ErrorBox, Field, Icon, IconButton, Input, Loading, PageHeader, Select, TextArea, cx,
 } from '../../ui/components.js';
@@ -20,8 +19,8 @@ const h = (m) => (m ? String(Math.round((m / 60) * 100) / 100) : '');
 
 function EntryForm({ entry, userId, day, close }) {
   const people = getState().users.filter((u) => u.is_active);
-  const start = entry ? toLocalInput(entry.clock_in) : `${day || S.todayKey()}T08:00`;
-  const end = entry ? (entry.clock_out ? toLocalInput(entry.clock_out) : '') : `${day || S.todayKey()}T16:30`;
+  const start = entry ? S.toOrgInput(entry.clock_in) : `${day || S.todayKey()}T08:00`;
+  const end = entry ? (entry.clock_out ? S.toOrgInput(entry.clock_out) : '') : `${day || S.todayKey()}T16:30`;
   const [form, setForm] = useState({
     user_id: String(entry ? entry.user_id : userId || ''), clock_in: start, clock_out: end,
     break_minutes: entry ? Math.round(entry.break_minutes) : 30, notes: entry ? entry.notes || '' : '', job_id: entry?.job_id || '',
@@ -30,7 +29,7 @@ function EntryForm({ entry, userId, day, close }) {
   const submit = async (e) => {
     e.preventDefault();
     const payload = {
-      clock_in: fromLocalInput(form.clock_in), clock_out: form.clock_out ? fromLocalInput(form.clock_out) : null,
+      clock_in: S.fromOrgInput(form.clock_in), clock_out: form.clock_out ? S.fromOrgInput(form.clock_out) : null,
       break_minutes: Number(form.break_minutes) || 0, notes: form.notes, job_id: form.job_id ? Number(form.job_id) : null,
     };
     try {
@@ -72,8 +71,8 @@ function Entries({ person, manager }) {
     <thead><tr><th>Day</th><th>In</th><th>Out</th><th class="num">Break</th><th class="num">Worked</th><th class="num">OT</th><th>Source</th><th>Note</th>${manager && html`<th></th>`}</tr></thead>
     <tbody>${person.entries.map((e) => html`<tr key=${e.id} class=${cx(e.flag && 'is-flagged')}>
       <td>${S.dayLabel(e.date)}</td>
-      <td class="tabular">${fmtTime(e.clock_in)}</td>
-      <td class="tabular">${e.clock_out ? fmtTime(e.clock_out) : html`<${Chip} tone="ok" size="sm">on the clock</${Chip}>`}
+      <td class="tabular">${S.orgTime(e.clock_in)}</td>
+      <td class="tabular">${e.clock_out ? S.orgTime(e.clock_out) : html`<${Chip} tone="ok" size="sm">on the clock</${Chip}>`}
         ${e.flag && html` <${Chip} tone="warn" size="sm" icon="triangle-alert">Auto clock-out</${Chip}>`}</td>
       <td class="num tabular">${e.break_minutes ? `${Math.round(e.break_minutes)}m` : '—'}</td>
       <td class="num tabular">${fmtDuration(e.worked_minutes)}</td>
@@ -115,7 +114,7 @@ export function TimesheetsPage({ route }) {
     actions=${data && html`
       <div class="btn-group">
         <${Button} size="sm" icon="chevron-left" aria-label="Previous period" onClick=${() => go(data.prev)} />
-        <${Button} size="sm" onClick=${() => navigate('/schedule/timesheets')}>Current</${Button}>
+        <${Button} size="sm" icon="calendar-check" onClick=${() => navigate('/schedule/timesheets')}>Current</${Button}>
         <${Button} size="sm" icon="chevron-right" aria-label="Next period" onClick=${() => go(data.next)} />
       </div>
       ${manager && html`<${Button} size="sm" icon="plus" onClick=${() => openModal((close) => html`<${EntryForm} close=${close} />`)}>Add entry</${Button}>`}

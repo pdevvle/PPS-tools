@@ -196,12 +196,13 @@ export function ScheduleBoard({ route }) {
   });
   const now = useNow(60000);
   const scrollRef = useRef(null);
-  const [width, setWidth] = useState(900);
+  const [width, setWidth] = useState(0); // 0 until the scroll area is measured
   const [drag, setDrag] = useState(null);
   const [dropHint, setDropHint] = useState(null); // { rowKey, x }
   const [showQueue, setShowQueue] = useState(!mobile);
   const dragRef = useRef(null);
-  dragRef.current = drag;
+  const suppressClick = useRef(false); // the click that ends a real drag shouldn't open details
+  const scrolledFor = useRef(null);
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -213,9 +214,22 @@ export function ScheduleBoard({ route }) {
   }, [!!data]);
 
   // -- geometry ---------------------------------------------------------------------
+  // Work windows come from the server in UTC (org timezone applied there), so shading
+  // stays right even when this browser is in another timezone.
   const wh = (data && data.work_hours) || { start: '07:00', end: '18:00', days: [0, 1, 2, 3, 4] };
-  let minMin = Math.max(0, hhmmToMinutes(wh.start, 420) - 60);
-  let maxMin = Math.min(24 * 60, hhmmToMinutes(wh.end, 1080) + 60);
+  const windows = useMemo(() => (data ? data.windows : []).map((w) => [parseISO(w.start_at), parseISO(w.end_at)]), [data]);
+  const pad = view === 'week' ? 30 : 60;
+  let minMin;
+  let maxMin;
+  if (windows.length) {
+    minMin = Math.min(...windows.map(([a]) => minutesOfDay(a)));
+    maxMin = Math.max(...windows.map(([a, b]) => (isSameDay(a, b) ? minutesOfDay(b) : 1440)));
+  } else {
+    minMin = hhmmToMinutes(wh.start, 420);
+    maxMin = hhmmToMinutes(wh.end, 1080);
+  }
+  minMin = Math.max(0, Math.floor((minMin - pad) / 30) * 30);
+  maxMin = Math.min(24 * 60, Math.ceil((maxMin + pad) / 30) * 30);
   for (const b of (data ? data.blocks : [])) {
     const s = parseISO(b.start_at);
     const e = parseISO(b.end_at);
@@ -224,10 +238,11 @@ export function ScheduleBoard({ route }) {
   }
   const span = Math.max(60, maxMin - minMin);
   const labelW = mobile ? 104 : 176;
-  const avail = Math.max(320, width - labelW);
-  const dayWidth = view === 'week' ? Math.max(mobile ? 150 : 132, avail / 7) : Math.max(avail, span * (mobile ? 1.6 : 1.1));
+  const avail = Math.max(320, (width || 900) - labelW);
+  const dayWidth = view === 'week' ? Math.max(150, avail / 7) : Math.max(avail, span * (mobile ? 1.6 : 2));
   const pxPerMin = dayWidth / span;
   const totalW = dayWidth * dayCount;
+  const hourStep = [1, 2, 3, 4, 6, 12, 24].find((h) => h * 60 * pxPerMin >= 46) || 24;
 
   const dayIndex = (d) => {
     for (let i = 0; i < dayCount; i++) if (isSameDay(days[i], d)) return i;
@@ -282,19 +297,23 @@ export function ScheduleBoard({ route }) {
     return out;
   }, [data]);
 
-  // Non-working stripes shared by every row.
+  // Non-working stripes shared by every row: each day's visible span minus work windows.
   const offHours = useMemo(() => {
     const segs = [];
-    const ws = hhmmToMinutes(wh.start, 420);
-    const we = hhmmToMinutes(wh.end, 1080);
     days.forEach((d, i) => {
-      const pyDay = (d.getDay() + 6) % 7; // Python weekday: Monday = 0
-      if (!wh.days.includes(pyDay)) { segs.push({ left: i * dayWidth, width: dayWidth }); return; }
-      if (ws > minMin) segs.push({ left: i * dayWidth, width: (ws - minMin) * pxPerMin });
-      if (we < maxMin) segs.push({ left: i * dayWidth + (we - minMin) * pxPerMin, width: (maxMin - we) * pxPerMin });
+      const open = windows
+        .filter(([a]) => isSameDay(a, d))
+        .map(([a, b]) => [Math.max(minutesOfDay(a), minMin), isSameDay(a, b) ? Math.min(minutesOfDay(b), maxMin) : maxMin])
+        .sort((x, y) => x[0] - y[0]);
+      let cursor = minMin;
+      for (const [a, b] of open) {
+        if (a > cursor) segs.push({ left: i * dayWidth + (cursor - minMin) * pxPerMin, width: (a - cursor) * pxPerMin });
+        cursor = Math.max(cursor, b);
+      }
+      if (cursor < maxMin) segs.push({ left: i * dayWidth + (cursor - minMin) * pxPerMin, width: (maxMin - cursor) * pxPerMin });
     });
     return segs;
-  }, [days, dayWidth, pxPerMin, minMin, maxMin, wh.start, wh.end, wh.days.join(',')]);
+  }, [days, windows, dayWidth, pxPerMin, minMin, maxMin]);
 
   const offShift = (uid) => {
     if (!hasShifts || uid === null) return [];
@@ -319,6 +338,10 @@ export function ScheduleBoard({ route }) {
   };
 
   // -- drag: move & resize ------------------------------------------------------------
+  // Listeners go on in pointerdown itself (not an effect) so a quick click can't release
+  // before they exist. A plain click opens details from the click handler, after the
+  // overlay host has closed (or toggled) popovers on mousedown — for mouse, pen and touch
+  // alike. CSS keeps the grid from selecting text, so no preventDefault here.
   const trackX = (clientX) => {
     const el = scrollRef.current;
     const rect = el.getBoundingClientRect();
@@ -330,58 +353,53 @@ export function ScheduleBoard({ route }) {
     return rowEl ? rowEl.dataset.rowKey : null;
   };
 
-  const startDrag = (e, block, mode) => {
-    if (!manage || e.button !== 0) return;
-    e.stopPropagation();
-    e.preventDefault();
-    const target = e.currentTarget;
-    target.setPointerCapture && target.setPointerCapture(e.pointerId);
-    setDrag({
-      id: block.id, block, mode, startX: e.clientX, startY: e.clientY, dx: 0, moved: false,
-      row: rowKey(group === 'user' ? block.user_id : block.resource_id), targetRow: rowKey(group === 'user' ? block.user_id : block.resource_id),
-      anchorEl: target,
+  const finishDrag = async (d) => {
+    const b = d.block;
+    if (!d.moved) return;
+    suppressClick.current = true;
+    const preview = previewTimes(d);
+    const fields = { start_at: preview.start.toISOString(), end_at: preview.end.toISOString() };
+    if (d.mode === 'move' && d.targetRow !== d.row) {
+      const id = d.targetRow === 'none' ? null : Number(d.targetRow);
+      fields[group === 'user' ? 'user_id' : 'resource_id'] = id;
+    }
+    setData((prev) => prev && {
+      ...prev,
+      blocks: prev.blocks.map((x) => (x.id === b.id ? { ...x, ...fields } : x)),
     });
+    try { await patchOp(b.id, fields); } catch (err) { toastError(err); }
+    reload({ quiet: true });
   };
 
-  useEffect(() => {
-    if (!drag) return undefined;
-    const onMove = (e) => {
+  const startDrag = (e, block, mode) => {
+    if (!manage || e.button !== 0 || dragRef.current) return;
+    e.stopPropagation();
+    suppressClick.current = false;
+    const row = rowKey(group === 'user' ? block.user_id : block.resource_id);
+    dragRef.current = { id: block.id, block, mode, startX: e.clientX, startY: e.clientY, dx: 0, moved: false, row, targetRow: row };
+    setDrag(dragRef.current);
+    const onMove = (ev) => {
       const d = dragRef.current;
       if (!d) return;
-      const dx = e.clientX - d.startX;
-      const moved = d.moved || Math.abs(dx) > 4 || Math.abs(e.clientY - d.startY) > 4;
-      const targetRow = d.mode === 'move' ? (rowAt(e.clientX, e.clientY) || d.targetRow) : d.row;
-      setDrag({ ...d, dx, moved, targetRow });
+      const dx = ev.clientX - d.startX;
+      const moved = d.moved || Math.abs(dx) > 4 || Math.abs(ev.clientY - d.startY) > 4;
+      const targetRow = d.mode === 'move' ? (rowAt(ev.clientX, ev.clientY) || d.targetRow) : d.row;
+      dragRef.current = { ...d, dx, moved, targetRow };
+      setDrag(dragRef.current);
     };
-    const onUp = async () => {
-      const d = dragRef.current;
-      setDrag(null);
-      if (!d) return;
-      const b = d.block;
-      if (!d.moved) {
-        openDetails(d.anchorEl, b);
-        return;
-      }
-      const preview = previewTimes(d);
-      const fields = { start_at: preview.start.toISOString(), end_at: preview.end.toISOString() };
-      if (d.mode === 'move' && d.targetRow !== d.row) {
-        const id = d.targetRow === 'none' ? null : Number(d.targetRow);
-        fields[group === 'user' ? 'user_id' : 'resource_id'] = id;
-      }
-      setData((prev) => prev && {
-        ...prev,
-        blocks: prev.blocks.map((x) => (x.id === b.id ? { ...x, ...fields } : x)),
-      });
-      try { await patchOp(b.id, fields); } catch (err) { toastError(err); }
-      reload({ quiet: true });
-    };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp, { once: true });
-    return () => {
+    const onUp = (ev) => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      const d = dragRef.current;
+      dragRef.current = null;
+      setDrag(null);
+      if (d && ev.type === 'pointerup') finishDrag(d);
     };
-  }, [!!drag]);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+  };
 
   const previewTimes = (d) => {
     const b = d.block;
@@ -442,6 +460,26 @@ export function ScheduleBoard({ route }) {
   }, [q.focus, !!data]);
 
   const nowX = now >= rangeStart.getTime() && now < rangeEnd.getTime() ? xOf(new Date(now).toISOString()) : null;
+
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    const key = `${view}:${rangeStart.getTime()}:${group}`;
+    if (!el || !data || !width || q.focus || scrolledFor.current === key) return;
+    scrolledFor.current = key;
+    const nowMin = minutesOfDay(new Date(now));
+    let x = 0;
+    if (view === 'week') {
+      const i = dayIndex(new Date(now));
+      x = i > 0 && i < dayCount ? i * dayWidth - 8 : 0;
+    } else if (nowX !== null && nowMin > minMin && nowMin < maxMin) {
+      x = nowX - 160;
+    } else if (data.blocks.length) {
+      x = Math.min(...data.blocks.map((b) => xOf(b.start_at))) - 40;
+    } else if (windows.length) {
+      x = xOf(windows[0][0].toISOString()) - 40;
+    }
+    el.scrollLeft = Math.max(0, x);
+  }, [data, width, view, group, rangeStart.getTime()]);
   const conflictCount = data ? data.blocks.filter((b) => b.conflicts && b.conflicts.length).length : 0;
 
   const header = html`<${PageHeader} leading=${html`<${SidebarButton} />`} title="Production schedule" icon="chart-gantt"
@@ -474,11 +512,11 @@ export function ScheduleBoard({ route }) {
               ${days.map((d, i) => html`<div class=${cx('sched-day', isSameDay(d, new Date()) && 'is-today')} key=${i} style=${{ left: i * dayWidth + 'px', width: dayWidth + 'px' }}>
                 ${view === 'week' && html`<div class="sched-day-label">${fmtWeekday(d)} ${d.getDate()}</div>`}
                 <div class="sched-hours">
-                  ${Array.from({ length: Math.floor(span / 60) + 1 }, (_, h) => h).filter((h) => view === 'day' || h % (dayWidth / (span / 60) < 34 ? 3 : 2) === 0).map((h) => {
-    const minutes = minMin + h * 60;
-    if (minutes > maxMin) return null;
+                  ${Array.from({ length: Math.floor(span / 60) + 1 }, (_, h) => h).map((h) => {
+    const minutes = Math.ceil(minMin / 60) * 60 + h * 60;
+    if (minutes >= maxMin || (minutes / 60) % hourStep !== 0) return null;
     const t = new Date(d); t.setHours(0, 0, 0, 0); t.setMinutes(minutes);
-    return html`<span class="sched-hour" key=${h} style=${{ left: h * 60 * pxPerMin + 'px' }}>${fmtTimeShort(t)}</span>`;
+    return html`<span class="sched-hour" key=${h} style=${{ left: (minutes - minMin) * pxPerMin + 'px' }}>${fmtTimeShort(t)}</span>`;
   })}
                 </div>
               </div>`)}
@@ -518,11 +556,14 @@ export function ScheduleBoard({ route }) {
       return html`<div
                     key=${b.id}
                     data-op-id=${b.id}
-                    class=${cx('sched-block', `is-${b.status}`, bad && 'has-conflict', dragging && 'is-dragging', manage && 'is-draggable', b.job_priority === 'rush' && 'is-rush')}
+                    class=${cx('sched-block', `is-${b.status}`, bad && 'has-conflict', dragging && 'is-dragging', manage && 'is-draggable', b.job_priority === 'rush' && 'is-rush', g.width < 56 && 'is-narrow')}
                     style=${{ left: g.left + 'px', width: g.width + 'px', top: top + 'px', '--block': b.stage_color || 'var(--accent)' }}
                     title=${`${b.job_number} · ${b.name}\n${fmtTimeShort(b.start_at)}–${fmtTimeShort(b.end_at)}${bad ? '\n⚠ ' + b.conflicts.map((c) => c.message).join('\n⚠ ') : ''}`}
                     onPointerDown=${(e) => (manage ? startDrag(e, b, 'move') : null)}
-                    onClick=${(e) => { if (!manage) openDetails(e.currentTarget, b); }}
+                    onClick=${(e) => {
+      if (suppressClick.current) { suppressClick.current = false; return; }
+      openDetails(e.currentTarget, b);
+    }}
                     role="button" tabIndex="0"
                     onKeyDown=${(e) => { if (e.key === 'Enter') openDetails(e.currentTarget, b); }}
                   >

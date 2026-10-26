@@ -6,14 +6,16 @@ import threading
 import time
 from datetime import timedelta
 
-from flask import Blueprint, current_app, request, session
+from flask import Blueprint, current_app, session
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from pps_tools.switchboard import config, db
 from pps_tools.switchboard.api.core import me_payload
 from pps_tools.switchboard.services import mailer, settings
 from pps_tools.switchboard.util import iso, now, now_iso, parse_iso, pick_color, token
-from pps_tools.switchboard.web import ApiError, audit, bad_request, body, conflict, current_user, login_required, ok
+from pps_tools.switchboard.web import (
+    ApiError, audit, bad_request, body, client_ip, conflict, current_user, login_required, ok,
+)
 
 bp = Blueprint("auth", __name__)
 
@@ -25,8 +27,7 @@ MAX_FAILURES = 10
 
 
 def _throttle_keys(email: str) -> list[str]:
-    ip = request.headers.get("X-Forwarded-For", request.remote_addr or "?").split(",")[0].strip()
-    return [f"ip:{ip}", f"email:{email}"]
+    return [f"ip:{client_ip()}", f"email:{email}"]
 
 
 def _check_throttle(email: str) -> None:

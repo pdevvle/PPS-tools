@@ -235,7 +235,7 @@ function ConnectInfo({ channel }) {
   }
   const info = channel.connect || {};
   const warn = !info.base_is_public && html`<${Banner} tone="warn">
-    Switchboard is running at <span class="mono">${info.base_url}</span>, which the internet can't reach. Set
+    Switchboard is running at <span class="mono">${info.base_url}</span>, which the internet can't reach. Set${' '}
     <span class="mono">SWITCHBOARD_BASE_URL</span> to your public address (and restart) before using these URLs.</${Banner}>`;
   if (channel.type === 'chat') {
     return html`<div class="stack">${warn}
@@ -361,7 +361,7 @@ function ChannelEditor({ initial, type, close, onSaved, presets }) {
         ${tab === 'setup' && (type === 'sms' || type === 'whatsapp') && html`<${TwilioSetup} form=${form} setConfig=${setConfig} type=${type} />`}
         ${tab === 'setup' && type === 'chat' && html`<${ChatSetup} form=${form} set=${set} setConfig=${setConfig} />`}
         ${tab === 'setup' && type === 'api' && html`<div class="stack">
-          <p class="text-2">Messages posted by your website forms, Zapier or other tools arrive in the inbox like email. Replies go back to the sender's email address when there is one; with a reply URL they're also POSTed to your system.</p>
+          <p class="text-2">Messages posted by your website forms, Zapier or other tools arrive in the inbox like email. Replies are emailed to the sender from your system email account when they left an address — or, if you set a reply URL above, POSTed to your system instead.</p>
         </div>`}
         ${tab === 'sending' && html`<${EmailSending} form=${form} set=${set} setConfig=${setConfig} />`}
         ${tab === 'access' && html`<${AccessFields} form=${form} set=${set} />`}

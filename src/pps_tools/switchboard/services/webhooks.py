@@ -255,8 +255,8 @@ def send_test(webhook_id: int) -> dict:
 
 def retry(delivery_id: int) -> dict:
     with db.transaction():
-        db.update("webhook_deliveries", delivery_id, {"status": "pending", "attempts": 0, "next_attempt_at": now_iso(),
-                                                       "error": None})
+        db.update("webhook_deliveries", delivery_id,
+                  {"status": "pending", "attempts": 0, "next_attempt_at": now_iso(), "error": None})
     return db.one("SELECT * FROM webhook_deliveries WHERE id = ?", delivery_id)
 
 

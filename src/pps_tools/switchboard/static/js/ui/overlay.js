@@ -313,6 +313,7 @@ export function Menu({ items, close }) {
         ${item.color && html`<span class="color-dot" style=${{ background: item.color }}></span>`}
         ${item.icon && html`<${Icon} name=${item.icon} size=${15} class="menu-icon" />`}
         <span class="menu-label">${item.label}${item.hint && html`<span class="menu-hint">${item.hint}</span>`}</span>
+        ${item.count ? html`<span class="menu-count">${item.count > 99 ? '99+' : item.count}</span>` : null}
         ${item.shortcut && html`<span class="menu-shortcut">${item.shortcut}</span>`}
       </button>`;
   })}

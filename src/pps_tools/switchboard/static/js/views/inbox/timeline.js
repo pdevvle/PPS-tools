@@ -297,7 +297,15 @@ const EVENT_ICONS = {
   unsnoozed: 'alarm-clock', labeled: 'tag', unlabeled: 'tag', moved_team: 'users-round', priority: 'flag',
   renamed: 'pencil', spam: 'octagon-alert', not_spam: 'inbox', trashed: 'trash', restored: 'archive-restore',
   merged: 'git-merge', reminder_set: 'bell', reminder: 'bell-ring', discussion_started: 'messages-square',
-  rule_applied: 'zap', task_created: 'square-check-big',
+  rule_applied: 'zap', task_created: 'square-check-big', task_completed: 'square-check-big',
+  job_linked: 'square-kanban', job_unlinked: 'square-kanban',
+};
+
+const RULE_ACTIONS = {
+  assign: 'assigned', unassign: 'unassigned', add_label: 'labeled', remove_label: 'removed a label', move_team: 'moved team',
+  close: 'closed', snooze: 'snoozed', priority: 'set priority', spam: 'marked spam', trash: 'trashed',
+  auto_reply: 'sent an auto-reply', add_comment: 'added a note', forward: 'forwarded', notify: 'notified people',
+  webhook: 'called a webhook', stop: '',
 };
 
 function eventText(e, teams) {
@@ -326,8 +334,14 @@ function eventText(e, teams) {
     case 'reminder_set': return html`<b>${who}</b> set a reminder for ${fmtDateTime(d.at)}${d.condition === 'no_reply' ? ' if no one replies' : ''}`;
     case 'reminder': return html`Reminder for <b>${who}</b>${d.note ? `: ${d.note}` : ''}`;
     case 'discussion_started': return html`<b>${who}</b> started this discussion`;
-    case 'rule_applied': return html`Rule <b>${d.name || ''}</b> ran`;
+    case 'rule_applied': {
+      const did = (d.actions || []).map((a) => RULE_ACTIONS[a] || a.replace(/_/g, ' ')).filter(Boolean);
+      return html`Rule <b>${d.name || ''}</b> ran${did.length ? `: ${[...new Set(did)].join(', ')}` : ''}`;
+    }
     case 'task_created': return html`<b>${who}</b> added a task: ${d.title || ''}`;
+    case 'task_completed': return html`<b>${who}</b> completed the task: ${d.title || ''}`;
+    case 'job_linked': return html`<b>${who || 'Switchboard'}</b> linked job <a href=${`/jobs/${d.job_id}`}>${d.number}</a>${d.title ? ` · ${d.title}` : ''}`;
+    case 'job_unlinked': return html`<b>${who || 'Switchboard'}</b> unlinked job <a href=${`/jobs/${d.job_id}`}>${d.number}</a>`;
     default: return html`${who ? html`<b>${who}</b> ` : ''}${String(e.event).replace(/_/g, ' ')}`;
   }
 }

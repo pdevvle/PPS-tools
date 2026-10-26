@@ -71,8 +71,10 @@ export function weekStartKey(key, weekStart = 0) {
   return dateKey(addDays(d, -diff));
 }
 
+// Today's date in the shop's timezone (matches the server's idea of "today").
 export function todayKey() {
-  return dateKey(new Date());
+  const p = orgParts(Date.now());
+  return `${p.year}-${p.month}-${p.day}`;
 }
 
 const dayFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short' });
@@ -143,6 +145,73 @@ export function timeOffSpan(r) {
 
 export function personName(id) {
   return id ? lookupUser(id).name : 'Open shift';
+}
+
+// -- the shop's timezone ----------------------------------------------------------------
+//
+// Punch times and the kiosk clock show the shop's wall-clock time (org.timezone), the
+// same as the schedule, whatever timezone the viewer's device is set to.
+
+const orgFormatters = new Map();
+function orgFormatter(opts) {
+  const tz = getState().settings['org.timezone'];
+  const key = tz + JSON.stringify(opts);
+  if (!orgFormatters.has(key)) {
+    let f;
+    try { f = new Intl.DateTimeFormat(undefined, { ...opts, timeZone: tz || undefined }); } catch { f = new Intl.DateTimeFormat(undefined, opts); }
+    orgFormatters.set(key, f);
+  }
+  return orgFormatters.get(key);
+}
+
+export function orgTime(value) {
+  if (!value) return '';
+  return orgFormatter({ hour: 'numeric', minute: '2-digit' }).format(new Date(value));
+}
+
+export function orgDateLong(value = new Date()) {
+  return orgFormatter({ weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(new Date(value));
+}
+
+function orgParts(ts) {
+  const parts = {};
+  for (const p of orgFormatter({ year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(ts))) {
+    parts[p.type] = p.value;
+  }
+  return parts;
+}
+
+// Instant -> 'YYYY-MM-DDTHH:MM' wall time in the shop's timezone (for datetime-local inputs).
+export function toOrgInput(value) {
+  if (!value) return '';
+  const p = orgParts(new Date(value).getTime());
+  return `${p.year}-${p.month}-${p.day}T${p.hour === '24' ? '00' : p.hour}:${p.minute}`;
+}
+
+// Shop wall time 'YYYY-MM-DDTHH:MM' -> ISO instant.
+export function fromOrgInput(value) {
+  if (!value) return null;
+  const [d, t] = value.split('T');
+  const [y, m, day] = d.split('-').map(Number);
+  const [hh, mm] = t.split(':').map(Number);
+  const wall = Date.UTC(y, m - 1, day, hh, mm);
+  const offsetAt = (ts) => {
+    const p = orgParts(ts);
+    return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute) - Math.floor(ts / 60000) * 60000;
+  };
+  let ts = wall - offsetAt(wall);
+  const again = wall - offsetAt(ts);
+  if (again !== ts) ts = again;
+  return new Date(ts).toISOString();
+}
+
+export function untilLabel(value) {
+  const mins = Math.round((new Date(value).getTime() - Date.now()) / 60000);
+  if (mins <= 0) return 'now';
+  if (mins < 60) return `in ${mins}m`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 36) return `in ${hrs}h`;
+  return `in ${Math.round(hrs / 24)} days`;
 }
 
 // -- small components ------------------------------------------------------------------

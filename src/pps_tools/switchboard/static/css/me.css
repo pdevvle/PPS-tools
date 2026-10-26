@@ -6,4 +6,4 @@
 .widget-lg { grid-column: span 12; }
 .widget > .card { height: 100%; }
 @media (max-width: 1180px) { .widget-sm { grid-column: span 6; } .widget-md { grid-column: span 6; } }
-@media (max-width: 760px) { .widget-grid { grid-template-columns: 1fr; } .widget-sm, .widget-md, .widget-lg { grid-column: auto; } }
+@media (max-width: 760px) { .widget-grid { grid-template-columns: minmax(0, 1fr); } .widget-sm, .widget-md, .widget-lg { grid-column: auto; } }

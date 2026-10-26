@@ -496,3 +496,31 @@ def test_missed_chat_replies_are_emailed_once(client, owner, monkeypatch):
     assert chat_channel.email_missed_replies() == 1
     assert sent[0][0] == "ellie@cust.test" and "3 business days!" in sent[0][2]
     assert chat_channel.email_missed_replies() == 0
+
+
+def test_demo_channel_never_sends_system_email(client, smtp):
+    client.post("/api/channels", {"type": "email", "address": "orders@shop.test", "config": {"demo": True}}, expect=201)
+    assert mailer.send_system_email("x@y.test", "Hi", "<p>hi</p>") is False
+    assert smtp.sent == []
+
+
+def test_form_replies_are_emailed_from_the_system_account(client, smtp):
+    make_email_channel(client)
+    form = client.post("/api/channels", {"type": "api", "name": "Quote form"}, expect=201)["channel"]
+    res = client.post(f"/api/channels/{form['id']}/messages", {
+        "from": {"name": "Renee", "handle": "renee@dental.test"}, "subject": "Appointment cards", "body_text": "2,500 please"},
+        expect=201)
+    d = client.post("/api/drafts", {"conversation_id": res["conversation_id"], "body_html": "<p>Quote attached!</p>"})["draft"]
+    client.post(f"/api/drafts/{d['id']}/send", {})
+    assert outbox.process_outbox() == 1
+    from_addr, rcpt, raw = smtp.sent[0]
+    msg = message_from_bytes(raw, policy=policy.default)
+    assert rcpt == ["renee@dental.test"] and from_addr == "orders@shop.test"
+    assert msg["Subject"] == "Re: Appointment cards"
+    stored = db.one("SELECT external_id, status FROM messages WHERE direction = 'out'")
+    assert stored["status"] == "sent" and stored["external_id"] == msg["Message-ID"]
+    # the customer's emailed answer threads back into the form conversation
+    email = db.one("SELECT * FROM channels WHERE type = 'email'")
+    reply = _deliver({"id": email["id"]}, raw_email(subject="Re: Appointment cards", sender="renee@dental.test",
+                                                    msgid="<renee2@dental.test>", in_reply_to=stored["external_id"]))
+    assert reply["conversation_id"] == res["conversation_id"]
