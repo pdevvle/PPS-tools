@@ -237,3 +237,48 @@ def test_due_on_receipt_and_day_of_month_terms(s, b):
     inv = invoice(s, cust, [{"item_id": item.id, "qty": "1"}], date="2026-05-05")
     assert inv.due_date == date(2026, 5, 5)
     assert inv.due_date - inv.date == timedelta(0)
+
+
+def test_progress_invoicing_bills_an_estimate_in_parts(s, b):
+    from pps_tools.books.web.txn import _progress_lines
+
+    cust = b.customer()
+    cards = b.service(price="0.09")
+    est = tx.save(s, {"type": "estimate", "customer_id": cust.id, "date": "2026-03-01", "lines": [
+        {"item_id": cards.id, "qty": "500", "rate": "0.09", "taxable": False},
+        {"kind": "item", "account_id": b.acct("Graphic Design").id, "qty": "1", "rate": "200", "taxable": False,
+         "description": "Design"}]})
+    assert est.total_cents == 24500
+
+    def progress_invoice(pct=None):
+        lines = _progress_lines(s, est, tx.to_payload(est, for_copy=True)["lines"], pct)
+        return tx.save(s, {"type": "invoice", "customer_id": cust.id, "date": "2026-03-02",
+                           "source_estimate_id": est.id, "lines": lines})
+
+    first = progress_invoice("50")
+    assert first.total_cents == 12250
+    assert [str(ln.qty) for ln in first.lines] == ["250", "1"]  # half the cards, half the lump-sum design
+    assert est.status == "pending"  # still open: half is left
+    assert tx.estimate_remaining(s, est) == 12250
+    rest = progress_invoice()
+    assert rest.total_cents == 12250 and est.status == "closed"
+    assert tx.estimate_remaining(s, est) == 0
+    tx.void(s, rest)
+    assert est.status == "accepted" and tx.estimate_remaining(s, est) == 12250
+    again = progress_invoice("25")
+    assert again.total_cents == 6125
+    b.assert_balanced()
+
+
+def test_without_progress_invoicing_one_invoice_closes_the_estimate(s, b):
+    from pps_tools.books.services import prefs
+    from pps_tools.books.web.txn import _progress_lines
+
+    prefs.set_many(s, {"progress_invoicing": False})
+    cust = b.customer()
+    est = tx.save(s, {"type": "estimate", "customer_id": cust.id, "date": "2026-03-01", "lines": [
+        {"kind": "item", "account_id": b.acct("Printing Services").id, "qty": "1", "rate": "100"}]})
+    lines = _progress_lines(s, est, tx.to_payload(est, for_copy=True)["lines"], "50")
+    assert lines[0]["amount_cents"] == 10000  # the percentage is ignored: the whole estimate
+    tx.save(s, {"type": "invoice", "customer_id": cust.id, "source_estimate_id": est.id, "lines": lines})
+    assert est.status == "closed"

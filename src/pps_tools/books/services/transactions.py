@@ -981,17 +981,40 @@ def recompute_po_lines(s: Session, po_line_ids: Iterable[int]) -> None:
             po.status = "closed" if lines and all(ln.closed for ln in lines) else "open"
 
 
+def estimate_progress(s: Session, est: Transaction) -> dict[int, int]:
+    """{estimate line id: amount already on (non-voided) invoices}, for progress invoicing."""
+    ids = [ln.id for ln in est.lines if ln.kind in ("item", "account")]
+    if not ids:
+        return {}
+    q = (select(TransactionLine.source_id, func.sum(TransactionLine.amount_cents))
+         .join(Transaction, Transaction.id == TransactionLine.txn_id)
+         .where(TransactionLine.source_type == "estimate_line", TransactionLine.source_id.in_(ids),
+                Transaction.type == "invoice", Transaction.voided.is_(False))
+         .group_by(TransactionLine.source_id))
+    return {int(lid): int(amt or 0) for lid, amt in s.execute(q)}
+
+
+def estimate_remaining(s: Session, est: Transaction) -> int:
+    """Pre-tax amount of the estimate's lines not yet invoiced."""
+    done = estimate_progress(s, est)
+    return sum(max(0, ln.amount_cents - done.get(ln.id, 0)) for ln in est.lines if ln.kind in ("item", "account"))
+
+
 def _sync_workflow_statuses(s: Session, txn: Transaction, old_related: set[int]) -> None:
     for rid in old_related | related_ids(s, txn):
         other = s.get(Transaction, rid)
         if other is None:
             continue
         if other.type == "estimate":
-            linked = s.scalar(select(TransactionLink.id).where(TransactionLink.to_txn_id == other.id,
-                                                               TransactionLink.link_type == "estimate").limit(1))
-            if linked and other.status in ("pending", "accepted"):
+            linked = s.scalar(select(TransactionLink.id).join(Transaction, Transaction.id == TransactionLink.from_txn_id)
+                              .where(TransactionLink.to_txn_id == other.id, TransactionLink.link_type == "estimate",
+                                     Transaction.voided.is_(False)).limit(1))
+            # With progress invoicing an estimate stays open until every line has been invoiced.
+            partial = bool(linked) and prefs.get(s, "progress_invoicing") and bool(estimate_progress(s, other)) \
+                and estimate_remaining(s, other) > 0
+            if linked and not partial and other.status in ("pending", "accepted"):
                 other.status = "closed"
-            elif not linked and other.status in ("closed", "converted"):
+            elif (not linked or partial) and other.status in ("closed", "converted"):
                 other.status = "accepted"
         if other.type in ("delayed_charge", "delayed_credit"):
             billed = s.scalar(select(TransactionLine.id).where(

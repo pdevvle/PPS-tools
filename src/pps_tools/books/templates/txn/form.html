@@ -30,6 +30,7 @@
         {% if txn and txn.voided %}<span class="void-stamp">VOID</span>{% endif %}
         {% if txn and txn.needs_review %}<span class="badge review">Needs review</span>{% endif %}
       </h1>
+      {% if t == 'estimate' and estimate_invoiced %}<div class="muted small">Invoiced {{ estimate_invoiced|money }} so far · {{ estimate_remaining|money }} left before tax</div>{% endif %}
       {% if txn and txn.source != 'manual' %}<div class="muted small">Created by {{ txn.source.replace('_', ' ') }}{% if txn.stripe_payment_intent_id %} · Stripe {{ txn.stripe_payment_intent_id }}{% endif %}</div>{% endif %}
     </div>
     <div class="big-amount">
@@ -301,7 +302,10 @@
           <a href="{{ url_for('txn.history', txn_id=txn.id) }}">Audit history</a>
           {% if info.customer_facing or info.vendor_facing %}<a href="{{ url_for('txn.pdf', txn_id=txn.id, inline=1) }}" target="_blank">Print or preview PDF</a>{% endif %}
           {% if t in ('check', 'bill_payment', 'customer_refund') %}<a href="{{ url_for('txn.print_check', txn_id=txn.id) }}" target="_blank">Print check</a>{% endif %}
-          {% if t == 'estimate' and not txn.voided %}<a href="{{ url_for('txn.new', slug='invoices', from_estimate=txn.id) }}">Convert to invoice</a>{% endif %}
+          {% if t == 'estimate' and not txn.voided and (estimate_remaining is not defined or estimate_remaining > 0) %}
+            <a href="{{ url_for('txn.new', slug='invoices', from_estimate=txn.id) }}">{{ 'Invoice the rest' if estimate_invoiced else 'Convert to invoice' }}</a>
+            {% if prefs.progress_invoicing %}{% for pct in (25, 50) %}<a href="{{ url_for('txn.new', slug='invoices', from_estimate=txn.id, pct=pct) }}">Progress invoice for {{ pct }}%</a>{% endfor %}{% endif %}
+          {% endif %}
           {% if t == 'purchase_order' and txn.status == 'open' %}<a href="{{ url_for('txn.new', slug='bills', from_po=txn.id) }}">Copy to bill</a>{% endif %}
           {% if t == 'invoice' and txn.balance_cents > 0 and not txn.voided %}<a href="{{ url_for('txn.new', slug='payments', invoice_id=txn.id) }}">Receive payment</a>{% endif %}
           {% if t == 'bill' and txn.balance_cents > 0 and not txn.voided %}<a href="{{ url_for('txn.new', slug='bill-payments', bill_id=txn.id) }}">Make payment</a>{% endif %}
