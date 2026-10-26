@@ -12,6 +12,9 @@ venv/
 env/
 .env
 *.db
+*.db-wal
+*.db-shm
+*.db-journal
 *.sqlite
 *.sqlite3
 reports/*.html
@@ -28,3 +31,6 @@ htmlcov/
 *.swp
 *.swo
 *~
+
+# Switchboard runtime data (database, attachments, secret key)
+switchboard_data/
