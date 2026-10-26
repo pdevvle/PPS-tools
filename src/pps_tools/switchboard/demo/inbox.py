@@ -68,6 +68,12 @@ def _mention(uid, name):
 
 
 def _finish(conv_id, read_by=(), first_response=None):
+    first = db.scalar(
+        "SELECT MIN(at) FROM (SELECT MIN(date) AS at FROM messages WHERE conversation_id = ? "
+        "UNION ALL SELECT MIN(created_at) FROM comments WHERE conversation_id = ?)", conv_id, conv_id,
+    )
+    if first:
+        db.execute("UPDATE conversations SET created_at = MIN(created_at, ?) WHERE id = ?", first, conv_id)
     inbox.recompute(conv_id)
     conv = inbox.get(conv_id)
     if first_response:

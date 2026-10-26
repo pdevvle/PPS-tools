@@ -205,14 +205,18 @@ export function RichEditor({
     const p = popupRef.current;
     if (!p || !item) return;
     const sel = window.getSelection();
-    const range = document.createRange();
     const ctx = textBeforeCaret();
     if (ctx && ctx.node === p.node) {
-      range.setStart(p.node, Math.max(0, p.start));
-      range.setEnd(p.node, ctx.offset);
+      // Remove the "@query" / "/query" trigger text. A plain trailing space would be
+      // swallowed by insertHTML, so keep it as a non-breaking space.
+      const text = p.node.textContent;
+      const before = text.slice(0, Math.max(0, p.start)).replace(/ $/, '\u00a0');
+      p.node.textContent = before + text.slice(ctx.offset);
+      const range = document.createRange();
+      range.setStart(p.node, before.length);
+      range.collapse(true);
       sel.removeAllRanges();
       sel.addRange(range);
-      range.deleteContents();
     }
     document.execCommand('insertHTML', false, item.html);
     closePopup();
@@ -300,7 +304,7 @@ export function RichEditor({
 
   const saveRange = () => {
     const sel = window.getSelection();
-    if (sel && sel.rangeCount && elRef.current.contains(sel.anchorNode)) savedRange.current = sel.getRangeAt(0).cloneRange();
+    if (elRef.current && sel && sel.rangeCount && elRef.current.contains(sel.anchorNode)) savedRange.current = sel.getRangeAt(0).cloneRange();
   };
 
   const addLink = async () => {

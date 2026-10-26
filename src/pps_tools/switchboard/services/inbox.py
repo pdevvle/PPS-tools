@@ -304,6 +304,9 @@ def deliver_inbound(msg: Inbound) -> dict | None:
         if not contact and msg.from_handle:
             kind = "email" if msg.kind == "email" or "@" in msg.from_handle else "phone"
             contact = contacts_svc.resolve(kind, msg.from_handle, msg.from_name)
+        if not contact and msg.kind == "chat" and msg.thread_key:
+            # Anonymous website visitor: a contact keyed by their chat session.
+            contact = contacts_svc.resolve("chat", msg.thread_key, msg.from_name or "Website visitor")
         conv = _thread_for(msg, contact)
         is_new = conv is None
         if is_new:
@@ -727,15 +730,17 @@ def delete_forever(cid: int) -> None:
 
 def recompute(cid: int) -> None:
     """Rebuild counters and preview from the conversation's messages and comments."""
+    # Scheduled (send-later) messages count, but don't move "last activity" into the future.
     stats = db.one(
-        "SELECT COUNT(*) AS n, MAX(date) AS last_date, "
+        "SELECT COUNT(*) AS n, MAX(CASE WHEN status != 'scheduled' THEN date END) AS last_date, "
         "MAX(CASE WHEN direction = 'in' THEN date END) AS last_in, "
         "MAX(CASE WHEN direction = 'out' AND status NOT IN ('scheduled', 'failed') THEN date END) AS last_out "
-        "FROM messages WHERE conversation_id = ?",
+        "FROM messages WHERE conversation_id = ? AND status != 'cancelled'",
         cid,
     )
     comments = db.one("SELECT COUNT(*) AS n, MAX(created_at) AS last FROM comments WHERE conversation_id = ? AND deleted_at IS NULL", cid)
-    last = db.one("SELECT snippet FROM messages WHERE conversation_id = ? ORDER BY date DESC, id DESC LIMIT 1", cid)
+    last = db.one("SELECT snippet FROM messages WHERE conversation_id = ? AND status NOT IN ('scheduled', 'cancelled') "
+                  "ORDER BY date DESC, id DESC LIMIT 1", cid)
     conv = get(cid)
     activity = max([x for x in (stats["last_date"], comments["last"], conv["created_at"]) if x])
     db.update("conversations", cid, {

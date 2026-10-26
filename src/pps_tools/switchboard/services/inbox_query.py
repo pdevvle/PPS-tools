@@ -254,8 +254,9 @@ def list_conversations(user: dict, mailbox: str = "inbox", q: str | None = None,
 
 
 def _channel_index() -> dict[int, dict]:
-    return {c["id"]: {"id": c["id"], "type": c["type"], "name": c["name"], "address": c["address"]}
-            for c in db.query("SELECT id, type, name, address FROM channels")}
+    return {c["id"]: {"id": c["id"], "type": c["type"], "name": c["name"], "address": c["address"],
+                      "visibility": c["visibility"]}
+            for c in db.query("SELECT id, type, name, address, visibility FROM channels")}
 
 
 def summaries(user: dict, rows: list[dict]) -> list[dict]:
@@ -298,7 +299,8 @@ def summaries(user: dict, rows: list[dict]) -> list[dict]:
         last_read = r.get("my_last_read_at")
         awaiting = bool(r["last_inbound_at"] and (not r["last_outbound_at"] or r["last_outbound_at"] < r["last_inbound_at"]))
         overdue = False
-        if awaiting and sla_minutes and r["status"] == "open":
+        shared = r["team_id"] or (channels.get(r["channel_id"]) or {}).get("visibility") == "shared"
+        if awaiting and sla_minutes and r["status"] == "open" and shared:
             overdue = (current - parse_iso(r["last_inbound_at"])).total_seconds() > sla_minutes * 60
         out.append({
             "id": r["id"],

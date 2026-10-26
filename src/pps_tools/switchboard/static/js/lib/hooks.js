@@ -9,7 +9,7 @@ import { on } from './events.js';
 //   const { data, loading, error, reload, setData } = useFetch('/jobs', {
 //     query: { stage: 3 },
 //     refetchOn: ['job.changed'],          // server events that may affect this data
-//     filter: (evt) => evt.id === jobId,   // optional: only refetch for matching events
+//     filter: (evt, type) => evt.id === jobId,   // optional: only refetch for matching events
 //   });
 //
 // Pass path = null to skip loading. Stale responses (after the key changed) are ignored.
@@ -53,7 +53,7 @@ export function useFetch(path, { query, refetchOn = [], filter, interval, deps =
       timer = setTimeout(() => load({ quiet: true }), 150);
     };
     const offs = [...refetchOn, 'reconnected'].map((type) => on(type, (data) => {
-      if (type !== 'reconnected' && filterRef.current && !filterRef.current(data || {})) return;
+      if (type !== 'reconnected' && filterRef.current && !filterRef.current(data || {}, type)) return;
       schedule();
     }));
     let poll = null;
