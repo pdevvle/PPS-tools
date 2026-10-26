@@ -8,8 +8,10 @@ import json
 import os
 import sqlite3
 import tempfile
+import time
+from pathlib import Path
 
-from flask import Blueprint, Response, request, send_file
+from flask import Blueprint, Response, request
 
 from pps_tools.switchboard import config, db
 from pps_tools.switchboard.api.core import APP_VERSION
@@ -310,12 +312,24 @@ def test_integration():
 # -- backup, export, audit ------------------------------------------------------------
 
 
+def _remove_stale_backups(folder: Path) -> None:
+    """Temp copies are deleted once sent; this catches any left by a crash."""
+    cutoff = time.time() - 3600
+    for leftover in folder.glob("switchboard-backup-*.db"):
+        try:
+            if leftover.stat().st_mtime < cutoff:
+                leftover.unlink()
+        except OSError:
+            pass
+
+
 @bp.get("/api/admin/backup")
 @require("admin")
 def backup():
-    """A consistent copy of the live database (SQLite online backup)."""
-    cfg = config.current()
-    fd, path = tempfile.mkstemp(prefix="switchboard-backup-", suffix=".db", dir=str(cfg.data_dir))
+    """A consistent copy of the live database (SQLite online backup), streamed and then deleted."""
+    folder = Path(config.current().data_dir)
+    _remove_stale_backups(folder)
+    fd, path = tempfile.mkstemp(prefix="switchboard-backup-", suffix=".db", dir=str(folder))
     os.close(fd)
     src = sqlite3.connect(str(db.path()))
     dst = sqlite3.connect(path)
@@ -326,12 +340,21 @@ def backup():
         src.close()
         dst.close()
     audit("data.backup")
+
+    def stream():
+        try:
+            with open(path, "rb") as fh:
+                while chunk := fh.read(256 * 1024):
+                    yield chunk
+        finally:
+            os.unlink(path)
+
     stamp = now().strftime("%Y%m%d-%H%M")
-    response = send_file(path, as_attachment=True, download_name=f"switchboard-backup-{stamp}.db",
-                         mimetype="application/vnd.sqlite3", max_age=0)
-    response.headers["Cache-Control"] = "no-store"
-    response.call_on_close(lambda: os.path.exists(path) and os.unlink(path))
-    return response
+    return Response(stream(), mimetype="application/vnd.sqlite3", headers={
+        "Content-Disposition": f'attachment; filename="switchboard-backup-{stamp}.db"',
+        "Content-Length": str(os.path.getsize(path)),
+        "Cache-Control": "no-store",
+    })
 
 
 USER_FIELDS = ("id", "email", "name", "role", "is_active", "title", "phone", "color", "timezone", "created_at",
@@ -455,4 +478,3 @@ def seed(ctx) -> None:
     from pps_tools.switchboard.demo.admin import seed_admin
 
     seed_admin(ctx)
-

@@ -7,7 +7,7 @@ import { navigate } from '../../lib/router.js';
 import { useFetch, usePresence } from '../../lib/hooks.js';
 import { fmtBytes, fmtDateTime, fmtDuration, fmtMoney, fmtTimeShort, fmtDate } from '../../lib/format.js';
 import {
-  Avatar, AvatarStack, Banner, Button, Card, Checkbox, Chip, Empty, ErrorBox, Field, Icon, IconButton, Input, Loading,
+  Avatar, AvatarStack, Banner, Button, Card, Checkbox, Chip, Empty, ErrorBox, Field, Icon, IconButton, Input, KeyValue, Loading,
   PageHeader, ProgressBar, RelTime, Select, SidePanel, TextArea, cx,
 } from '../../ui/components.js';
 import { SidebarButton } from '../../ui/layout.js';
@@ -59,42 +59,61 @@ function Viewers({ id }) {
 
 // -- summary & specs ----------------------------------------------------------------
 
+function ReadOnlySummary({ job }) {
+  const dash = html`<span class="muted">—</span>`;
+  return html`<${Card} title="Details" icon="clipboard-list">
+    <${KeyValue} items=${[
+    ['Customer', html`<span class="row row-wrap gap-2">${customerOf(job) || dash}
+        ${job.contact && can('inbox') && html`<a class="text-sm" href=${`/contacts/${job.contact.id}`}>View contact</a>`}</span>`],
+    ['Due', job.due_at ? fmtDateTime(job.due_at) : dash],
+    ['Priority', html`<${PriorityChip} priority=${job.priority} showNormal />`],
+    ['Quantity', job.quantity != null ? Number(job.quantity).toLocaleString() : dash],
+    ['Quote', job.quote_amount != null ? fmtMoney(job.quote_amount) : dash],
+    ['PO number', job.po_number || dash],
+    ['Estimate', job.estimated_minutes ? fmtDuration(job.estimated_minutes) : dash],
+    ['Delivery / install', job.address || dash],
+    (job.tags || []).length > 0 && ['Tags', html`<span class="row row-wrap gap-1">${job.tags.map((t) => html`<${Chip} key=${t} size="sm">${t}</${Chip}>`)}</span>`],
+  ]} />
+    ${job.description && html`<div class="job-notes-static">${job.description}</div>`}
+  </${Card}>`;
+}
+
 function SummaryCard({ job, patch, manage }) {
   const [desc, setDesc] = useState(job.description || '');
   useEffect(() => setDesc(job.description || ''), [job.description]);
+  if (!manage) return html`<${ReadOnlySummary} job=${job} />`;
   const contact = job.contact ? { id: job.contact.id, name: job.contact.display_name, hint: job.contact.email || job.contact.phone } : null;
   const numberField = (key, label, step) => html`<${Field} label=${label}>
-    <${Input} type="number" min="0" step=${step} disabled=${!manage} value=${job[key] ?? ''}
+    <${Input} type="number" min="0" step=${step} value=${job[key] == null ? '' : step === '0.01' ? Number(job[key]).toFixed(2) : job[key]}
       onBlur=${(e) => { const v = e.currentTarget.value; const n = v === '' ? null : Number(v); if (n !== job[key]) patch({ [key]: n }); }} />
   </${Field}>`;
   const textField = (key, label, placeholder) => html`<${Field} label=${label}>
-    <${Input} disabled=${!manage} value=${job[key] || ''} placeholder=${placeholder}
+    <${Input} value=${job[key] || ''} placeholder=${placeholder}
       onBlur=${(e) => { const v = e.currentTarget.value.trim(); if (v !== (job[key] || '')) patch({ [key]: v || null }); }} />
   </${Field}>`;
   return html`<${Card} title="Details" icon="clipboard-list">
     <div class="form-grid">
       <${Field} label="Customer" class="span-2">
-        ${manage ? html`<${CustomerField} contact=${contact} onChange=${(c) => patch({ contact_id: c ? c.id : null, organization_id: null })} />`
-    : html`<span>${customerOf(job) || '—'}</span>`}
-        ${job.contact && html`<a class="text-sm" href=${`/contacts/${job.contact.id}`}>View contact</a>`}
+        <${CustomerField} contact=${contact} onChange=${(c) => patch({ contact_id: c ? c.id : null, organization_id: null })} />
+        ${job.contact && can('inbox') && html`<a class="text-sm" href=${`/contacts/${job.contact.id}`}>View contact</a>`}
       </${Field}>
-      <${Field} label="Due">${manage
-    ? html`<${DateTimeButton} value=${job.due_at} onChange=${(v) => patch({ due_at: v })} placeholder="No due date" title="Due" />`
-    : html`<span>${job.due_at ? fmtDateTime(job.due_at) : '—'}</span>`}</${Field}>
-      <${Field} label="Priority">${manage
-    ? html`<${Select} value=${job.priority} onValue=${(v) => patch({ priority: v })} options=${PRIORITIES} />`
-    : html`<${PriorityChip} priority=${job.priority} showNormal />`}</${Field}>
+      <${Field} label="Due">
+        <${DateTimeButton} value=${job.due_at} onChange=${(v) => patch({ due_at: v })} placeholder="No due date" title="Due" />
+      </${Field}>
+      <${Field} label="Priority">
+        <${Select} value=${job.priority} onValue=${(v) => patch({ priority: v })} options=${PRIORITIES} />
+      </${Field}>
       ${numberField('quantity', 'Quantity', '1')}
       ${numberField('quote_amount', 'Quote ($)', '0.01')}
       ${textField('po_number', 'PO number', 'Customer PO')}
       ${numberField('estimated_minutes', 'Estimate (minutes)', '5')}
       ${textField('address', 'Delivery / install address', 'Pickup at the shop')}
       <${Field} label="Tags">
-        <${Input} disabled=${!manage} value=${(job.tags || []).join(', ')} placeholder="Comma separated"
+        <${Input} value=${(job.tags || []).join(', ')} placeholder="Comma separated"
           onBlur=${(e) => { const tags = e.currentTarget.value.split(',').map((t) => t.trim()).filter(Boolean); if (tags.join(',') !== (job.tags || []).join(',')) patch({ tags }); }} />
       </${Field}>
       <${Field} label="Notes" class="span-2">
-        <${TextArea} rows="3" autoSize disabled=${!manage} value=${desc} onValue=${setDesc}
+        <${TextArea} rows="3" autoSize value=${desc} onValue=${setDesc}
           placeholder="Stock, special instructions, delivery details…"
           onBlur=${() => { if (desc !== (job.description || '')) patch({ description: desc }); }} />
       </${Field}>
@@ -488,8 +507,10 @@ function ProofPanel({ job, files, reload, manage }) {
           ${manage && html`<${Button} size="sm" variant="ghost" onClick=${unshare}>Turn off</${Button}>`}</div>
         ${!proofs.length && html`<p class="muted text-xs">Mark a file as a proof so the customer can review it.</p>`}
       </div>`
-    : html`<p class="muted text-sm">Send the customer a page where they can see the job's status and approve proofs.</p>
-      ${manage && html`<${Button} size="sm" icon="link" onClick=${share}>Create customer link</${Button}>`}`}
+    : manage
+      ? html`<p class="muted text-sm">Send the customer a page where they can see the job's status and approve proofs.</p>
+        <${Button} size="sm" icon="link" onClick=${share}>Create customer link</${Button}>`
+      : html`<p class="muted text-sm">Not shared with the customer.</p>`}
   </${SidePanel}>`;
 }
 

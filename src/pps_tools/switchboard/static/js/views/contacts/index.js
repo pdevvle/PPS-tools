@@ -504,7 +504,7 @@ function OrgDetail({ id, mobile }) {
       <section class="contact-card">
         <h3 class="contact-card-title">Details</h3>
         <dl class="kv">
-          <div class="kv-row"><dt>Domain</dt><dd class="row gap-1"><${InlineText} value=${o.domain} placeholder="example.com" label="domain" onSave=${(domain) => save({ domain })} />
+          <div class="kv-row"><dt>Domain</dt><dd class="row row-wrap gap-1"><${InlineText} value=${o.domain} placeholder="example.com" label="domain" onSave=${(domain) => save({ domain })} />
             ${o.domain && html`<${Button} size="sm" variant="ghost" icon="link" onClick=${linkDomain}>Link @${o.domain}</${Button}>`}</dd></div>
           <div class="kv-row"><dt>Phone</dt><dd><${InlineText} value=${o.phone} label="phone" onSave=${(phone) => save({ phone })} /></dd></div>
           <div class="kv-row"><dt>Website</dt><dd><${InlineText} value=${o.website} label="website" onSave=${(website) => save({ website })} />
@@ -512,7 +512,7 @@ function OrgDetail({ id, mobile }) {
           <div class="kv-row"><dt>Address</dt><dd><${InlineText} value=${o.address} multiline label="address" onSave=${(address) => save({ address })} /></dd></div>
         </dl>
       </section>
-      <section class="contact-card contact-notes">
+      <section class="contact-card">
         <h3 class="contact-card-title">Notes</h3>
         <${InlineText} value=${o.notes} multiline placeholder="Billing terms, delivery instructions…" label="notes" onSave=${(notes) => save({ notes })} />
       </section>

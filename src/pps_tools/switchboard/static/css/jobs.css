@@ -1,6 +1,9 @@
 /* Jobs module: board, list, job page, production schedule, panels, settings. */
 
 .jobs-page { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; background: var(--surface); }
+/* On phones the shell sizes .app-main from its content; size containment keeps a tall jobs
+   page from growing it (which pushed the page header above the screen). */
+@media (max-width: 760px) { .jobs-page { contain: size; } }
 .jobs-toolbar { gap: 8px; }
 .jobs-search { width: min(320px, 100%); }
 @media (max-width: 760px) { .jobs-search { width: 100%; } }
@@ -48,11 +51,23 @@
 
 /* -- list ----------------------------------------------------------------------- */
 
-.jobs-list-body { padding: 16px; }
+.jobs-list-body { padding: 16px; container-type: inline-size; }
 .jobs-table th.is-sortable { cursor: pointer; user-select: none; }
 .jobs-table th.is-sortable:hover { color: var(--text); }
 .sort-icon { display: inline-block; vertical-align: -1px; margin-left: 3px; }
-.jobs-title-cell { max-width: 360px; min-width: 160px; }
+.jobs-table .jobs-title-cell { width: 100%; max-width: 0; min-width: 180px; }
+.jobs-stage-cell { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+.jobs-progress-cell { min-width: 96px; }
+.jobs-mobile-meta { display: none; }
+@container (max-width: 1180px) { .jobs-table .col-updated { display: none; } }
+@container (max-width: 900px) { .jobs-table .col-quote { display: none; } }
+@container (max-width: 800px) { .jobs-table .col-progress { display: none; } }
+@container (max-width: 700px) { .jobs-table .col-people { display: none; } }
+@media (max-width: 760px) {
+  .jobs-list-body { padding: 10px; }
+  .jobs-table .jobs-title-cell { min-width: 0; }
+  .jobs-mobile-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 5px; }
+}
 .jobs-table tr.is-archived td { opacity: 0.6; }
 
 /* -- job page ------------------------------------------------------------------- */
@@ -80,6 +95,7 @@
   .job-header .page-header-actions .stage-button .btn-label { display: inline; }
   .job-detail-main { padding: 10px; }
 }
+.job-notes-static { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--divider); font-size: 13.5px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .card.is-drop-target { border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus); }
 
 /* customer picker */
@@ -193,7 +209,7 @@
 .sched-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); }
 .sched-body.has-queue { grid-template-columns: minmax(0, 1fr) 270px; }
 .sched-scroll { overflow: auto; min-height: 0; position: relative; background: var(--surface); }
-.sched-grid { position: relative; min-height: 100%; }
+.sched-grid { position: relative; min-height: 100%; user-select: none; -webkit-user-select: none; }
 .sched-head { position: sticky; top: 0; z-index: 6; display: flex; background: var(--surface); border-bottom: 1px solid var(--border); height: 44px; }
 .sched-corner { position: sticky; left: 0; z-index: 7; width: var(--label-w); flex: none; background: var(--surface); border-right: 1px solid var(--border); display: flex; align-items: flex-end; padding: 0 12px 6px; font-size: 11.5px; font-weight: 650; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.04em; }
 .sched-scale { position: relative; flex: none; }
@@ -252,7 +268,7 @@
 @media (max-width: 760px) {
   .sched-body.has-queue { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, 40%); }
   .sched-queue { border-left: 0; border-top: 1px solid var(--border); }
-  .sched-toolbar .segmented-item span { display: none; }
+  .sched-toolbar .segmented-item .icon + span { display: none; }
 }
 
 .sched-pop { padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
@@ -270,7 +286,7 @@
 .auto-plan { display: flex; flex-direction: column; gap: 12px; margin-top: 4px; }
 .auto-plan-job { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
 .auto-plan-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--surface-2); border-bottom: 1px solid var(--divider); min-width: 0; }
-.auto-plan-step { display: grid; grid-template-columns: minmax(0, 1.2fr) auto minmax(0, 1fr) 24px; gap: 10px; align-items: center; padding: 7px 12px; border-bottom: 1px solid var(--divider); font-size: 13px; }
+.auto-plan-step { display: grid; grid-template-columns: minmax(0, 1fr) 210px minmax(0, 0.9fr) 24px; gap: 10px; align-items: center; padding: 7px 12px; border-bottom: 1px solid var(--divider); font-size: 13px; }
 .auto-plan-step:last-child { border-bottom: 0; }
 .auto-plan-step.is-late { background: var(--yellow-soft); }
 .auto-plan-unplaced { display: flex; align-items: center; gap: 6px; color: var(--red-text); font-size: 13px; }
@@ -311,6 +327,12 @@
 .cost-input { width: 76px; }
 .resource-kind { width: 130px; flex: none; }
 .field-type-select { width: 130px; flex: none; }
+.resource-row > * { flex: none; }
+.resource-row > .grow { flex: 1 1 140px; min-width: 0; }
+.resource-row > .select { width: 170px; }
+.settings-list-row > .toggle { flex: none; white-space: nowrap; }
+.field-choices { width: 96px; flex: none; display: flex; justify-content: flex-end; }
+.field-key { width: 128px; flex: none; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .resource-row.is-inactive input { color: var(--text-3); }
 .tmpl-steps { display: flex; flex-direction: column; gap: 6px; }
 .tmpl-step { display: flex; align-items: center; gap: 6px; min-width: 0; }

@@ -4,9 +4,9 @@
 import { html, useEffect, useRef, useState } from '../../lib/preact.js';
 import { api } from '../../lib/api.js';
 import { navigate, setQuery } from '../../lib/router.js';
-import { boot, useStore } from '../../lib/store.js';
+import { boot, setting, useStore } from '../../lib/store.js';
 import { addDays, dateKey, fromDateKey, startOfMonth } from '../../lib/dates.js';
-import { fmtDate, fmtMoney, fmtNumber, plural } from '../../lib/format.js';
+import { fmtDate, fmtMoney, fmtNumber, fmtTime, plural } from '../../lib/format.js';
 import { ModuleLayout, SidebarButton, SidebarHeader, SidebarItem, SidebarSection } from '../../ui/layout.js';
 import { Avatar, Banner, Button, ErrorBox, Icon, Loading, PageHeader, Select, Spinner, cx } from '../../ui/components.js';
 import { showMenu, showPopover } from '../../ui/overlay.js';
@@ -45,8 +45,18 @@ const PRESETS = [
   { id: 'ytd', label: 'Year to date' },
 ];
 
+// Reports bucket days in the business's timezone, so "today" is the date there.
+function orgToday() {
+  try {
+    const key = new Intl.DateTimeFormat('en-CA', { timeZone: setting('org.timezone') || undefined, year: 'numeric', month: '2-digit', day: '2-digit' })
+      .format(new Date());
+    if (/^\d{4}-\d{2}-\d{2}$/.test(key)) return fromDateKey(key);
+  } catch { /* unknown zone: fall back to the browser's date */ }
+  return new Date();
+}
+
 export function rangeFromQuery(query) {
-  const today = new Date();
+  const today = orgToday();
   const id = query.range || (query.start && query.end ? 'custom' : '30d');
   if (id === 'custom' && query.start && query.end) {
     return { id, start: query.start, end: query.end, label: `${fmtDate(fromDateKey(query.start))} – ${fmtDate(fromDateKey(query.end))}` };
@@ -182,6 +192,16 @@ function InboxReport({ data, stale, prevLabel }) {
         ${data.first_response.count === 0 && html`<div class="viz-empty">No first replies in this period</div>`}
       </${ChartCard}>
 
+      <${ChartCard} title="Waiting for a reply" subtitle=${data.waiting.count ? `${plural(data.waiting.count, 'conversation')} right now, longest first` : 'Right now'}>
+        ${data.waiting.items.length ? html`<ul class="waiting-list">
+          ${data.waiting.items.map((w) => html`<li key=${w.id}><a href=${`/inbox/c/${w.id}`} class="waiting-item">
+            <span class="waiting-text"><span class="waiting-subject">${w.subject || w.contact || 'Conversation'}</span>
+              ${w.subject && w.contact && html`<span class="muted text-sm">${w.contact}</span>`}</span>
+            <span class=${cx('waiting-time', w.minutes > (sla?.target_minutes || 1e9) && 'is-late')}>${fmtSpan(w.minutes)}</span>
+          </a></li>`)}
+        </ul>` : html`<div class="viz-empty"><${Icon} name="circle-check" size=${16} /> Everyone has an answer</div>`}
+      </${ChartCard}>
+
       <${ChartCard} wide title="When messages arrive" subtitle="Messages received by weekday and hour" stale=${stale}
         table=${{ columns: [{ key: 'day', label: 'Weekday' }, { key: 'hour', label: 'Hour', num: true }, { key: 'count', label: 'Messages', num: true }],
           rows: data.heatmap.cells.flatMap((row, ri) => row.map((count, hour) => ({ day: data.heatmap.weekdays[ri], hour, count }))),
@@ -201,16 +221,6 @@ function InboxReport({ data, stale, prevLabel }) {
         table=${{ columns: [{ key: 'name', label: 'Label' }, { key: 'conversations', label: 'Conversations', num: true }], rows: data.labels }}>
         <${BarList} items=${data.labels.map((l) => ({ key: l.label_id, label: l.name, value: l.conversations, dot: l.color,
     href: `/inbox/label/${l.label_id}` }))} format=${num} empty="No labeled conversations" />
-      </${ChartCard}>
-
-      <${ChartCard} title="Waiting for a reply" subtitle=${data.waiting.count ? `${plural(data.waiting.count, 'conversation')} right now, longest first` : 'Right now'}>
-        ${data.waiting.items.length ? html`<ul class="waiting-list">
-          ${data.waiting.items.map((w) => html`<li key=${w.id}><a href=${`/inbox/c/${w.id}`} class="waiting-item">
-            <span class="waiting-text"><span class="waiting-subject">${w.subject || w.contact || 'Conversation'}</span>
-              ${w.subject && w.contact && html`<span class="muted text-sm">${w.contact}</span>`}</span>
-            <span class=${cx('waiting-time', w.minutes > (sla?.target_minutes || 1e9) && 'is-late')}>${fmtSpan(w.minutes)}</span>
-          </a></li>`)}
-        </ul>` : html`<div class="viz-empty"><${Icon} name="circle-check" size=${16} /> Everyone has an answer</div>`}
       </${ChartCard}>
 
       <${ChartCard} wide title="Teammates" subtitle="Replies, closes and first-response speed in this period" stale=${stale}>
@@ -291,7 +301,7 @@ function TeamReport({ data, stale, prevLabel }) {
         ${data.late.length ? html`<ul class="waiting-list">
           ${data.late.map((x) => html`<li key=${x.user_id + x.clock_in}><div class="waiting-item">
             <span class="waiting-text"><span class="row"><${Avatar} user=${x.user_id} size=${20} /><span class="waiting-subject">${x.name}</span></span>
-              <span class="muted text-sm">${fmtDate(x.clock_in, { weekday: true })} · shift at ${new Date(x.shift_start).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span></span>
+              <span class="muted text-sm">${fmtDate(x.clock_in, { weekday: true })} · shift at ${fmtTime(x.shift_start)}</span></span>
             <span class="waiting-time is-late">+${fmtSpan(x.minutes_late)}</span>
           </div></li>`)}
         </ul>` : html`<div class="viz-empty"><${Icon} name="circle-check" size=${16} /> Everyone was on time</div>`}

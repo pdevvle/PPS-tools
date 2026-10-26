@@ -10,12 +10,14 @@ import { kindIcon } from './editor.js';
 import { itemsOnDay, prepare } from './util.js';
 
 export function AgendaWidget() {
+  const todayKey = dateKey(new Date());
   const { data, loading } = useFetch('/calendar/agenda', {
+    query: { date: todayKey },
     refetchOn: ['calendar.changed', 'shift.changed', 'schedule.changed', 'job.changed'],
     interval: 5 * 60000,
   });
   const items = prepare(data?.items || []);
-  const today = data ? fromDateKey(data.today) : new Date();
+  const today = fromDateKey(data?.today || todayKey);
   const days = [[today, 'Today'], [addDays(today, 1), 'Tomorrow']];
   const now = new Date();
   return html`<${Card} title="Agenda" icon="calendar-days" pad=${false}

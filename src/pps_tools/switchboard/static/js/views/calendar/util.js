@@ -37,10 +37,10 @@ export function rangeTitle(view, date, weekStart) {
   if (view === 'day') return titleFmt({ weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(date);
   const { start, end } = rangeFor(view, date, weekStart);
   const last = addDays(end, -1);
-  const sameMonth = start.getMonth() === last.getMonth();
-  const a = titleFmt({ month: 'short', day: 'numeric' }).format(start);
-  const b = titleFmt(sameMonth ? { day: 'numeric', year: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' }).format(last);
-  return `${a} – ${b}`;
+  const fmt = titleFmt({ month: 'short', day: 'numeric', year: 'numeric' });
+  // formatRange gives "Oct 25 – 31, 2026"; a {day, year} format alone renders oddly in some locales.
+  if (fmt.formatRange) return fmt.formatRange(start, last);
+  return `${titleFmt({ month: 'short', day: 'numeric' }).format(start)} – ${fmt.format(last)}`;
 }
 
 // Normalize API items: Date objects plus local day keys for placement.

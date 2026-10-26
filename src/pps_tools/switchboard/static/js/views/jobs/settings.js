@@ -139,9 +139,9 @@ export function FieldsSettings() {
         <input class="input input-sm grow" value=${f.label} aria-label="Field label"
           onBlur=${(e) => { const v = e.currentTarget.value.trim(); if (v && v !== f.label) save(f, { label: v }); }} />
         <${Select} class="input-sm field-type-select" value=${f.type} options=${FIELD_TYPES} onValue=${(v) => save(f, { type: v })} />
-        ${f.type === 'select' && html`<${Button} size="sm" onClick=${() => openModal((close) => html`<${OptionsEditor} field=${f} close=${close} />`, { size: 'sm' })}>
-          ${f.options.length} choice${f.options.length === 1 ? '' : 's'}</${Button}>`}
-        <span class="muted text-xs mono hide-mobile">${f.key}</span>
+        <span class="field-choices">${f.type === 'select' && html`<${Button} size="sm" onClick=${() => openModal((close) => html`<${OptionsEditor} field=${f} close=${close} />`, { size: 'sm' })}>
+          ${f.options.length} choice${f.options.length === 1 ? '' : 's'}</${Button}>`}</span>
+        <span class="muted text-xs mono hide-mobile field-key" title=${f.key}>${f.key}</span>
         <${IconButton} icon="trash" size="sm" label="Remove field" onClick=${() => remove(f)} />
       </div>`)}
     </div>

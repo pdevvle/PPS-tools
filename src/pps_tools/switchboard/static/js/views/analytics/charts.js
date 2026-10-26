@@ -135,7 +135,7 @@ export function LineChart({ labels, series, format = compact, xFormat = (l) => l
         <line x1=${m.l} x2=${m.l + pw} y1=${y(t)} y2=${y(t)} class=${t === 0 ? 'viz-baseline' : 'viz-gridline'} />
         <text x=${m.l - 8} y=${y(t) + 4} class="viz-tick" text-anchor="end">${format(t)}</text>
       </g>`)}
-      ${labels.map((l, i) => (i % every === 0 || i === n - 1) && (i === n - 1 || n - 1 - i >= every * 0.6) && html`<text key=${l}
+      ${labels.map((l, i) => (i % every === 0 || i === n - 1) && (i === n - 1 || x(n - 1) - x(i) >= 64) && html`<text key=${l}
         x=${x(i)} y=${height - 6} class="viz-tick" text-anchor=${i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'}>${xFormat(l)}</text>`)}
       ${area && html`<path d=${area} class="viz-area" style=${{ fill: seriesColor(0) }} />`}
       ${series.map((s, i) => html`<path key=${s.key} d=${paths[i]} class="viz-line" style=${{ stroke: seriesColor(i) }} />`)}
@@ -203,7 +203,7 @@ export function ColumnChart({ labels, series, format = compact, xFormat = (l) =>
             class="viz-bar" style=${{ fill: seriesColor(si) }} />`)}
           ${gi === n - 1 && series.map((s, si) => (s.values[gi] ? html`<text key=${'v' + s.key}
             x=${gx + si * (barW + 2) + barW / 2} y=${y(s.values[gi]) - 5} class="viz-cap" text-anchor="middle">${format(s.values[gi])}</text>` : null))}
-          ${(gi % every === 0 || gi === n - 1) && html`<text x=${m.l + band * gi + band / 2} y=${height - 6} class="viz-tick" text-anchor="middle">${xFormat(l)}</text>`}
+          ${(gi === n - 1 || (gi % every === 0 && (n - 1 - gi) * band >= 64)) && html`<text x=${m.l + band * gi + band / 2} y=${height - 6} class="viz-tick" text-anchor="middle">${xFormat(l)}</text>`}
         </g>`;
   })}
     </svg>`}

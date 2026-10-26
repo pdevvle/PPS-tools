@@ -16,7 +16,7 @@ import json
 import os
 import re
 import threading
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 
 import anthropic
 
@@ -157,7 +157,7 @@ def complete_json(system: str, content: list[dict], schema: dict, **kwargs) -> d
 _QUOTE_HEADER = re.compile(
     r"^(On .{4,200}wrote:|-{2,}\s*Original Message\s*-{2,}|-{2,}\s*Forwarded message\s*-{2,}|"
     r"From: .+\n(Sent|Date): .+)",
-    re.I | re.M,
+    re.IGNORECASE | re.MULTILINE,
 )
 
 
@@ -191,11 +191,11 @@ def transcript(user: dict, cid: int) -> tuple[str, dict]:
     contact = detail.get("contact") or {}
     tz = settings.timezone()
     channel = (conv.get("channel") or {}).get("type") or "internal"
-    parts = [
+    parts = [(
         f'<conversation subject="{_attr(conv.get("subject"))}" channel="{_attr(channel)}" '
         f'customer="{_attr(contact.get("display_name"))}" customer_email="{_attr(contact.get("email"))}" '
         f'organization="{_attr((contact.get("organization") or {}).get("name"))}">'
-    ]
+    )]
     n = 0
     for item in detail["timeline"]:
         if item["type"] == "message":
@@ -377,7 +377,7 @@ def normalize_due(value, tz) -> str | None:
     text = str(value).strip()
     if re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
         try:
-            day = datetime.strptime(text, "%Y-%m-%d").date()
+            day = date.fromisoformat(text)
         except ValueError:
             return None
         return iso(datetime.combine(day, time(17, 0), tzinfo=tz))

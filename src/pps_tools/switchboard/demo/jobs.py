@@ -139,8 +139,9 @@ def seed_jobs(ctx) -> None:
         if conversation and convs.get(conversation):
             data["conversation_id"] = convs[conversation]
         job = jobs_svc.create(sam, data)
-        stamp =ctx.ago(days=days_ago, hours=ctx.rng.randint(0, 6))
-        db.update("jobs", job["id"], {"created_at": stamp, "updated_at": stamp, "stage_entered_at": ctx.ago(days=max(0, days_ago - 1))})
+        stamp = ctx.ago(days=days_ago, hours=ctx.rng.randint(0, 6))
+        entered = ctx.ago(days=days_ago - 1) if days_ago > 1 else stamp
+        db.update("jobs", job["id"], {"created_at": stamp, "updated_at": stamp, "stage_entered_at": entered})
         db.execute("UPDATE job_activity SET created_at = ? WHERE job_id = ?", stamp, job["id"])
         for p in people:
             db.execute("INSERT OR IGNORE INTO job_assignees (job_id, user_id) VALUES (?, ?)", job["id"], u(p))
@@ -167,6 +168,12 @@ def seed_jobs(ctx) -> None:
             db.update("job_operations", op["id"], values)
 
     def history(job_id, names, start, step_hours=20):
+        # Keep the timeline in order: the job exists before its first move.
+        created_at = db.one("SELECT created_at FROM jobs WHERE id = ?", job_id)["created_at"]
+        if created_at > iso(start):
+            earlier = iso(start - timedelta(minutes=40))
+            db.execute("UPDATE job_activity SET created_at = ? WHERE job_id = ? AND created_at = ?", earlier, job_id, created_at)
+            db.update("jobs", job_id, {"created_at": earlier})
         t = start
         prev = None
         for name in names:
@@ -175,6 +182,7 @@ def seed_jobs(ctx) -> None:
                                            "data_json": db.jdump({"from": prev, "to": name, "from_id": stages[prev],
                                                                   "to_id": stages[name]}),
                                            "created_at": iso(t)})
+                db.update("jobs", job_id, {"stage_entered_at": iso(t)})
                 t += timedelta(hours=step_hours)
             prev = name
 

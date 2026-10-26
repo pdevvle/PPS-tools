@@ -55,7 +55,8 @@
 
 /* -- KPI tiles ---------------------------------------------------------------------- */
 
-.kpi-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 12px; }
+.kpi-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+@media (min-width: 1440px) { .kpi-row { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
 .kpi {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
   padding: 12px 14px; min-width: 0; box-shadow: var(--shadow-1);
@@ -71,7 +72,7 @@
 
 /* -- cards ------------------------------------------------------------------------- */
 
-.viz-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.viz-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: stretch; }
 .viz-card { display: flex; flex-direction: column; min-width: 0; }
 .viz-card-wide { grid-column: 1 / -1; }
 .viz-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 14px 16px 8px; flex-wrap: wrap; }

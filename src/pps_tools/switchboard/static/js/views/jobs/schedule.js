@@ -196,12 +196,12 @@ export function ScheduleBoard({ route }) {
   });
   const now = useNow(60000);
   const scrollRef = useRef(null);
-  const [width, setWidth] = useState(900);
+  const [width, setWidth] = useState(0); // 0 until the scroll area is measured
   const [drag, setDrag] = useState(null);
   const [dropHint, setDropHint] = useState(null); // { rowKey, x }
   const [showQueue, setShowQueue] = useState(!mobile);
   const dragRef = useRef(null);
-  dragRef.current = drag;
+  const scrolledFor = useRef(null);
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -237,8 +237,8 @@ export function ScheduleBoard({ route }) {
   }
   const span = Math.max(60, maxMin - minMin);
   const labelW = mobile ? 104 : 176;
-  const avail = Math.max(320, width - labelW);
-  const dayWidth = view === 'week' ? Math.max(150, avail / 7) : Math.max(avail, span * (mobile ? 1.6 : 1.1));
+  const avail = Math.max(320, (width || 900) - labelW);
+  const dayWidth = view === 'week' ? Math.max(150, avail / 7) : Math.max(avail, span * (mobile ? 1.6 : 2));
   const pxPerMin = dayWidth / span;
   const totalW = dayWidth * dayCount;
   const hourStep = [1, 2, 3, 4, 6, 12, 24].find((h) => h * 60 * pxPerMin >= 46) || 24;
@@ -337,6 +337,9 @@ export function ScheduleBoard({ route }) {
   };
 
   // -- drag: move & resize ------------------------------------------------------------
+  // Listeners go on in pointerdown itself (not an effect) so a quick click or tap can't
+  // release before they exist. No preventDefault: the overlay host closes any open
+  // popover on mousedown, and CSS keeps the grid from selecting text.
   const trackX = (clientX) => {
     const el = scrollRef.current;
     const rect = el.getBoundingClientRect();
@@ -348,58 +351,58 @@ export function ScheduleBoard({ route }) {
     return rowEl ? rowEl.dataset.rowKey : null;
   };
 
-  const startDrag = (e, block, mode) => {
-    if (!manage || e.button !== 0) return;
-    e.stopPropagation();
-    e.preventDefault();
-    const target = e.currentTarget;
-    target.setPointerCapture && target.setPointerCapture(e.pointerId);
-    setDrag({
-      id: block.id, block, mode, startX: e.clientX, startY: e.clientY, dx: 0, moved: false,
-      row: rowKey(group === 'user' ? block.user_id : block.resource_id), targetRow: rowKey(group === 'user' ? block.user_id : block.resource_id),
-      anchorEl: target,
+  const finishDrag = async (d) => {
+    const b = d.block;
+    if (!d.moved) {
+      openDetails(d.anchorEl, b);
+      return;
+    }
+    const preview = previewTimes(d);
+    const fields = { start_at: preview.start.toISOString(), end_at: preview.end.toISOString() };
+    if (d.mode === 'move' && d.targetRow !== d.row) {
+      const id = d.targetRow === 'none' ? null : Number(d.targetRow);
+      fields[group === 'user' ? 'user_id' : 'resource_id'] = id;
+    }
+    setData((prev) => prev && {
+      ...prev,
+      blocks: prev.blocks.map((x) => (x.id === b.id ? { ...x, ...fields } : x)),
     });
+    try { await patchOp(b.id, fields); } catch (err) { toastError(err); }
+    reload({ quiet: true });
   };
 
-  useEffect(() => {
-    if (!drag) return undefined;
-    const onMove = (e) => {
+  const startDrag = (e, block, mode) => {
+    if (!manage || e.button !== 0 || dragRef.current) return;
+    e.stopPropagation();
+    const target = e.currentTarget;
+    const row = rowKey(group === 'user' ? block.user_id : block.resource_id);
+    dragRef.current = {
+      id: block.id, block, mode, startX: e.clientX, startY: e.clientY, dx: 0, moved: false, row, targetRow: row,
+      anchorEl: mode === 'resize' ? target.parentElement : target,
+    };
+    setDrag(dragRef.current);
+    const onMove = (ev) => {
       const d = dragRef.current;
       if (!d) return;
-      const dx = e.clientX - d.startX;
-      const moved = d.moved || Math.abs(dx) > 4 || Math.abs(e.clientY - d.startY) > 4;
-      const targetRow = d.mode === 'move' ? (rowAt(e.clientX, e.clientY) || d.targetRow) : d.row;
-      setDrag({ ...d, dx, moved, targetRow });
+      const dx = ev.clientX - d.startX;
+      const moved = d.moved || Math.abs(dx) > 4 || Math.abs(ev.clientY - d.startY) > 4;
+      const targetRow = d.mode === 'move' ? (rowAt(ev.clientX, ev.clientY) || d.targetRow) : d.row;
+      dragRef.current = { ...d, dx, moved, targetRow };
+      setDrag(dragRef.current);
     };
-    const onUp = async () => {
-      const d = dragRef.current;
-      setDrag(null);
-      if (!d) return;
-      const b = d.block;
-      if (!d.moved) {
-        openDetails(d.anchorEl, b);
-        return;
-      }
-      const preview = previewTimes(d);
-      const fields = { start_at: preview.start.toISOString(), end_at: preview.end.toISOString() };
-      if (d.mode === 'move' && d.targetRow !== d.row) {
-        const id = d.targetRow === 'none' ? null : Number(d.targetRow);
-        fields[group === 'user' ? 'user_id' : 'resource_id'] = id;
-      }
-      setData((prev) => prev && {
-        ...prev,
-        blocks: prev.blocks.map((x) => (x.id === b.id ? { ...x, ...fields } : x)),
-      });
-      try { await patchOp(b.id, fields); } catch (err) { toastError(err); }
-      reload({ quiet: true });
-    };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp, { once: true });
-    return () => {
+    const onUp = (ev) => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      const d = dragRef.current;
+      dragRef.current = null;
+      setDrag(null);
+      if (d && ev.type === 'pointerup') finishDrag(d);
     };
-  }, [!!drag]);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+  };
 
   const previewTimes = (d) => {
     const b = d.block;
@@ -460,6 +463,26 @@ export function ScheduleBoard({ route }) {
   }, [q.focus, !!data]);
 
   const nowX = now >= rangeStart.getTime() && now < rangeEnd.getTime() ? xOf(new Date(now).toISOString()) : null;
+
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    const key = `${view}:${rangeStart.getTime()}:${group}`;
+    if (!el || !data || !width || q.focus || scrolledFor.current === key) return;
+    scrolledFor.current = key;
+    const nowMin = minutesOfDay(new Date(now));
+    let x = 0;
+    if (view === 'week') {
+      const i = dayIndex(new Date(now));
+      x = i > 0 && i < dayCount ? i * dayWidth - 8 : 0;
+    } else if (nowX !== null && nowMin > minMin && nowMin < maxMin) {
+      x = nowX - 160;
+    } else if (data.blocks.length) {
+      x = Math.min(...data.blocks.map((b) => xOf(b.start_at))) - 40;
+    } else if (windows.length) {
+      x = xOf(windows[0][0].toISOString()) - 40;
+    }
+    el.scrollLeft = Math.max(0, x);
+  }, [data, width, view, group, rangeStart.getTime()]);
   const conflictCount = data ? data.blocks.filter((b) => b.conflicts && b.conflicts.length).length : 0;
 
   const header = html`<${PageHeader} leading=${html`<${SidebarButton} />`} title="Production schedule" icon="chart-gantt"

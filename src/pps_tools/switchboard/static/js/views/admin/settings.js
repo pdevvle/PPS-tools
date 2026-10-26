@@ -570,9 +570,10 @@ function AuditLog() {
 
 export function DataSettings() {
   return html`<div>
-    <${Section} title="Backup" description="A complete copy of the database as one SQLite file. It holds everything, including password hashes and connection secrets, so store it somewhere safe.">
+    <${Section} title="Backup" description="A consistent copy of the whole database as one SQLite file, safe to take while people are working. It includes password hashes and connection secrets, so store it somewhere safe.">
       <a class="btn btn-secondary" href="/api/admin/backup" download data-native><${Icon} name="archive" size=${16} /><span class="btn-label">Download backup</span></a>
-      <p class="muted text-sm mt-2">To restore, stop Switchboard, replace <span class="mono">switchboard.db</span> in the data folder with the backup, and start it again.</p>
+      <p class="muted text-sm mt-2">Attachments are kept as files next to the database (the <span class="mono">files</span> folder in the data directory); back that folder up too.
+        To restore, stop Switchboard, put the backup in place of <span class="mono">switchboard.db</span>, and start it again.</p>
     </${Section}>
     <${Section} title="Export" description="Your data as JSON, to move elsewhere or keep for your records: people, teams, contacts, conversations with messages and comments, jobs, shifts, timesheets, time off and tasks. Passwords and secrets are left out.">
       <a class="btn btn-secondary" href="/api/admin/export.json" download data-native><${Icon} name="file-down" size=${16} /><span class="btn-label">Export everything (JSON)</span></a>

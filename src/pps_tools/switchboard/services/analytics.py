@@ -63,7 +63,7 @@ class Period:
     def days(self) -> list[date]:
         return [self.start + timedelta(days=i) for i in range(self.length)]
 
-    def previous(self) -> "Period":
+    def previous(self) -> Period:
         return Period(self.start - timedelta(days=self.length), self.start - timedelta(days=1), self.tz)
 
     def local(self, value) -> datetime | None:
@@ -461,7 +461,10 @@ def _shift_net_pieces(shift: dict, tz) -> list[tuple[date, float]]:
 def _team_core(period: Period) -> dict:
     tz = period.tz
     current = now()
-    in_range = lambda d: period.start <= d <= period.end  # noqa: E731
+
+    def in_range(d: date) -> bool:
+        return period.start <= d <= period.end
+
     w0 = week_start(period.start)
     w1 = week_start(period.end) + timedelta(days=7)
     w0_utc = iso(datetime.combine(w0, time(0), tzinfo=tz))
@@ -574,7 +577,9 @@ def _team_core(period: Period) -> dict:
             if p["rate"] is not None:
                 p["labor_cost"] += OT_PREMIUM * p["rate"] * ot / 60
 
-    # Late clock-ins: compared with the linked shift, else the shift they clocked in for.
+    # Late clock-ins: the first punch for each shift (the linked one, else the shift it
+    # falls in) against the shift's start. Later punches that day are back-from-break or
+    # job switches, not late arrivals.
     late_items = []
     nearby = defaultdict(list)
     for sh in db.query(
@@ -583,9 +588,10 @@ def _team_core(period: Period) -> dict:
     ):
         nearby[sh["user_id"]].append(sh)
     shift_by_id = {sh["id"]: sh for lst in nearby.values() for sh in lst}
+    first_punch: dict[tuple[int, int], tuple[datetime, dict, dict]] = {}
     for en in entries:
         clock_in = parse_iso(en["clock_in"])
-        if not clock_in or not (period.start_dt <= clock_in < period.end_dt):
+        if not clock_in:
             continue
         shift = shift_by_id.get(en["shift_id"]) if en["shift_id"] else None
         if shift is None:
@@ -595,6 +601,12 @@ def _team_core(period: Period) -> dict:
             ]
             shift = min(candidates, key=lambda sh: abs(minutes_between(parse_iso(sh["start_at"]), clock_in)), default=None)
         if not shift:
+            continue
+        key = (en["user_id"], shift["id"])
+        if key not in first_punch or clock_in < first_punch[key][0]:
+            first_punch[key] = (clock_in, en, shift)
+    for clock_in, en, shift in first_punch.values():
+        if not (period.start_dt <= clock_in < period.end_dt):
             continue
         late_by = minutes_between(parse_iso(shift["start_at"]), clock_in)
         if late_by > LATE_GRACE_MINUTES:

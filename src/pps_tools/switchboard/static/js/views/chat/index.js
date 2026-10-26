@@ -262,7 +262,7 @@ function Message({ m, grouped, room, me, onReply, onToggleReaction, highlight, i
     mine && !m.deleted && { label: 'Edit', icon: 'pencil', onSelect: () => setEditing(true) },
     canDelete && !m.deleted && { label: 'Delete', icon: 'trash', danger: true, onSelect: remove },
   ].filter(Boolean));
-  return html`<div id=${`m${m.id}`} class=${cx('chat-msg', grouped && 'is-grouped', highlight && 'is-highlight', m.deleted && 'is-deleted')}>
+  return html`<div id=${`m${m.id}`} tabIndex="-1" class=${cx('chat-msg', grouped && 'is-grouped', highlight && 'is-highlight', m.deleted && 'is-deleted')}>
     <div class="chat-msg-gutter">
       ${grouped ? html`<span class="chat-msg-hovertime">${fmtTime(m.created_at)}</span>` : html`<${Avatar} user=${author} size=${34} />`}
     </div>
@@ -491,8 +491,8 @@ function RoomHeader({ room, me, mobile, onShowMembers, reloadRooms }) {
     : others.length === 1 && html`<div class="chat-head-topic">${lookupUser(others[0]).title || ''}</div>`}
     </div>
     <div class="page-header-actions">
-      ${isChannel && html`<button type="button" class="chat-head-members" onClick=${onShowMembers} aria-label="Members">
-        <${AvatarStack} users=${room.member_ids} max=${3} size=${22} /><span>${room.member_count}</span></button>`}
+      ${isChannel && html`<button type="button" class="chat-head-members" onClick=${onShowMembers} aria-label=${`${plural(room.member_count, 'member')} — show`}
+        data-tip=${plural(room.member_count, 'member')}><${AvatarStack} users=${room.member_ids} max=${3} size=${22} /></button>`}
       <${IconButton} icon="ellipsis" label="Channel options" onClick=${menu} />
     </div>
   </header>`;
