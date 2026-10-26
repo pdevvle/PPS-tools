@@ -122,6 +122,9 @@ document.addEventListener("DOMContentLoaded", function () {
         var card = MK.el("div", { class: "banner " + (dry ? "info" : "success"), style: "margin-top:14px;display:block" });
         var title = res.outcomes.length ? (dry ? "Dry run: " : "") + res.outcomes.length + " campaign match" + (res.outcomes.length === 1 ? "" : "es") : (dry ? "Dry run: no campaign matches right now." : "No campaign matched, so nothing changed.");
         card.appendChild(MK.el("p", {}, title));
+        Object.keys(res.problems || {}).forEach(function (name) {
+          card.appendChild(MK.el("p", { class: "small", style: "margin-top:4px" }, "Skipped " + name + " — its numbers couldn't be read: " + res.problems[name]));
+        });
         if (res.outcomes.length) {
           var table = MK.el("table", { class: "data", style: "margin-top:8px" });
           var thead = MK.el("thead"); var hr = MK.el("tr");

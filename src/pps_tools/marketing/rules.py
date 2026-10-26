@@ -169,30 +169,42 @@ def evaluate(
     dry_run: bool = True,
     today: Optional[date] = None,
     now: Optional[float] = None,
+    problems: Optional[dict] = None,
 ) -> list[RuleOutcome]:
+    """Check every enabled rule against active campaigns.
+
+    Accounts whose numbers couldn't be fetched are skipped entirely — a failed
+    request must never look like "zero conversions" and trigger a pause. Their
+    errors are added to `problems` when a dict is passed.
+    """
     today = today or date.today()
     now = now if now is not None else time.time()
+    problems = problems if problems is not None else {}
     rules = [r for r in rules if r.get("enabled", True)]
     if not rules:
         return []
 
     campaigns, errors = hub.campaigns(refresh=not dry_run)
+    problems.update(errors)
     if errors and not campaigns:
         raise PlatformAPIError("Rules", "; ".join(f"{k}: {v}" for k, v in errors.items()))
     active = [c for c in campaigns if c.status == ACTIVE]
 
-    windows: dict[int, dict[str, Totals]] = {}
+    windows: dict[int, tuple[dict[str, Totals], set]] = {}
     outcomes: list[RuleOutcome] = []
     for rule in rules:
         days = int(rule["lookback_days"])
         if days not in windows:
-            rows, _ = hub.metrics(today - timedelta(days=days - 1), today, refresh=not dry_run)
-            windows[days] = by_campaign(rows)
-        grouped = windows[days]
+            rows, errors, failed = hub.metrics_detail(today - timedelta(days=days - 1), today, refresh=not dry_run)
+            problems.update(errors)
+            windows[days] = (by_campaign(rows), failed)
+        grouped, failed = windows[days]
         compare = OPERATORS[rule["operator"]]
         needle = (rule.get("name_contains") or "").lower()
 
         for c in active:
+            if (c.platform, c.account_id) in failed:
+                continue
             if rule["platform"] != "any" and c.platform != rule["platform"]:
                 continue
             if needle and needle not in c.name.lower():

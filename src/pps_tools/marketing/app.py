@@ -22,7 +22,9 @@ import csv
 import hmac
 import io
 import logging
+import math
 import secrets
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
@@ -344,9 +346,17 @@ def create_app(
     def dashboard():
         period = period_from_args()
         refresh = request.args.get("refresh") == "1"
-        rows, errors = hub.metrics(period.start, period.end, refresh=refresh)
         prev = period.previous()
-        prev_rows, _ = hub.metrics(prev.start, prev.end, refresh=refresh)
+        # The four lookups are independent; on a cold cache each is a round trip to every platform.
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            current_job = pool.submit(hub.metrics, period.start, period.end, refresh)
+            previous_job = pool.submit(hub.metrics, prev.start, prev.end, refresh)
+            campaigns_job = pool.submit(hub.campaigns, refresh)
+            pacing_job = pool.submit(pacing_for, hub)
+            rows, errors = current_job.result()
+            prev_rows, _ = previous_job.result()
+            campaigns, campaign_errors = campaigns_job.result()
+            pacing = pacing_job.result()
         currencies = an.currencies(rows)
         currency = currencies[0] if currencies else "USD"
         cur, old = an.totals(rows), an.totals(prev_rows)
@@ -370,7 +380,6 @@ def create_app(
         networks = an.by_network(rows)
         top_spend = max((t.spend for _, t in networks), default=0) or 1
 
-        campaigns, campaign_errors = hub.campaigns(refresh=refresh)
         errors.update(campaign_errors)
         by_key = {c.key: c for c in campaigns}
         by_campaign = an.by_campaign(rows)
@@ -400,7 +409,7 @@ def create_app(
             currencies=currencies,
             errors=errors,
             top_campaigns=top_campaigns,
-            pacing=pacing_for(hub),
+            pacing=pacing,
             connected=hub.sources(),
         )
 
@@ -560,6 +569,7 @@ def create_app(
             flash("Publishing failed: " + "; ".join(r.get("error", "") for r in bad), "error")
 
     def publish_context(targets, post=None) -> dict:
+        store.fail_stale_publishing()
         posts = store.list_posts(limit=300)
         target_names = {t.key: (t.network, t.name) for t in hub.targets(enabled_only=False)}
         calendar = [
@@ -791,15 +801,17 @@ def create_app(
         rules = [r for r in rules if r]
         if not rules:
             return api_error("No enabled rules to run.")
+        problems: dict = {}
         try:
-            outcomes = rules_mod.evaluate(hub, rules, dry_run=dry_run)
+            outcomes = rules_mod.evaluate(hub, rules, dry_run=dry_run, problems=problems)
         except (PlatformAPIError, NotConnectedError) as exc:
             return api_error(getattr(exc, "message", None) or str(exc))
         if not dry_run:
             store.log("rule.run", f"Ran {len(rules)} rule(s): {len(outcomes)} match(es)",
-                      detail={"applied": sum(1 for o in outcomes if o.status in ("applied", "alerted"))})
+                      detail={"applied": sum(1 for o in outcomes if o.status in ("applied", "alerted")),
+                              "skipped_accounts": problems})
         return jsonify({"ok": True, "dry_run": dry_run, "outcomes": [o.to_dict() for o in outcomes],
-                        "platforms": platform_labels()})
+                        "platforms": platform_labels(), "problems": problems})
 
     # -- budgets ---------------------------------------------------------------------
 
@@ -811,17 +823,25 @@ def create_app(
         except ValueError:
             month = month_key(date.today())
         keys = ["total", *hub.platforms]
+        labels = platform_labels()
+        labels["total"] = "All platforms"
         if request.method == "POST":
+            bad = []
             for key in keys:
                 raw = request.form.get(f"budget_{key}", "").replace(",", "").replace("$", "").strip()
                 try:
-                    store.set_budget(month, key, float(raw) if raw else None)
+                    amount = float(raw) if raw else None
                 except ValueError:
-                    flash(f"Budget for {key} must be a number.", "error")
-            flash("Budgets saved.", "success")
+                    amount = float("nan")
+                if amount is not None and (not math.isfinite(amount) or amount < 0):
+                    bad.append(labels.get(key, key))
+                    continue
+                store.set_budget(month, key, amount)
+            if bad:
+                flash(f"Not saved — enter a plain amount for: {', '.join(bad)}. The other budgets were saved.", "error")
+            else:
+                flash("Budgets saved.", "success")
             return redirect(url_for("budgets", month=month))
-        labels = platform_labels()
-        labels["total"] = "All platforms"
         current = month_key(date.today())
         return render_template(
             "mk_budgets.html",

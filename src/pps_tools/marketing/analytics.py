@@ -67,11 +67,13 @@ def resolve_period(
     if start and end:
         try:
             s, e = date.fromisoformat(start), date.fromisoformat(end)
-            if s > e:
-                s, e = e, s
-            return Period(s, min(e, today), f"{s:%b %d} – {e:%b %d, %Y}", "custom")
         except ValueError:
-            pass
+            s = e = None
+        if s and e:
+            s, e = sorted((s, e))
+            e = min(e, today)
+            s = min(s, e)
+            return Period(s, e, f"{s:%b} {s.day} – {e:%b} {e.day}, {e.year}", "custom")
     preset = preset if preset in PRESETS else "30d"
     if preset == "mtd":
         return Period(today.replace(day=1), today, PRESETS[preset], preset)

@@ -176,14 +176,17 @@ class Store:
     def init(self) -> None:
         if self.path.parent and not self.path.parent.exists():
             self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self._conn() as conn:
-            conn.execute("PRAGMA journal_mode=WAL")
-            conn.executescript(SCHEMA_SQL)
-        # The file holds OAuth tokens: keep it private to this user.
+        # The file holds OAuth tokens: create it private to this user (SQLite gives
+        # its -wal / -shm side files the same permissions).
+        if not self.path.exists():
+            os.close(os.open(self.path, os.O_CREAT | os.O_WRONLY, 0o600))
         try:
             os.chmod(self.path, 0o600)
         except OSError:
             pass
+        with self._conn() as conn:
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.executescript(SCHEMA_SQL)
 
     # -- settings -----------------------------------------------------------
 
@@ -471,6 +474,31 @@ class Store:
                 (PUBLISHING, utc_iso(), post_id, *from_statuses),
             )
             return cur.rowcount == 1
+
+    def fail_stale_publishing(self, older_than_minutes: int = 15) -> int:
+        """Release posts left in 'publishing' by a crash or restart so they can be retried.
+
+        Destinations without a recorded result are marked as interrupted (they may
+        or may not have received the post, hence the warning).
+        """
+        cutoff = utc_iso(datetime.fromtimestamp(time.time() - older_than_minutes * 60, timezone.utc))
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT id, targets, results FROM posts WHERE status = ? AND updated_at < ?", (PUBLISHING, cutoff)
+            ).fetchall()
+            for row in rows:
+                results = json.loads(row["results"] or "{}")
+                for key in json.loads(row["targets"]):
+                    results.setdefault(key, {
+                        "ok": False,
+                        "error": "Publishing was interrupted. Check this network for the post before retrying.",
+                    })
+                status = PARTIAL if any(r.get("ok") for r in results.values()) else FAILED
+                conn.execute(
+                    "UPDATE posts SET status = ?, results = ?, updated_at = ? WHERE id = ?",
+                    (status, json.dumps(results), utc_iso(), row["id"]),
+                )
+        return len(rows)
 
     def due_post_ids(self, now: Optional[datetime] = None) -> list[int]:
         with self._conn() as conn:

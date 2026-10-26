@@ -167,7 +167,10 @@ def run_rules(dry_run: bool) -> None:
     if not rules:
         console.print("No enabled rules. Create them on the Automation page.")
         return
-    outcomes = evaluate(hub, rules, dry_run=dry_run)
+    problems: dict = {}
+    outcomes = evaluate(hub, rules, dry_run=dry_run, problems=problems)
+    for name, msg in problems.items():
+        console.print(f"[yellow]Skipped {name}[/yellow] (couldn't read its numbers): {msg}", highlight=False)
     if not outcomes:
         console.print(f"{len(rules)} rule(s) checked; no campaign matched.")
         return

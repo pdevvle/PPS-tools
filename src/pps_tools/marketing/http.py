@@ -28,7 +28,7 @@ class NotConnectedError(RuntimeError):
     pass
 
 
-def _default_error_message(resp: requests.Response) -> str:
+def default_error_message(resp: requests.Response) -> str:
     try:
         data = resp.json()
     except ValueError:
@@ -59,7 +59,7 @@ class ApiClient:
         self.session = session or requests.Session()
         self.timeout = timeout
         self.max_retries = max_retries
-        self.error_message = error_message or _default_error_message
+        self.error_message = error_message or default_error_message
         self.sleep = sleep
 
     def request(self, method: str, url: str, retry: Optional[bool] = None, **kwargs) -> requests.Response:

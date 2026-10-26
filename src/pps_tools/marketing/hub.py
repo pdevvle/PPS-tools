@@ -10,6 +10,7 @@ the other platforms returned.
 from __future__ import annotations
 
 import logging
+import math
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta
 from typing import Callable, Iterable, Optional
@@ -114,23 +115,29 @@ class MarketingHub:
 
     # -- reading --------------------------------------------------------------
 
-    def _gather(self, jobs: list[tuple[AdAccount, Callable[[], list]]]) -> tuple[list, dict[str, str]]:
+    def _gather(
+        self, jobs: list[tuple[AdAccount, Callable[[], list]]]
+    ) -> tuple[list, dict[str, str], set[tuple[str, str]]]:
+        """Run one job per account in parallel: (results, errors by label, failed (platform, account) pairs)."""
         results: list = []
         errors: dict[str, str] = {}
+        failed: set[tuple[str, str]] = set()
         if not jobs:
-            return results, errors
+            return results, errors, failed
         with ThreadPoolExecutor(max_workers=min(self.max_workers, len(jobs))) as pool:
             futures = [(acct, pool.submit(fn)) for acct, fn in jobs]
             for acct, fut in futures:
                 name = f"{self.platforms[acct.platform].name} ({acct.name})"
                 try:
                     results.extend(fut.result())
+                    continue
                 except (PlatformAPIError, NotConnectedError) as exc:
                     errors[name] = getattr(exc, "message", None) or str(exc)
                 except Exception as exc:  # one broken platform must not break the page
                     logger.exception("%s failed", name)
                     errors[name] = f"Unexpected error: {exc}"
-        return results, errors
+                failed.add((acct.platform, acct.account_id))
+        return results, errors, failed
 
     def campaigns(self, refresh: bool = False) -> tuple[list[Campaign], dict[str, str]]:
         demo = self.demo_active()
@@ -149,9 +156,21 @@ class MarketingHub:
 
             return run
 
-        return self._gather([(a, job(a)) for a in self.accounts()])
+        results, errors, _ = self._gather([(a, job(a)) for a in self.accounts()])
+        return results, errors
 
     def metrics(self, start: date, end: date, refresh: bool = False) -> tuple[list[MetricRow], dict[str, str]]:
+        rows, errors, _ = self.metrics_detail(start, end, refresh)
+        return rows, errors
+
+    def metrics_detail(
+        self, start: date, end: date, refresh: bool = False
+    ) -> tuple[list[MetricRow], dict[str, str], set[tuple[str, str]]]:
+        """Like metrics(), plus the (platform, account) pairs whose numbers couldn't be read.
+
+        Anything that acts on metrics (the rules engine) must skip those accounts:
+        a failed fetch is not the same as zero spend.
+        """
         demo = self.demo_active()
         # Recent days are still being attributed, so they are re-fetched sooner.
         ttl = self.settings.cache_minutes * 60
@@ -214,8 +233,8 @@ class MarketingHub:
     def set_campaign_budget(
         self, key: str, amount: float, actor: str = "you", enforce_cap: bool = False
     ) -> Campaign:
-        if amount is None or amount <= 0:
-            raise HubError("Budget must be greater than zero.")
+        if amount is None or not math.isfinite(amount) or amount <= 0:
+            raise HubError("Budget must be a number greater than zero.")
         campaign = self.find_campaign(key)
         source = self.source(campaign.platform)
         if not campaign.budget_editable or campaign.daily_budget is None:

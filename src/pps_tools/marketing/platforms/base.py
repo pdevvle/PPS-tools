@@ -13,14 +13,16 @@ Everything is returned in the normalized shapes from `marketing.models`.
 from __future__ import annotations
 
 import os
+import threading
 import time
+from collections import defaultdict
 from datetime import date, timedelta
 from typing import Mapping, Optional
 
 import requests
 
 from pps_tools.marketing.config import MarketingSettings
-from pps_tools.marketing.http import ApiClient, NotConnectedError, PlatformAPIError
+from pps_tools.marketing.http import ApiClient, NotConnectedError, PlatformAPIError, default_error_message
 from pps_tools.marketing.models import (
     AdAccount,
     Campaign,
@@ -30,6 +32,9 @@ from pps_tools.marketing.models import (
     PublishTarget,
 )
 from pps_tools.marketing.store import Store
+
+
+_REFRESH_LOCKS: defaultdict[str, threading.Lock] = defaultdict(threading.Lock)
 
 
 class Platform:
@@ -87,13 +92,25 @@ class Platform:
             raise NotConnectedError(f"{self.name} is not connected.")
         return conn["credentials"]
 
-    def access_token(self) -> str:
-        """The current access token, refreshed first if it is about to expire."""
-        creds = self.credentials()
+    @staticmethod
+    def _needs_refresh(creds: dict) -> bool:
         expires_at = creds.get("expires_at")
-        if expires_at and creds.get("refresh_token") and time.time() > float(expires_at) - 120:
-            creds = self.refresh_tokens(creds)
-            self.store.update_credentials(self.key, creds)
+        return bool(expires_at and creds.get("refresh_token") and time.time() > float(expires_at) - 120)
+
+    def access_token(self) -> str:
+        """The current access token, refreshed first if it is about to expire.
+
+        Refreshing is serialized per platform: Pinterest and X hand out a new
+        refresh token each time (X's are single-use), so two threads refreshing
+        with the same one would knock each other out.
+        """
+        creds = self.credentials()
+        if self._needs_refresh(creds):
+            with _REFRESH_LOCKS[self.key]:
+                creds = self.credentials()  # another thread may have just refreshed
+                if self._needs_refresh(creds):
+                    creds = self.refresh_tokens(creds)
+                    self.store.update_credentials(self.key, creds)
         return creds["access_token"]
 
     def refresh_tokens(self, creds: dict) -> dict:
@@ -192,18 +209,8 @@ class Platform:
     # -- errors ---------------------------------------------------------------
 
     def error_message(self, resp: requests.Response) -> str:
-        try:
-            data = resp.json()
-        except ValueError:
-            return resp.text[:300] or f"HTTP {resp.status_code}"
-        if isinstance(data, dict):
-            err = data.get("error")
-            if isinstance(err, dict) and err.get("message"):
-                return str(err["message"])
-            for key in ("message", "error_description", "error"):
-                if isinstance(data.get(key), str) and data[key]:
-                    return data[key]
-        return str(data)[:300]
+        """Turn an error response into a readable message (connectors override for odd shapes)."""
+        return default_error_message(resp)
 
 
 def daterange_days(start: date, end: date) -> list[date]:

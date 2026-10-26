@@ -254,12 +254,3 @@ class PinterestPlatform(Platform):
             remote_id=pin_id,
             url=f"https://www.pinterest.com/pin/{pin_id}/" if pin_id else None,
         )
-
-    def error_message(self, resp) -> str:
-        try:
-            data = resp.json()
-        except ValueError:
-            return resp.text[:300] or f"HTTP {resp.status_code}"
-        if isinstance(data, dict):
-            return str(data.get("message") or data.get("error_description") or data.get("error") or data)[:300]
-        return str(data)[:300]

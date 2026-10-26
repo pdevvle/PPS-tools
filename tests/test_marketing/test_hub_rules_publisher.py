@@ -314,3 +314,70 @@ class TestPublisher:
         post = publish_post(hub, pid)
         assert post["status"] == st.FAILED
         assert "no longer connected" in post["results"]["fake:facebook:gone"]["error"]
+
+
+# -- regressions found in review ----------------------------------------------------
+
+def test_rules_skip_accounts_whose_numbers_could_not_be_read(hub, fake, store, monkeypatch):
+    def broken_metrics(account, start, end):
+        raise PlatformAPIError("Fake Ads", "HTTP 500")
+
+    monkeypatch.setattr(fake, "fetch_metrics", broken_metrics)
+    data = rules_mod.clean_rule({"name": "No conversions", "metric": "conversions", "operator": "<", "threshold": 1,
+                                 "action": "pause"}, ["fake"])
+    data["id"] = store.save_rule(data)
+    problems = {}
+    outcomes = rules_mod.evaluate(hub, [data], dry_run=False, problems=problems)
+    assert outcomes == []  # a failed fetch must never read as "zero conversions"
+    assert not [c for c in fake.calls if c[0] == "status"]
+    assert any("HTTP 500" in msg for msg in problems.values())
+
+
+def test_non_finite_budgets_are_rejected(hub):
+    for bad in (float("inf"), float("nan"), -5, 0):
+        with pytest.raises(HubError):
+            hub.set_campaign_budget("fake:acct:c1", bad)
+
+
+def test_stuck_publishing_posts_are_released(store):
+    pid = store.create_post("Hi", ["fake:facebook:p1", "fake:x:u1"], status=st.SCHEDULED)
+    assert store.claim_post(pid)
+    assert store.fail_stale_publishing(older_than_minutes=15) == 0  # still fresh
+    with store._conn() as conn:
+        conn.execute("UPDATE posts SET updated_at = '2000-01-01T00:00:00+00:00' WHERE id = ?", (pid,))
+    assert store.fail_stale_publishing(older_than_minutes=15) == 1
+    post = store.get_post(pid)
+    assert post["status"] == st.FAILED
+    assert "interrupted" in post["results"]["fake:x:u1"]["error"]
+    assert store.delete_post(pid)
+
+
+def test_concurrent_token_refreshes_happen_once(settings, store):
+    import threading
+    import time as _time
+
+    class Rotating(FakePlatform):
+        key = "rotating"
+        refreshes = 0
+
+        def refresh_tokens(self, creds):
+            type(self).refreshes += 1
+            _time.sleep(0.05)
+            return dict(creds, access_token=f"fresh-{type(self).refreshes}", expires_at=_time.time() + 3600)
+
+    connect(store, "rotating", refresh_token="single-use", expires_at=_time.time() - 1)
+    platform = Rotating(store, settings)
+    seen = []
+    threads = [threading.Thread(target=lambda: seen.append(platform.access_token())) for _ in range(5)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert Rotating.refreshes == 1 and set(seen) == {"fresh-1"}
+
+
+def test_link_written_into_text_is_tagged_not_duplicated():
+    post = {"body": "New cards https://pps.com/cards. Order today", "link": "https://pps.com/cards", "image_url": None,
+            "title": None, "overrides": {}, "utm_campaign": "spring"}
+    text = content_for(post, "x").text
+    assert text.count("https://") == 1 and "https://pps.com/cards?utm_source=x" in text and text.endswith("Order today")

@@ -211,3 +211,18 @@ def test_login_only_redirects_to_local_paths(target, expected):
 def test_only_https_links_are_rendered():
     assert safe_url("https://x.com/a") == "https://x.com/a"
     assert safe_url("javascript:alert(1)") is None and safe_url(None) is None
+
+
+def test_bad_budget_values_are_reported_not_crashing(client):
+    month = datetime.now().strftime("%Y-%m")
+    resp = post_form(client, "/budgets", {"month": month, "budget_total": "5000", "budget_meta": "nan", "budget_x": "abc"},
+                     follow_redirects=True)
+    assert resp.status_code == 200
+    page = resp.data.decode()
+    assert "Not saved" in page and "Budgets saved" not in page
+    assert 'value="5000"' in page
+
+
+def test_infinite_campaign_budget_is_a_clean_error(client):
+    resp = post_json(client, "/api/campaigns/budget", {"key": "google_ads:4825519306:20482", "amount": "inf"})
+    assert resp.status_code == 400 and "greater than zero" in resp.get_json()["error"]

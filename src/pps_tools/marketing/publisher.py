@@ -63,12 +63,16 @@ def text_length(network: str, text: str) -> int:
 def content_for(post: dict, network: str) -> PostContent:
     """The text, link and image a given network should get for this post."""
     text = (post.get("overrides") or {}).get(network) or post["body"]
-    link = post.get("link") or None
-    if link and post.get("utm_campaign"):
+    raw_link = post.get("link") or None
+    link = raw_link
+    if raw_link and post.get("utm_campaign"):
         try:
-            link = tag_for_network(link, network, post["utm_campaign"])
+            link = tag_for_network(raw_link, network, post["utm_campaign"])
         except UTMError:
             pass
+        else:
+            # The same address typed into the text gets the tags too (and isn't added twice).
+            text = re.sub(re.escape(raw_link) + r"(?=$|[\s)\]>,.!?;:'\"])", lambda _: link, text)
     if network == "x" and link and link not in text:
         text = f"{text.rstrip()}\n\n{link}"
     if network not in LINK_NETWORKS:
@@ -145,6 +149,7 @@ def publish_post(hub, post_id: int, retry_failed: bool = False) -> Optional[dict
 
 def publish_due(hub, now: Optional[datetime] = None) -> list[int]:
     """Publish every scheduled post whose time has come. Safe to run from several places."""
+    hub.store.fail_stale_publishing()
     done = []
     for post_id in hub.store.due_post_ids(now):
         try:

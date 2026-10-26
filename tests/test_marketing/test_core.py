@@ -248,3 +248,8 @@ class TestStore:
 
     def test_secret_key_is_stable(self, store):
         assert store.secret_key() == store.secret_key()
+
+
+def test_custom_range_in_the_future_never_runs_backwards():
+    p = an.resolve_period(None, "2026-12-01", "2026-12-10", today=date(2026, 10, 26))
+    assert p.start <= p.end == date(2026, 10, 26) and p.days == 1
