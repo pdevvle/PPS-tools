@@ -4,7 +4,7 @@
 {% block content %}
 <div class="page-head"><div><div class="crumbs"><a href="{{ url_for('lists.index') }}">Lists</a></div><h1>{{ spec.label }}</h1>
   <div class="muted small">{{ spec.description }}</div></div></div>
-<div class="grid" style="grid-template-columns:minmax(0,2fr) minmax(280px,1fr)">
+<div class="grid main-side">
 <div class="card">
   {% if spec.has_active %}<form class="filters" method="get"><div class="field"><label>Show</label><select name="show" data-autosubmit>
     <option value="active"{% if show == 'active' %} selected{% endif %}>Active</option><option value="all"{% if show == 'all' %} selected{% endif %}>All</option></select></div></form>{% endif %}

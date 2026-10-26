@@ -186,8 +186,8 @@ details.menu.left .menu-panel { left: 0; right: auto; }
 /* ---------- forms ---------- */
 label { display: block; font-size: .82rem; font-weight: 600; color: var(--muted); margin-bottom: .25rem; }
 label.inline { display: inline-flex; align-items: center; gap: .4rem; font-weight: 500; color: var(--text); font-size: .92rem; margin: 0; }
-input[type=text], input[type=email], input[type=password], input[type=number], input[type=date], input[type=search],
-input[type=tel], input[type=url], input[type=time], input[type=file], select, textarea {
+input:not([type]), input[type=text], input[type=email], input[type=password], input[type=number], input[type=date],
+input[type=search], input[type=tel], input[type=url], input[type=time], input[type=file], input[type=color], select, textarea {
   width: 100%; padding: .45rem .6rem; border: 1px solid var(--border-strong); border-radius: 6px;
   background: var(--surface); color: var(--text); font: inherit; min-height: 34px;
 }
@@ -263,7 +263,7 @@ table.lines td.del { width: 34px; text-align: center; }
 table.lines tr.description-row td { background: var(--surface-2); }
 table.lines .del button { border: 0; background: none; color: var(--faint); padding: .3rem; }
 table.lines .del button:hover { color: var(--danger); }
-.line-tools { display: flex; gap: .5rem; margin-top: .6rem; }
+.line-tools { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .6rem; }
 .totals { margin-left: auto; width: min(420px, 100%); }
 .totals table { width: 100%; border-collapse: collapse; }
 .totals td { padding: .35rem .25rem; }
@@ -418,3 +418,35 @@ dialog .dialog-foot { padding: .8rem 1.25rem; border-top: 1px solid var(--border
 .attach-list li { display: flex; gap: .5rem; align-items: center; padding: .3rem 0; }
 .toolbar { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
 .sticky-top { position: sticky; top: 56px; z-index: 5; }
+
+/* ---------- lists, schedules, grids (planning pages) ---------- */
+[hidden] { display: none !important; }
+a.card.tile-link { display: block; color: var(--text); transition: border-color .12s, box-shadow .12s; }
+a.card.tile-link:hover { text-decoration: none; border-color: var(--border-strong); box-shadow: var(--shadow-lg); }
+a.card.tile-link h3 { color: var(--link); }
+table.data tr.selected td { background: var(--brand-soft); }
+.check-list.cols { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: .35rem 1rem; }
+.inline-inputs { display: flex; align-items: center; gap: .5rem; }
+.schedule-panel { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.1rem; margin-bottom: 1rem; }
+.title-input { font: inherit; font-size: 1.5rem; font-weight: 650; border: 1px solid transparent; background: transparent; color: var(--text); padding: .1rem .3rem; margin-left: -.35rem; border-radius: 6px; max-width: 100%; }
+.title-input:hover { border-color: var(--border); }
+.title-input:focus { border-color: var(--brand); box-shadow: var(--focus); outline: none; }
+table.budget-grid input.cell { width: 86px; min-width: 70px; padding: .3rem .4rem; text-align: right; font-variant-numeric: tabular-nums; }
+table.timesheet input.cell { width: 64px; min-width: 56px; padding: .3rem .4rem; text-align: right; font-variant-numeric: tabular-nums; }
+table.budget-grid td, table.timesheet td { padding: .3rem .4rem; vertical-align: middle; }
+table.budget-grid tr.section-row td { background: var(--surface-2); font-size: .85rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+table.budget-grid .sticky-col { position: sticky; left: 0; z-index: 2; background: var(--surface); min-width: 220px; }
+table.budget-grid th.sticky-col { background: var(--surface-2); z-index: 3; }
+table.budget-grid tfoot th { border-top: 2px solid var(--border-strong); font-variant-numeric: tabular-nums; }
+table.timesheet select, table.timesheet input:not(.cell) { min-width: 130px; }
+table.timesheet tr.locked td { background: var(--surface-2); }
+td.row-total { font-weight: 650; font-variant-numeric: tabular-nums; }
+.grid.main-side { grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); align-items: start; }
+.grid.main-side.wide-main { grid-template-columns: minmax(0, 3fr) minmax(260px, 1fr); }
+.grid.main-side.narrow-side { grid-template-columns: minmax(0, 1fr) 300px; }
+@media (max-width: 900px) { .grid.main-side, .grid.main-side.wide-main, .grid.main-side.narrow-side { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 720px) { table.budget-grid .sticky-col { min-width: 150px; } }
+/* Phones: wide tables scroll inside their card instead of widening the page. */
+@media (max-width: 720px) {
+  .card > table.data, .card > form > table.data, .card-body > table.data, .table-view > table.data { display: block; overflow-x: auto; }
+}

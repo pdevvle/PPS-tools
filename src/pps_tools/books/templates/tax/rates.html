@@ -3,7 +3,7 @@
 {% block content %}
 <div class="page-head"><div><div class="crumbs"><a href="{{ url_for('tax.index') }}">Sales tax</a></div><h1>Rates and agencies</h1>
   <div class="muted small">A combined rate (for example a state rate plus a county rate) charges its components together and splits the tax between their agencies.</div></div></div>
-<div class="grid" style="grid-template-columns:minmax(0,2fr) minmax(280px,1fr)">
+<div class="grid main-side">
   <div>
     <div class="card" style="margin-bottom:1rem"><div class="card-head"><h3>Rates</h3></div>
       <table class="data"><thead><tr><th>Name</th><th class="num">Rate</th><th>Agency / components</th><th class="num">Sales</th><th></th></tr></thead>

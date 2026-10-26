@@ -36,11 +36,14 @@ def index():
         periods = []
         for start, end in tax_service.filing_periods(ag, today, count=4):
             rows = tax_service.liability_by_rate(s, start, end, agency_id=ag.id)
+            owed_at_end = tax_service.agency_balance(s, ag.id, end)
+            # Payments made after the period count against the oldest balance first.
+            paid_after = tax_service.payments_to_agency(s, ag.id, end + timedelta(days=1), None)
             periods.append({
                 "start": start, "end": end, "due": end + timedelta(days=20),
                 "taxable": sum(r.taxable_cents for r in rows), "tax": sum(r.tax_cents for r in rows),
                 "adjustments": tax_service.adjustments_for_agency(s, ag.id, start, end),
-                "owed_at_end": tax_service.agency_balance(s, ag.id, end),
+                "owed_at_end": owed_at_end, "unpaid": max(0, owed_at_end - paid_after),
                 "open": end >= today,
             })
         payments = s.scalars(select(Transaction).where(Transaction.type == "sales_tax_payment",

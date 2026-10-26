@@ -58,8 +58,8 @@
         {% if t == 'invoice' %}
         <div class="field"><label>Online payments</label>
           <input type="hidden" name="has_allow_online_card" value="1"><input type="hidden" name="has_allow_online_ach" value="1">
-          <label class="inline"><input type="checkbox" name="allow_online_card" value="1"{% if data.allow_online_card is none or data.allow_online_card %} checked{% endif %}> Cards</label>
-          <label class="inline"><input type="checkbox" name="allow_online_ach" value="1"{% if data.allow_online_ach is none or data.allow_online_ach %} checked{% endif %}> Bank (ACH)</label>
+          <label class="inline"><input type="checkbox" name="allow_online_card" value="1"{% if data.get('allow_online_card') is none or data.allow_online_card %} checked{% endif %}> Cards</label>
+          <label class="inline"><input type="checkbox" name="allow_online_ach" value="1"{% if data.get('allow_online_ach') is none or data.allow_online_ach %} checked{% endif %}> Bank (ACH)</label>
           <div class="hint">Customers pay through Stripe from the invoice link.</div></div>
         {% endif %}
       </div>

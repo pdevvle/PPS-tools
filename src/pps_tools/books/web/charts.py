@@ -151,7 +151,8 @@ def hbar_rows(rows: list[dict]) -> Markup:
     max_v = max([r["amount"] for r in rows] + [1])
     out = ['<div class="hbars">']
     for r in rows:
-        pct = max(0.0, r["amount"] / max_v * 100)
+        # The longest bar fills 75% of the track so its value label still fits beside it.
+        pct = max(0.0, r["amount"] / max_v * 75)
         label = escape(r["name"])
         href = r.get("href")
         name = f'<a href="{escape(href)}">{label}</a>' if href else label
