@@ -36,26 +36,26 @@ export function setTheme(theme) {
 // -- module loading -----------------------------------------------------------------
 
 const loaded = new Map();
+const failed = new Map();
 
+// The current module's page component. It is looked up on every render: handing the
+// previous module's component the new route (even for one render) lets its effects
+// act on a URL that isn't theirs, e.g. Chat redirecting /tasks back to /chat/1.
 function useModule(mod) {
-  const [state, setLoaded] = useState(() => (mod && loaded.has(mod.id) ? { component: loaded.get(mod.id) } : { loading: true }));
+  const [, rerender] = useState(0);
+  const id = mod && mod.id;
   useEffect(() => {
-    if (!mod) return;
-    if (loaded.has(mod.id)) { setLoaded({ component: loaded.get(mod.id) }); return; }
+    if (!mod || loaded.has(mod.id) || failed.has(mod.id)) return;
     let alive = true;
-    setLoaded({ loading: true });
     mod.load()
-      .then((m) => {
-        loaded.set(mod.id, m.default);
-        if (alive) setLoaded({ component: m.default });
-      })
-      .catch((error) => {
-        console.error(error);
-        if (alive) setLoaded({ error });
-      });
+      .then((m) => { loaded.set(mod.id, m.default); })
+      .catch((error) => { console.error(error); failed.set(mod.id, error); })
+      .finally(() => { if (alive) rerender((n) => n + 1); });
     return () => { alive = false; };
-  }, [mod && mod.id]);
-  return state;
+  }, [id]);
+  if (mod && loaded.has(mod.id)) return { component: loaded.get(mod.id) };
+  if (mod && failed.has(mod.id)) return { error: failed.get(mod.id) };
+  return { loading: true };
 }
 
 function ModuleOutlet({ route }) {
