@@ -1,0 +1,104 @@
+/* Admin: API tokens, webhooks, sidebar apps, AI settings, data & audit, and the
+   sidebar-app panels in the conversation sidebar. */
+
+.admin-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+.admin-row-icon {
+  display: inline-flex; align-items: center; justify-content: center; flex: none; width: 30px; height: 30px;
+  border-radius: var(--radius); background: var(--surface-3); color: var(--text-2);
+}
+.settings-list-row.is-dimmed .admin-row-icon,
+.settings-list-row.is-dimmed .grow { opacity: 0.6; }
+.admin-meta { display: flex; flex-wrap: wrap; gap: 2px 0; min-width: 0; }
+.admin-meta > span:not(:last-child)::after { content: "·"; margin: 0 6px; color: var(--text-3); }
+.admin-title-link {
+  display: block; max-width: 100%; text-align: left; padding: 0; border: 0; background: none; color: var(--text);
+  font: inherit; font-weight: 600; cursor: pointer;
+}
+.admin-title-link:hover { color: var(--accent-text); text-decoration: underline; }
+.admin-details { font-size: 13px; }
+.admin-details summary { cursor: pointer; color: var(--accent-text); font-weight: 550; width: max-content; max-width: 100%; }
+.admin-details[open] summary { margin-bottom: 8px; }
+.admin-details p { margin: 8px 0 0; }
+.admin-code {
+  font-family: var(--mono); font-size: 0.92em; background: var(--surface-3); padding: 1px 4px; border-radius: 4px;
+}
+
+.copy-field { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.copy-field .input { flex: 1; min-width: 0; }
+
+/* -- webhooks -------------------------------------------------------------------------- */
+
+.hook-row { align-items: flex-start; }
+.hook-row .admin-row-icon { margin-top: 2px; }
+.hook-actions { flex: none; }
+.hook-health { min-width: 0; max-width: 100%; }
+
+.event-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 4px; }
+.event-group { border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 12px 10px; margin: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.event-group legend { padding: 0 4px; margin-left: -4px; }
+.event-group .checkbox { align-items: flex-start; }
+.event-group .checkbox-box { margin-top: 2px; }
+.event-group .checkbox-label { display: flex; flex-direction: column; min-width: 0; }
+.event-name { font-size: 12px; }
+.event-desc { font-size: 12px; color: var(--text-3); }
+
+.delivery-list { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+.delivery { border-bottom: 1px solid var(--divider); }
+.delivery:last-child { border-bottom: 0; }
+.delivery-row {
+  display: grid; grid-template-columns: auto minmax(90px, 0.8fr) minmax(0, 1.4fr) auto 16px; align-items: center; gap: 10px;
+  width: 100%; padding: 9px 12px; border: 0; background: none; color: var(--text); text-align: left; font: inherit; cursor: pointer;
+}
+.delivery-row:hover { background: var(--hover); }
+.delivery-event { font-size: 12.5px; }
+.delivery-chevron { color: var(--text-3); transition: transform 0.15s; }
+.delivery.is-open .delivery-chevron { transform: rotate(180deg); }
+.delivery-body { padding: 0 12px 12px; }
+.delivery-payload { max-height: 280px; overflow: auto; margin: 0; white-space: pre; word-break: normal; }
+
+/* -- sidebar apps -------------------------------------------------------------------------- */
+
+.variable-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: -4px; }
+.variable-chip { border: 0; font: inherit; font-size: 12px; }
+.variable-chip .mono { font-size: 11.5px; }
+.integration-preview { word-break: break-all; }
+.integration-height { max-width: 200px; }
+.integration-test-btn { margin-right: auto; }
+
+.integration-loading { display: flex; justify-content: center; padding: 10px 0; color: var(--text-3); }
+.integration-message { display: flex; align-items: flex-start; gap: 6px; color: var(--text-3); font-size: 12.5px; line-height: 1.4; }
+.integration-message .icon { margin-top: 1px; }
+.integration-frame { display: block; width: 100%; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+
+.woo-orders { list-style: none; margin: 0 -6px; padding: 0; display: flex; flex-direction: column; }
+.woo-order { display: flex; flex-direction: column; gap: 2px; padding: 6px; border-radius: var(--radius-sm); color: var(--text); text-decoration: none; min-width: 0; }
+.woo-order:hover { background: var(--hover); }
+.woo-order-top { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.woo-order-top .chip { text-transform: capitalize; }
+.woo-order-total { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.woo-order-meta { display: block; }
+
+/* -- AI ---------------------------------------------------------------------------------- */
+
+.ai-features { list-style: none; margin: 14px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.ai-features li { display: flex; align-items: center; gap: 10px; }
+.ai-features .admin-row-icon { width: 26px; height: 26px; color: var(--accent-text); background: var(--accent-soft); }
+.ai-form { max-width: 620px; }
+.ai-privacy { margin: 0; font-size: 13px; max-width: 70ch; }
+
+/* -- data & audit ------------------------------------------------------------------------ */
+
+.data-links { margin: 12px 0 0; padding-left: 18px; color: var(--text-2); font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
+.data-links a { color: var(--accent-text); }
+.audit-wrap { max-height: 520px; }
+.audit-table td { vertical-align: top; }
+.audit-details { max-width: 340px; overflow-wrap: anywhere; }
+.audit-ip { font-family: var(--mono); font-size: 11.5px; }
+
+@media (max-width: 760px) {
+  .event-groups { grid-template-columns: minmax(0, 1fr); }
+  .delivery-row { grid-template-columns: auto minmax(0, 1fr) 16px; }
+  .delivery-detail, .delivery-row > .nowrap { display: none; }
+  .hook-row { flex-wrap: wrap; }
+}

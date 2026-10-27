@@ -1,0 +1,233 @@
+<title>Roofs and Houses</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@500;700&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a drawing sheet. A title block, then numbered sheets (the order is the order the generator decides in). */
+:root{
+  --ground:#16385f;      /* cyanotype field */
+  --ground-2:#1c4573;    /* panels */
+  --line:#9fc3ea;        /* drafting line */
+  --ink:#eaf3ff;         /* text */
+  --muted:#a9c2de;       /* secondary text */
+  --mark:#ffd27a;        /* redline: what the mockup does now */
+  --rule:rgba(159,195,234,.28);
+  --display:'Archivo Narrow','Arial Narrow',Arial,sans-serif;
+  --body:'IBM Plex Sans',system-ui,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+  color-scheme:dark;
+}
+body{background:var(--ground);color:var(--ink);font:15px/1.55 var(--body);background-image:linear-gradient(var(--rule) 1px,transparent 1px),linear-gradient(90deg,var(--rule) 1px,transparent 1px);background-size:48px 48px;background-position:-1px -1px}
+.page{max-width:1180px;margin:0 auto;padding-block:28px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:28px}
+header.tb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;border:2px solid var(--line);background:var(--ground)}
+header.tb .t{padding:18px 20px}
+header.tb h1{font:700 clamp(30px,5vw,52px)/1 var(--display);letter-spacing:.01em;margin:0 0 10px;text-wrap:balance}
+header.tb p{margin:0;max-width:68ch;color:var(--muted)}
+header.tb dl{margin:0;display:grid;grid-template-columns:auto auto;border-left:2px solid var(--line);font:12px var(--mono)}
+header.tb dt,header.tb dd{margin:0;padding:7px 12px;border-bottom:1px solid var(--rule)}
+header.tb dt{color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
+section.sheet{border:1px solid var(--line);background:color-mix(in srgb,var(--ground-2) 82%,transparent);padding:20px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.sheet>h2{font:700 26px/1.1 var(--display);margin:0;display:flex;gap:12px;align-items:baseline;text-wrap:balance}
+.sheet>h2 .no{font:500 12px var(--mono);letter-spacing:.1em;color:var(--mark);border:1px solid var(--mark);padding:2px 6px}
+.lede{margin:0;max-width:72ch;color:var(--muted)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.card{border:1px solid var(--rule);padding:12px;display:flex;flex-direction:column;gap:6px;min-width:0;background:var(--ground)}
+.card h3{font:700 18px/1.1 var(--display);margin:0}
+.card .tag{font:12px var(--mono);color:var(--muted)}
+.card p{margin:0;font-size:14px}
+.card .game{color:var(--mark);font-size:13px}
+svg.axo{width:100%;height:auto;max-width:100%;aspect-ratio:3/2;display:block}
+.tw{overflow-x:auto;border:1px solid var(--rule)}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:760px}
+th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font:500 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);background:var(--ground)}
+td.n{font-variant-numeric:tabular-nums;white-space:nowrap}
+.sw{display:inline-block;width:12px;height:12px;border:1px solid var(--line);vertical-align:-2px;margin-right:4px}
+ol.steps{margin:0;padding:0;list-style:none;display:grid;gap:10px;counter-reset:s}
+ol.steps li{counter-increment:s;display:grid;grid-template-columns:34px minmax(0,1fr);gap:10px;align-items:start}
+ol.steps li::before{content:counter(s);font:700 20px/1 var(--display);color:var(--ground);background:var(--line);display:grid;place-items:center;height:30px}
+ol.steps b{font-weight:500}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}
+.note{font-size:13px;color:var(--muted);margin:0}
+.redline{border-left:3px solid var(--mark);padding:6px 12px;color:var(--ink);margin:0}
+.redline b{color:var(--mark);font-weight:500}
+code{font:13px var(--mono);color:var(--mark)}
+a{color:var(--mark)}
+@media (max-width:640px){ header.tb{grid-template-columns:1fr} header.tb dl{border-left:0;border-top:2px solid var(--line)} }
+</style>
+
+<div class="page">
+<header class="tb">
+  <div class="t">
+    <h1>Roofs and Houses</h1>
+    <p>Reference for the interiors generator. It covers how roofs, wall build-ups, storeys and footings are chosen, so that each building gets one that fits where it stands, when it was built and the ground it sits on. Every table here is read from the generator's own data, and the roof drawings come from its roof code.</p>
+  </div>
+  <dl>
+    <dt>Project</dt><dd>Nightfall Protocol</dd>
+    <dt>Sheet</dt><dd>Interiors · buildings</dd>
+    <dt>Source</dt><dd>tools/interiors/houses.js</dd>
+    <dt>Units</dt><dd>metres; pitch in 12ths</dd>
+  </dl>
+</header>
+
+<section class="sheet" id="roofs">
+  <h2><span class="no">A1</span>Roof forms</h2>
+  <p class="lede">Each house takes one roof form. The generator covers the footprint with a few overlapping rectangles and puts the form on each one, all at the same pitch and eave height. Where they overlap, the roofs run into each other the way cross gables and hipped wings do on real houses. Forms that only suit a plain box (shed, butterfly, gambrel, saltbox, A-frame, Dutch gable) fall back to a gable or hip when the footprint has wings.</p>
+  <div class="grid" id="roofCards"></div>
+</section>
+
+<section class="sheet" id="coverings">
+  <h2><span class="no">A2</span>Roof coverings</h2>
+  <p class="lede">The covering sets the pitch range and the look. On screen each covering is carried by tone in courses at least 0.25 m wide: shingle and slate courses run along the eave, tile ribs and metal seams run down the slope. No hairline joints, so nothing shimmers.</p>
+  <div class="tw"><table id="matTable"><thead><tr><th>Covering</th><th>Pitch</th><th>Reads as</th><th>Where</th><th>In play</th></tr></thead><tbody></tbody></table></div>
+</section>
+
+<section class="sheet" id="types">
+  <h2><span class="no">A3</span>House types</h2>
+  <p class="lede">Each type says how many storeys it has, which roofs and coverings it wears, what its walls are clad in, and which footprints it can sit on. A long 4:1 box reads as a single-wide; a Colonial needs a near-rectangle. The footprint comes from the map, so the type has to fit it, not the other way round.</p>
+  <div class="tw"><table id="archTable"><thead><tr><th>Type</th><th>Built</th><th>Storeys</th><th>Roofs</th><th>Pitch</th><th>Eave</th><th>Walls</th><th>Fits a footprint that is</th></tr></thead><tbody></tbody></table></div>
+</section>
+
+<section class="sheet" id="regions">
+  <h2><span class="no">A4</span>Regions</h2>
+  <p class="lede">The region weights which types get built, in which eras, and what footing is normal on level ground. Arizona is where the map is. The other regions are there so the same footprint can be shown built elsewhere, and so the rules are ready when the map grows.</p>
+  <div class="tw"><table id="regTable"><thead><tr><th>Region</th><th>Most built</th><th>Eras</th><th>Footing on a level lot</th></tr></thead><tbody></tbody></table></div>
+</section>
+
+<section class="sheet" id="walls">
+  <h2><span class="no">A5</span>Frames and walls</h2>
+  <p class="lede">The cladding is what the squad sees; the build-up behind it decides how the wall breaks. A Pueblo house can be real adobe or stucco over a wood frame, and a Sonoran ranch is stucco over frame or painted block. Thin and thick are the terms in play; the numbers belong to combat.</p>
+  <div class="two">
+    <div class="tw"><table id="cladTable"><thead><tr><th>Cladding</th><th>Over</th><th>Pattern</th><th>Colours</th></tr></thead><tbody></tbody></table></div>
+    <div class="tw"><table id="matWall"><thead><tr><th>Build-up</th><th>Class</th><th>Rounds</th><th>Sledge</th><th>Charges</th></tr></thead><tbody></tbody></table></div>
+  </div>
+</section>
+
+<section class="sheet" id="footings">
+  <h2><span class="no">A6</span>Storeys and footings</h2>
+  <p class="lede">Basements follow the frost line. Where footings must go 0.9 to 1.2 m down (the Midwest, the Northeast), digging a full basement costs little more, so most houses have one. In Arizona the frost line is shallow and the ground is caliche and rock, so almost no house does: slab on grade is the rule. Hillside lots change that everywhere. Where the ground falls a storey under the house, the downhill half becomes a walk-out lower floor and the rest stands on posts.</p>
+  <div class="grid" id="footCards"></div>
+  <div class="tw"><table><thead><tr><th>Fall of the ground under the house</th><th>Footing</th></tr></thead><tbody>
+    <tr><td class="n">under 0.6 m</td><td>What the region does on level ground: slab, crawlspace or full basement.</td></tr>
+    <tr><td class="n">0.6 to 2.2 m</td><td>A stem wall and crawlspace, or posts (most hillside types). A basement in basement country becomes a daylight basement.</td></tr>
+    <tr><td class="n">2.2 m or more</td><td>A walk-out lower floor wherever the ground has fallen a storey, with posts under the rest. Otherwise a pole house on posts.</td></tr>
+    <tr><td class="n">over 12% grade</td><td>Never a slab.</td></tr>
+    <tr><td class="n">any</td><td>Manufactured homes sit on a steel chassis on piers behind skirting. Gulf raised cottages sit 2 m up on piers.</td></tr>
+  </tbody></table></div>
+  <p class="note">Storeys: one; one and a half (rooms in the roof, laid where the roof clears a 2.2 m wall); two; or a two-storey block beside a one-storey wing, which is how split-levels are shown for now. A straight 2 m stair joins the floors and sits in cells every floor it serves can hold.</p>
+</section>
+
+<section class="sheet" id="rules">
+  <h2><span class="no">A7</span>How a house is matched</h2>
+  <ol class="steps">
+    <li><span><b>Read the footprint.</b> Its area, how long and how boxy it is, and how many rectangles make it up.</span></li>
+    <li><span><b>Read the lot.</b> Ground heights from the terrain data under every cell give the fall across the house and which way is downhill. The panel can override this with a level lot or a steep one.</span></li>
+    <li><span><b>Pick the era</b> from the region's weights.</span></li>
+    <li><span><b>Pick the type.</b> Region weight × fits the footprint × built in that era (a type out of its era keeps a fifth of its weight) × slope (hillside types gain on steep lots). A clean long box strongly suggests a manufactured home.</span></li>
+    <li><span><b>Dress it.</b> Storeys, roof form and covering, pitch (within both the type's and the covering's range), eave depth, cladding, colours and porch, all from the type's tables for the region.</span></li>
+    <li><span><b>Stand it on the ground.</b> The footing comes from the type or the region, then the lot's fall overrides it. The main floor sits on the highest ground under it plus the footing's lift. Slabs get a levelled pad; raised floors keep the slope beneath them.</span></li>
+    <li><span><b>Plan the floors</b> from their own masks: a basement or lower floor gets family room, storage, a guest room and bath; the main floor gets the public rooms and the garage; bedrooms go up. Walls with earth against them get no doors or windows, except small egress windows high up in a basement bedroom.</span></li>
+  </ol>
+  <p class="redline"><b>Seeded:</b> the same building, region and lot always give the same house. Changing the region re-rolls the design, because a Northeast house on this footprint is a different house.</p>
+</section>
+
+<section class="sheet" id="import">
+  <h2><span class="no">A8</span>Importing a real home</h2>
+  <p class="lede">This is the route for hand-crafted places. A real listing gives the facts and photos; the map gives the footprint and the ground; a short layout file puts them together. The generator then furnishes it and stocks loot as it does for every other building.</p>
+  <ol class="steps">
+    <li><span><b>Find it on the map.</b> The listing's coordinates point to an OSM building. For 48918 N Fig Springs Rd, New River, that is way 1046267351, a D-shaped 398 m² outline traced from aerial imagery. It includes the deck: 2,743 sq ft of living space plus the 1,400 sq ft deck comes to about 385 m².</span></li>
+    <li><span><b>Fetch the site.</b> <code>import_home.py</code> caches the footprint, drives within 120 m and real ground (Terrarium tiles, 4 m grid). Here the ground falls about 2.8 m from the back to the curved front.</span></li>
+    <li><span><b>Write the layout</b> from the listing and photos: storeys, rooms as zones in metres (boxes and inside or outside circles), doors, window walls, a deck, and the stair. Fig Springs: a garage level of reinforced block under the house (4-car garage, full bath, walk-in vault) and a main floor whose curved half is a great room behind a wall of windows. Kitchen and dining are on the west curve by the French doors. Bedrooms, the study and the master suite run along the straight north wall.</span></li>
+    <li><span><b>Design facts become the design:</b> stucco over 6 in frame, a foam flat roof with a deep overhang, a walk-out lower floor.</span></li>
+    <li><span><b>The generator lays it on the cells,</b> places the listed doors and window walls, links anything left unjoined, furnishes and stocks it, and runs the gameplay passes: a second way into every big room, a cover budget, room-sized clutter.</span></li>
+    <li><span><b>Adapt for play</b> in the layout file: widen a hall, add a back stair, move a door. The listing is the start, not a constraint.</span></li>
+  </ol>
+  <p class="note">The photos are looked at for reference only and are not copied into the game or the repo. Positions inside are inferred from what each photo shows next to what, so they are approximate. The 1 m grid turns the curved front into steps; true curved walls are on the list below.</p>
+</section>
+
+<section class="sheet" id="status">
+  <h2><span class="no">A9</span>In the mockup now, and next</h2>
+  <div class="two">
+    <div class="card"><h3>Working</h3><p>All roof forms above (pyramid shows as a hip on a square). Coverings by tone. Parapets with vigas and canales, Territorial coping, tile fascias on shops. Every footing on real ground, with steps at raised doors, porches, decks with railings on posts, earth cut back round basements. Storeys, rooms in the roof, two-storey wings, walk-out lower floors. Setting and lot selects. One imported home.</p></div>
+    <div class="card"><h3>Next</h3><p>Dormers over rooms in the roof. True half-level split-levels. Curved walls for imported homes. Clerestory and glass gable ends (A-frames, mid-century). Wrap-around porches. Gutters, chimneys and solar panels. Roof damage, and walking on flat roofs.</p></div>
+  </div>
+</section>
+</div>
+
+<script>
+/*HOUSES*/
+// The roof drawings: the generator's own roofPlanes, projected to an axonometric line drawing.
+(function(){
+const ROOFS=[
+  ['gable','Gable','The most common US roof. Two slopes with triangular wall ends.','Attic vents at the gable ends; above 6/12 not walkable.',[11,7],5/12,.5],
+  ['hip','Hip','Four slopes and no gable walls. Stands up to wind; desert tracts and Gulf houses.','Every side has an eave, so no tall end walls to climb.',[11,7],5/12,.5],
+  ['dutch','Dutch gable','A hip with a small gable at the top of each end.','Gablet vents are a way into the attic.',[11,7],6/12,.4],
+  ['gambrel','Gambrel','A steep lower slope and a shallow upper one. Barns and Dutch Colonials.','The steep sides give a full-height upper floor.',[10,8],5/12,.3],
+  ['mansard','Mansard','Steep on all four sides round a flat top. Second Empire houses; 1970s fast food.','The flat top can be walked; the steep band hides a parapet.',[11,8],0,.3],
+  ['shed','Shed','A single slope. Hillside and desert contemporaries, additions.','The high wall carries clerestory windows.',[10,6],3/12,.6],
+  ['saltbox','Saltbox','An uneven gable: the rear slope runs long over a lean-to. Colonial New England.','Two storeys at the front, one at the back.',[10,7],10/12,.15],
+  ['butterfly','Butterfly','Two slopes falling to a central valley. Mid-century modern.','Tall glass walls at both eaves.',[10,7],3/12,.4],
+  ['flat','Flat with overhang','A thin slab with deep eaves. Mid-century and desert contemporaries.','Walkable; the overhang gives shade but no cover.',[11,7],0,0],
+  ['parapet','Flat behind a parapet','Pueblo and Territorial houses, and nearly every shop.','The parapet is cover on the roof; canales and scuppers drain it.',[11,7],0,0],
+  ['aframe','A-frame','The roof is the wall, down to the ground. 1950s to 1970s cabins.','A loft in the peak; no side walls to breach.',[7,6],21/12,0],
+  ['cross','Cross gable','Gables over each wing of an L or T, meeting in valleys. Made automatically from the footprint.','Valleys and a taller main ridge.',[11,7],5/12,.4],
+];
+const C=document.getElementById('roofCards');
+const iso=([x,y,z])=>[ (x-z)*Math.cos(Math.PI/6), (x+z)*Math.sin(Math.PI/6)-y ];
+function draw(type,dims,p,o){
+  const [L,D]=dims, wallH=2.8, polys=[];
+  const box=(x0,z0,x1,z1,h)=>{ polys.push({k:'wall',pts:[[x0,0,z1],[x1,0,z1],[x1,h,z1],[x0,h,z1]]},{k:'wall2',pts:[[x1,0,z0],[x1,0,z1],[x1,h,z1],[x1,h,z0]]}); };
+  const rect=(x0,z0,x1,z1,t)=>{ box(x0,z0,x1,z1,wallH); const r=roofPlanes({x0,x1,z0,z1},wallH,t,p,o); for(const pl of r.planes) polys.push({k:pl.kind==='end'?'end':'roof',pts:pl.pts}); };
+  if(type==='cross'){ rect(0,0,L,4.5,'gable'); rect(L-4.5,0,L,D,'gable'); }
+  else if(type==='flat'||type==='parapet'){ box(0,0,L,D,wallH);
+    if(type==='flat') polys.push({k:'roof',pts:[[-.9,wallH,-.9],[L+.9,wallH,-.9],[L+.9,wallH,D+.9],[-.9,wallH,D+.9]]},{k:'end',pts:[[-.9,wallH-.3,D+.9],[L+.9,wallH-.3,D+.9],[L+.9,wallH,D+.9],[-.9,wallH,D+.9]]});
+    else { polys.push({k:'roof',pts:[[0,wallH,0],[L,wallH,0],[L,wallH,D],[0,wallH,D]]}); const ph=.7; for(const [a,b] of [[[0,0],[L,0]],[[L,0],[L,D]],[[L,D],[0,D]],[[0,D],[0,0]]]) polys.push({k:'wall',pts:[[a[0],wallH,a[1]],[b[0],wallH,b[1]],[b[0],wallH+ph+(a[0]===b[0]?0:.2),b[1]],[a[0],wallH+ph,a[1]]]}); } }
+  else if(type==='aframe'){ const pp=1.75, y=wallH+.15, oo=(y-.35)/pp; const r=roofPlanes({x0:0,x1:L,z0:0,z1:D},y,'gable',pp,oo); box(0,0,L,D,wallH); for(const pl of r.planes) polys.push({k:pl.kind==='end'?'end':'roof',pts:pl.pts}); }
+  else if(type==='mansard'){ rect(0,0,L,D,'mansard'); }
+  else rect(0,0,L,D,type);
+  // painter's order: far to near by mean x+z then height
+  const depth=pl=>pl.pts.reduce((s,q)=>s+q[0]+q[2]+q[1]*.6,0)/pl.pts.length;
+  polys.sort((a,b)=>depth(a)-depth(b));
+  let mnx=1e9,mxx=-1e9,mny=1e9,mxy=-1e9; for(const pl of polys) for(const q of pl.pts){ const [X,Y]=iso(q); mnx=Math.min(mnx,X); mxx=Math.max(mxx,X); mny=Math.min(mny,Y); mxy=Math.max(mxy,Y); }
+  const pad=1.2, vb=[mnx-pad,mny-pad,mxx-mnx+2*pad,mxy-mny+2*pad];
+  const fill={roof:'rgba(159,195,234,.28)',end:'rgba(159,195,234,.12)',wall:'rgba(22,56,95,.95)',wall2:'rgba(28,69,115,.95)'};
+  const paths=polys.map(pl=>'<path d="M'+pl.pts.map(q=>iso(q).map(v=>v.toFixed(2)).join(' ')).join('L')+'Z" fill="'+fill[pl.k]+'" stroke="#eaf3ff" stroke-width=".09" stroke-linejoin="round"/>').join('');
+  return '<svg class="axo" viewBox="'+vb.map(v=>v.toFixed(2)).join(' ')+'" role="img" aria-label="'+type+' roof">'+paths+'</svg>';
+}
+for(const [t,n,d,g,dims,p,o] of ROOFS){ const el=document.createElement('div'); el.className='card'; el.innerHTML=draw(t,dims,p,o)+'<h3>'+n+'</h3><span class="tag">'+(p?'about '+Math.round(p*12)+'/12':'flat')+(o?' · eave '+o+' m':'')+'</span><p>'+d+'</p><p class="game">'+g+'</p>'; C.appendChild(el); }
+
+const MATNOTE={shingle:['Everywhere','Quiet underfoot; tears in a blast'],ctile:['Arizona tracts, Florida','Cracks and clatters when walked on'],clay:['Spanish Colonial, Mission','Heavy, brittle, noisy to cross'],metal:['Mountain, rural, Gulf','Loud in rain and underfoot; slick'],corrugated:['Sheds, barns, mobile homes','Loud; thin enough to shoot through'],shake:['Pacific Northwest, older houses','Burns'],slate:['Northeast, older and wealthier','Slippery, heavy'],foam:['Arizona flat roofs','Soft, walkable, white glare'],builtup:['Older flat roofs, shops','Walkable; gravel crunches'],membrane:['Shops and offices','Walkable; seams every 1.8 m'],rolled:['Low-slope sheds and porches','Cheap; tears']};
+const mt=document.querySelector('#matTable tbody');
+for(const k in ROOFMAT){ const m=ROOFMAT[k], nt=MATNOTE[k]||['','']; mt.insertAdjacentHTML('beforeend','<tr><td>'+m.n+'</td><td class="n">'+(m.pitch[1]<=1?'flat':m.pitch[0]+'/12 to '+m.pitch[1]+'/12')+'</td><td>'+m.cols.slice(0,4).map(c=>'<span class="sw" style="background:'+c[0]+'"></span>').join('')+' '+(m.pat==='courses'?'courses along the eave':m.pat==='ribs'?'ribs down the slope':m.pat==='seams'?'seams down the slope':'one sheet')+'</td><td>'+nt[0]+'</td><td>'+nt[1]+'</td></tr>'); }
+
+const RN={gable:'gable',hip:'hip',dutch:'Dutch gable',gambrel:'gambrel',mansard:'mansard',shed:'shed',saltbox:'saltbox',butterfly:'butterfly',flat:'flat',parapet:'parapet',aframe:'A-frame'};
+const ST={'1':'1','1.5':'1½','2':'2','wing':'2 + 1 wing'};
+const ERA={prewar:'before 1945',postwar:'1945-65',seventies:'1965-85',modern:'1985-2005',recent:'after 2005'};
+const FIT={ranch:'80 to 460 m²',tract:'100 to 460 m²',pueblo:'any, 60 m² or more',territorial:'boxy, 70 m² or more',spanish:'90 to 460 m²',mcm:'90 to 400 m²',manufactured:'a clean box: 2.3:1 or longer up to 175 m², or 1.5 to 3.2:1 up to 240 m²',hillside:'70 to 400 m²; gains on slopes',cabin:'boxy, 40 to 190 m²',aframe:'a clean box under 2.2:1, 40 to 150 m²',colonial:'boxy, 70 to 270 m²',cape:'boxy, 55 to 170 m²',craftsman:'70 to 230 m²',victorian:'80 to 300 m²',split:'110 to 330 m²',farmhouse:'boxy, 70 to 260 m²',saltbox:'a clean box, 60 to 200 m²',raised:'60 to 260 m²'};
+const fmtW=w=>{ const t=Object.values(w).reduce((a,b)=>a+b,0); return Object.entries(w).sort((a,b)=>b[1]-a[1]).map(([k,v])=>(RN[k]||ROOFMAT[k]&&ROOFMAT[k].n||CLAD[k]&&CLAD[k].n||k)+(Object.keys(w).length>1?' '+Math.round(v/t*100)+'%':'')).join(', '); };
+const at=document.querySelector('#archTable tbody');
+for(const k in ARCH){ const a=ARCH[k]; at.insertAdjacentHTML('beforeend','<tr><td><b>'+a.n+'</b></td><td>'+a.eras.map(e=>ERA[e]).join(', ')+'</td><td>'+Object.keys(a.storeys).map(s=>ST[s]).join(' or ')+'</td><td>'+fmtW(a.roofs)+(a.parapet?' ('+a.parapet+')':'')+'</td><td class="n">'+(a.pitch[1]?a.pitch[0]+'-'+a.pitch[1]+'/12':'flat')+'</td><td class="n">'+(a.over[1]?a.over[0]+'-'+a.over[1]+' m':'none')+'</td><td>'+fmtW(a.clad.any||a.clad.sonoran)+'</td><td>'+(FIT[k]||'')+'</td></tr>'); }
+const rt=document.querySelector('#regTable tbody'), FN=Object.fromEntries(Object.entries(FOUND).map(([k,v])=>[k,v.n]));
+for(const k in REGIONS){ const r=REGIONS[k], t=Object.values(r.arch).reduce((a,b)=>a+b,0), top=Object.entries(r.arch).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([a,v])=>ARCH[a].n+' '+Math.round(v/t*100)+'%').join(', ');
+  rt.insertAdjacentHTML('beforeend','<tr><td><b>'+r.n+'</b></td><td>'+top+'</td><td>'+Object.entries(r.eras).map(([e,v])=>ERA[e]+' '+Math.round(v*100)+'%').join(', ')+'</td><td>'+Object.entries(r.found).map(([f,v])=>FN[f].toLowerCase()+' '+Math.round(v*100)+'%').join(', ')+'</td></tr>'); }
+const ct=document.querySelector('#cladTable tbody');
+for(const k in CLAD){ const c=CLAD[k]; ct.insertAdjacentHTML('beforeend','<tr><td>'+c.n+'</td><td>'+WM2[c.mat].n.toLowerCase()+'</td><td>'+({lap:'courses 0.3 m',batten:'boards 0.34 m',brick:'courses 0.3 m',block:'courses 0.4 m',log:'logs 0.32 m'}[c.pat]||'plain')+'</td><td>'+c.cols.slice(0,6).map(x=>'<span class="sw" style="background:'+x+'"></span>').join('')+'</td></tr>'); }
+const wt=document.querySelector('#matWall tbody');
+for(const k of ['stud','metal','frame','siding','brick','block','log','adobe','concrete','vault']){ const m=WM2[k]; wt.insertAdjacentHTML('beforeend','<tr><td>'+m.n+'</td><td>'+m.cls+'</td><td>'+(m.pierce==null?'stops them':'go through')+'</td><td>'+(m.hand?'opens it':'too thick')+'</td><td>'+(m.charges>1?'two':'one')+'</td></tr>'); }
+const FC=document.getElementById('footCards');
+const FOOTD={slab:['Concrete poured on a levelled pad. Arizona, Texas, Florida, most newer tracts.','No crawlspace; the floor is the ground.'],crawl:['A stem wall round the edge, the floor 0.6 m up over a crawlspace.','A crawlspace is a hiding place and a way under the house.'],basement:['A full storey below ground, concrete walls, small high windows.','No way out but the stair or an egress window.'],walkout:['The downhill half has a lower floor at ground level; the uphill side is buried.','Two ground floors: a door at each level.'],piers:['Posts and beams over the slope.','Sight lines and cover under the house.'],raised:['Two metres up on piers, out of the flood. Gulf coast.','Stairs to every door are choke points.'],chassis:['A steel chassis on piers behind skirting.','Thin skirting hides a crawlspace.']};
+const sec=(k)=>{ const g=-1.2, s=[]; const L=(a,b,c,d,w)=>s.push('<path d="M'+a+' '+b+'L'+c+' '+d+'" stroke="#eaf3ff" stroke-width="'+(w||.08)+'"/>');
+  const ground=k==='walkout'||k==='piers'?'M-1 1.6L3 1.6L9 4.4L13 4.4':'M-1 2.4L13 2.4';
+  s.push('<path d="'+ground+'" stroke="#ffd27a" stroke-width=".1" fill="none"/>');
+  const fy={slab:2.2,crawl:1.7,basement:2.0,walkout:1.4,piers:1.2,raised:.4,chassis:1.6}[k];
+  s.push('<rect x="1" y="'+(fy-2.6)+'" width="10" height="2.6" fill="rgba(28,69,115,.9)" stroke="#eaf3ff" stroke-width=".08"/>');
+  if(k==='basement') s.push('<rect x="1" y="'+fy+'" width="10" height="2.6" fill="rgba(159,195,234,.18)" stroke="#eaf3ff" stroke-width=".08"/>');
+  if(k==='walkout') s.push('<rect x="6" y="'+fy+'" width="5" height="2.6" fill="rgba(159,195,234,.18)" stroke="#eaf3ff" stroke-width=".08"/>');
+  if(k==='crawl'||k==='chassis') { L(1,fy,1,2.4,.2); L(11,fy,11,2.4,.2); }
+  if(k==='piers'){ for(const x of [1.2,4,7,10.8]){ const gy=x<3?1.6:Math.min(4.4,1.6+(x-3)*2.8/6); L(x,fy,x,gy,.18); } }
+  if(k==='walkout'){ for(const x of [1.2,3.6]){ L(x,fy,x,1.6+(x>3?(x-3)*.47:0),.18); } }
+  if(k==='raised'){ for(const x of [1.2,4,7,10.8]) L(x,fy,x,2.4,.18); s.push('<path d="M11 '+fy+'L13 2.4" stroke="#eaf3ff" stroke-width=".08"/>'); }
+  return '<svg class="axo" viewBox="-1.5 -2.6 15 7.6" role="img" aria-label="'+k+' section">'+s.join('')+'</svg>'; };
+for(const k of ['slab','crawl','basement','walkout','piers','raised','chassis']){ const f=FOOTD[k]; FC.insertAdjacentHTML('beforeend','<div class="card">'+sec(k)+'<h3>'+FOUND[k].n+'</h3><p>'+f[0]+'</p><p class="game">'+f[1]+'</p></div>'); }
+})();
+</script>

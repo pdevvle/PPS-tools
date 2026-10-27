@@ -1,0 +1,73 @@
+{% from "mk_macros.html" import icon %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <title>{% block title %}Marketing Hub{% endblock %} · PPS Marketing Hub</title>
+  <script>try{var t=localStorage.getItem("mk-theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}</script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='mk.css') }}">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0b0b'/%3E%3Cpath d='M9 24V8h7a5 5 0 0 1 0 10h-7' fill='none' stroke='%23fff' stroke-width='3'/%3E%3C/svg%3E">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="shell">
+  <aside class="sidebar">
+    <a class="brand" href="{{ url_for('dashboard') }}" aria-label="PPS Marketing Hub home">
+      <span class="brand-mark" aria-hidden="true">PPS</span>
+      <span class="brand-name">Marketing Hub<small>Priority Print Service</small></span>
+    </a>
+    <nav class="nav" aria-label="Main">
+      {% for endpoint, label, ic in nav %}
+        <a href="{{ url_for(endpoint) }}" {% if request.endpoint == endpoint %}aria-current="page"{% endif %}>{{ icon(ic) }}<span>{{ label }}</span></a>
+      {% endfor %}
+    </nav>
+    <div class="sidebar-foot">
+      {% if demo_active %}<a class="pill demo" href="{{ url_for('connections') }}" title="Showing sample data">Demo data</a>{% endif %}
+      {% if app_password %}
+      <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="linkish small" type="submit">Sign out</button></form>
+      {% endif %}
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div>
+        <h1>{% block heading %}{% endblock %}</h1>
+        {% set intro %}{% block intro %}{% endblock %}{% endset %}
+        {% if intro|trim %}<p class="page-intro">{{ intro }}</p>{% endif %}
+      </div>
+      <div class="topbar-actions">
+        {% block actions %}{% endblock %}
+        <div class="theme-toggle" role="group" aria-label="Color theme">
+          <button type="button" data-theme-set="light" title="Light" aria-pressed="false">{{ icon("sun") }}<span class="sr-only">Light</span></button>
+          <button type="button" data-theme-set="auto" title="Match system" aria-pressed="true">{{ icon("monitor") }}<span class="sr-only">System</span></button>
+          <button type="button" data-theme-set="dark" title="Dark" aria-pressed="false">{{ icon("moon") }}<span class="sr-only">Dark</span></button>
+        </div>
+      </div>
+    </header>
+
+    <main class="content" id="main">
+      {% if demo_active and request.endpoint != "connections" %}
+      <div class="banner warning">{{ icon("info") }}
+        <p><strong>Demo mode:</strong> you're looking at sample data. Pausing, budget changes and posts are simulated.
+          <a href="{{ url_for('connections') }}">Connect your ad accounts</a> to see live numbers.</p>
+      </div>
+      {% endif %}
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for cat, msg in messages %}
+          <div class="banner {{ cat if cat in ('success', 'error', 'info', 'warning') else 'info' }}" role="{{ 'alert' if cat == 'error' else 'status' }}">
+            {{ icon("check" if cat == "success" else ("alert" if cat == "error" else "info")) }}<p>{{ msg }}</p>
+          </div>
+        {% endfor %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+<div class="toasts" role="status" aria-live="polite"></div>
+<script src="{{ url_for('static', filename='mk.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

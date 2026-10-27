@@ -1,0 +1,115 @@
+{% extends "mk_base.html" %}
+{% from "mk_macros.html" import icon, net with context %}
+{% block title %}Connections{% endblock %}
+{% block heading %}Connections{% endblock %}
+{% block intro %}Connect each ad platform once. The hub stores the access it's given in its local database (<code>marketing.db</code>) and refreshes it automatically where the platform allows.{% endblock %}
+
+{% block content %}
+<div class="grid grid-2">
+  <section class="card">
+    <h2>Demo mode</h2>
+    <p class="subtle" style="margin:6px 0 10px">Sample data for Priority Print Service, so you can try every feature before connecting anything.</p>
+    <form method="post" action="{{ url_for('connections_demo') }}" class="row">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="segmented" role="group" aria-label="Demo mode">
+        {% for mode, label in [("auto", "Automatic"), ("on", "Always on"), ("off", "Off")] %}
+          <button type="submit" name="mode" value="{{ mode }}" aria-pressed="{{ 'true' if demo_setting == mode else 'false' }}">{{ label }}</button>
+        {% endfor %}
+      </div>
+      <span class="pill {{ 'demo' if demo_active else 'tone-good' }}"><span class="dot"></span>{{ "Showing demo data" if demo_active else "Showing live data" }}</span>
+    </form>
+    <p class="subtle small" style="margin-top:8px">Automatic shows demo data until the first platform is connected, then switches to live data.</p>
+  </section>
+
+  <section class="card">
+    <h2>{{ icon("sparkle") }}Claude (AI features)</h2>
+    {% if ai_ready %}
+      <p style="margin:6px 0 0"><span class="pill tone-good"><span class="dot"></span>Ready</span> AI Studio and Insights use <code>{{ model }}</code>.</p>
+    {% else %}
+      <p class="subtle" style="margin:6px 0 0">Add <code>ANTHROPIC_API_KEY</code> to your <code>.env</code> file (get a key at console.anthropic.com) and restart the hub. Everything else works without it.</p>
+    {% endif %}
+  </section>
+</div>
+
+{% for card in cards %}
+{% set p = card.p %}
+{% set conn = card.connection %}
+<section class="card conn-card section-gap" id="{{ p.key }}">
+  <div class="conn-head">
+    <div>
+      <h2>{{ p.name }}</h2>
+      <div class="nets">{% for n in p.networks %}{{ net(n) }}{% endfor %}
+        <span>· {{ "Ads" if p.supports_ads }}{{ " + posting" if p.supports_publish }}</span></div>
+    </div>
+    <div class="row">
+      {% if conn %}
+        <span class="pill tone-good"><span class="dot"></span>Connected{% if conn.profile.get("name") or conn.profile.get("username") %} as {{ conn.profile.get("username") and "@" ~ conn.profile.username or conn.profile.name }}{% endif %}</span>
+        <form class="inline" method="post" action="{{ url_for('connections_refresh', platform=p.key) }}" data-busy>
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn ghost sm" type="submit">{{ icon("refresh") }} Refresh accounts</button></form>
+        {% if not p.missing_env() %}<a class="btn ghost sm" href="{{ url_for('oauth_start', platform=p.key) }}">Reconnect</a>{% endif %}
+        <form class="inline" method="post" action="{{ url_for('connections_disconnect', platform=p.key) }}" data-confirm="Disconnect {{ p.name }}? The hub will stop reading and changing it.">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn danger sm" type="submit">Disconnect</button></form>
+      {% elif p.configured %}
+        <span class="pill"><span class="dot"></span>Not connected</span>
+        {% if not p.missing_env() %}<a class="btn sm" href="{{ url_for('oauth_start', platform=p.key) }}">Connect {{ p.name.split(" (")[0] }}</a>{% endif %}
+        {% if card.keys_available %}
+          <form class="inline" method="post" action="{{ url_for('connections_keys', platform=p.key) }}" data-busy>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn {{ 'ghost ' if not p.missing_env() }}sm" type="submit">Connect with API keys</button></form>
+        {% endif %}
+      {% else %}
+        <span class="pill tone-warning"><span class="dot"></span>Needs setup</span>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if card.warning %}<div class="banner warning" style="margin-top:12px">{{ icon("alert") }}<p>{{ card.warning }}</p></div>{% endif %}
+
+  {% if conn %}
+  <div class="grid grid-2" style="margin-top:14px">
+    {% if p.supports_ads %}
+    <div>
+      <h3>Ad accounts</h3>
+      {% for a in card.accounts %}
+        <form class="toggle-row" method="post" action="{{ url_for('connections_account_toggle', platform=p.key) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="account_id" value="{{ a.account_id }}"><input type="hidden" name="enabled" value="{{ '0' if a.enabled else '1' }}">
+          <span>{{ a.name }} <span class="small muted">{{ a.account_id }} · {{ a.currency }}</span></span>
+          <button class="pill {{ 'tone-good' if a.enabled else '' }}" type="submit" style="cursor:pointer" title="Click to {{ 'exclude' if a.enabled else 'include' }}"><span class="dot"></span>{{ "Included" if a.enabled else "Excluded" }}</button>
+        </form>
+      {% else %}
+        <p class="subtle small">No ad accounts found.{% if p.key == "x" %} Ads reporting needs the X Ads API keys (see setup).{% endif %}</p>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if p.supports_publish %}
+    <div>
+      <h3>Places to publish</h3>
+      {% for t in card.targets %}
+        <form class="toggle-row" method="post" action="{{ url_for('connections_target_toggle', platform=p.key) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="network" value="{{ t.network }}"><input type="hidden" name="target_id" value="{{ t.target_id }}">
+          <input type="hidden" name="enabled" value="{{ '0' if t.enabled else '1' }}">
+          <span>{{ net(t.network) }} <span class="small">{{ t.name }}</span></span>
+          <button class="pill {{ 'tone-good' if t.enabled else '' }}" type="submit" style="cursor:pointer"><span class="dot"></span>{{ "On" if t.enabled else "Off" }}</button>
+        </form>
+      {% else %}
+        <p class="subtle small">Nothing to publish to yet{% if p.key == "meta" %} — make sure you have a Facebook Page (and an Instagram professional account linked to it){% endif %}.</p>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  <p class="small muted" style="margin-top:8px">Connected {{ conn.connected_at|local_time }}</p>
+  {% endif %}
+
+  <details style="margin-top:12px" {% if not p.configured %}open{% endif %}>
+    <summary class="small" style="cursor:pointer;font-weight:550">Setup instructions</summary>
+    <ol>{% for step in p.setup_steps %}<li>{{ step }}</li>{% endfor %}</ol>
+    <div class="copy-box"><span class="small muted nowrap">Redirect URI</span><code>{{ p.redirect_uri }}</code>
+      <button class="btn ghost sm" type="button" data-copy="{{ p.redirect_uri }}">Copy</button></div>
+    <div class="envlist">{% for name, present in card.env %}<code class="{{ 'ok' if present else 'missing' }}">{{ name }}</code>{% endfor %}
+      {% if p.key == "x" %}{% for name in ["X_API_KEY", "X_API_SECRET", "X_ACCESS_TOKEN", "X_ACCESS_TOKEN_SECRET"] %}<code class="{{ 'ok' if p.env(name) else 'missing' }}">{{ name }}</code>{% endfor %}{% endif %}</div>
+    <p class="small muted" style="margin-top:8px">Put these in the <code>.env</code> file next to the app and restart it. <a href="{{ p.docs_url }}" target="_blank" rel="noopener">{{ p.name }} developer docs {{ icon("external")|safe }}</a></p>
+  </details>
+</section>
+{% endfor %}
+{% endblock %}

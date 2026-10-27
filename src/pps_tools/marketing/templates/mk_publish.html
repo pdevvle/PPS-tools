@@ -1,0 +1,317 @@
+{% extends "mk_base.html" %}
+{% from "mk_macros.html" import icon, net, post_status with context %}
+{% block title %}Publish{% endblock %}
+{% block heading %}Publish{% endblock %}
+{% block intro %}Write a post once and send it to Facebook, Instagram, Pinterest, X and LinkedIn — now or on a schedule. Adjust the wording per network when one size doesn't fit.{% endblock %}
+
+{% block content %}
+{% set editing = post and post.get("id") %}
+<div class="grid grid-main">
+  <section class="card composer">
+    <div class="card-head"><h2>{{ "Edit post" if editing else "Compose" }}</h2>
+      {% if editing %}<a class="small" href="{{ url_for('publish') }}">Start a new post instead</a>{% endif %}</div>
+
+    {% if not targets %}
+      <div class="banner info">{{ icon("info") }}<p>Connect Meta, Pinterest, X or LinkedIn on the <a href="{{ url_for('connections') }}">Connections</a> page to publish. Google Ads, Microsoft Advertising and TikTok are ads-only here.</p></div>
+    {% endif %}
+
+    <form method="post" action="{{ url_for('publish') }}" id="composer" data-busy>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="scheduled_utc" id="scheduled-utc">
+      {% if editing %}<input type="hidden" name="post_id" value="{{ post.id }}">{% endif %}
+
+      <fieldset class="field" style="border:0;padding:0;margin:0 0 14px">
+        <legend style="font-size:0.86rem;font-weight:550;margin-bottom:6px">Publish to</legend>
+        {% set selected = (post.targets if post else []) %}
+        {% for network in ["facebook", "instagram", "pinterest", "x", "linkedin"] %}
+          {% set group = targets|selectattr("network", "equalto", network)|list %}
+          {% if group %}
+          <div class="target-group">
+            <h4>{{ net(network) }}</h4>
+            {% for t in group %}
+              <label class="check"><input type="checkbox" name="targets" value="{{ t.key }}" data-network="{{ t.network }}" {% if t.key in selected %}checked{% endif %}>
+                {{ t.name }}{% if t.kind == "board" %} <span class="muted small">board</span>{% endif %}</label>
+            {% endfor %}
+          </div>
+          {% endif %}
+        {% endfor %}
+      </fieldset>
+
+      <div class="field">
+        <label for="body">Post text</label>
+        <textarea id="body" name="body" placeholder="What do you want to say?">{{ post.body if post else "" }}</textarea>
+        <div class="counters" id="counters" aria-live="polite"></div>
+      </div>
+
+      <div class="form-grid" style="margin-top:14px">
+        <div class="field">
+          <label for="link">Link <span class="hint">optional</span></label>
+          <input id="link" name="link" type="url" placeholder="https://priorityprintservice.com/…" value="{{ post.link or '' if post else '' }}">
+        </div>
+        <div class="field">
+          <label for="utm_campaign">Tag link for analytics <span class="hint">UTM campaign name</span></label>
+          <input id="utm_campaign" name="utm_campaign" type="text" placeholder="fall-business-cards" value="{{ post.utm_campaign or '' if post else '' }}">
+        </div>
+        <div class="field">
+          <label for="image_url">Image URL <span class="hint">public https:// link; needed for Instagram and Pinterest</span></label>
+          <input id="image_url" name="image_url" type="url" placeholder="https://…/image.jpg" value="{{ post.image_url or '' if post else '' }}">
+          <img class="img-preview" id="img-preview" alt="Image preview">
+        </div>
+        <div class="field">
+          <label for="title">Title <span class="hint">Pinterest pin title · LinkedIn link headline</span></label>
+          <input id="title" name="title" type="text" maxlength="{{ pinterest_title_limit }}" value="{{ post.title or '' if post else '' }}">
+        </div>
+      </div>
+
+      <details class="overrides" style="margin-top:14px" {% if post and post.overrides %}open{% endif %}>
+        <summary>Customize the text per network</summary>
+        <p class="subtle">Leave a box empty to use the main text.</p>
+        {% for network in ["facebook", "instagram", "pinterest", "x", "linkedin"] %}
+        <div class="field override" data-network="{{ network }}" style="margin-top:10px" hidden>
+          <label for="override_{{ network }}">{{ net(network) }}</label>
+          <textarea id="override_{{ network }}" name="override_{{ network }}" rows="3">{{ post.overrides.get(network, "") if post and post.overrides else "" }}</textarea>
+        </div>
+        {% endfor %}
+      </details>
+
+      <p class="notice-x" id="x-notice" hidden>{{ icon("info")|safe }} X bills every post made through its API, and posts that contain a link cost considerably more than plain ones.</p>
+      <div id="needs-image" class="banner warning" hidden>{{ icon("alert") }}<p>Instagram and Pinterest posts need an image URL.</p></div>
+
+      <hr>
+      <div class="row">
+        <div class="field" style="min-width:220px">
+          <label for="schedule-local">Schedule for <span class="hint">your local time</span></label>
+          <input id="schedule-local" type="datetime-local" data-utc="{{ post.scheduled_at or '' if post else '' }}">
+        </div>
+        <span class="spacer"></span>
+        <button class="btn ghost" type="submit" name="mode" value="draft">Save draft</button>
+        <button class="btn ghost" type="submit" name="mode" value="schedule" id="btn-schedule">Schedule</button>
+        <button class="btn" type="submit" name="mode" value="now" id="btn-now">Publish now</button>
+      </div>
+    </form>
+  </section>
+
+  <aside class="stack">
+    <section class="card">
+      <h2>{{ icon("info") }}Before you post</h2>
+      <ul class="tight small" style="margin-top:10px">
+        <li><strong>Instagram</strong> needs a JPEG image (4:5 to 1.91:1). Links in captions aren't clickable. At most {{ instagram_max_hashtags }} hashtags.</li>
+        <li><strong>Pinterest</strong> needs an image; the link becomes the Pin's destination. Description up to {{ limits.pinterest }} characters.</li>
+        <li><strong>X</strong> counts links as 23 characters and allows {{ limits.x }} in total. The link is added automatically.</li>
+        <li><strong>LinkedIn</strong> shows a link as an article card, so give it a title.</li>
+        <li><strong>Facebook</strong> turns the link into a preview card; with an image and no link it posts a photo.</li>
+      </ul>
+      <p class="subtle small" style="margin-top:10px">Scheduled posts go out while the hub is running. To publish them when it isn't, run <code>pps marketing publish-due</code> every few minutes from cron or Task Scheduler.</p>
+    </section>
+    <section class="card">
+      <h2>{{ icon("sparkle") }}Need words?</h2>
+      <p class="subtle" style="margin:6px 0 12px">AI Studio writes on-brand posts and ads for each network and can send them straight here.</p>
+      <a class="btn ghost sm" href="{{ url_for('studio') }}">Open AI Studio</a>
+    </section>
+  </aside>
+</div>
+
+<section class="card section-gap">
+  <nav class="tabs" aria-label="Posts">
+    <a href="{{ url_for('publish', tab='queue') }}" {% if tab == 'queue' %}aria-current="page"{% endif %}>Queue ({{ queue|length }})</a>
+    <a href="{{ url_for('publish', tab='calendar') }}" {% if tab == 'calendar' %}aria-current="page"{% endif %}>Calendar</a>
+    <a href="{{ url_for('publish', tab='history') }}" {% if tab == 'history' %}aria-current="page"{% endif %}>History</a>
+  </nav>
+
+  {% if tab == "queue" %}
+    {% for p in queue %}
+      <div class="post-item">
+        <div class="row">{{ post_status(p.status) }}
+          {% if p.scheduled_at %}<span class="small muted">for {{ p.scheduled_at|local_time }}</span>{% endif %}
+          <span class="spacer"></span>
+          {% if p.status in ("draft", "scheduled") %}
+          <a class="btn ghost sm" href="{{ url_for('publish', edit=p.id) }}">Edit</a>
+          <form class="inline" method="post" action="{{ url_for('post_publish_now', post_id=p.id) }}" data-confirm="Publish this post now?" data-busy>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn sm" type="submit">Publish now</button></form>
+          <form class="inline" method="post" action="{{ url_for('post_delete', post_id=p.id) }}" data-confirm="Delete this post?">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn danger sm" type="submit">Delete</button></form>
+          {% endif %}
+        </div>
+        <div class="body">{{ p.body }}</div>
+        <div class="dests">{% for key in p.targets %}{% set info = target_names.get(key) %}
+          {% if info %}<span class="pill">{{ net(info[0]) }} · {{ info[1] }}</span>{% else %}<span class="pill">Disconnected destination</span>{% endif %}{% endfor %}</div>
+      </div>
+    {% else %}
+      <p class="empty">Nothing queued. Scheduled posts and drafts show up here.</p>
+    {% endfor %}
+
+  {% elif tab == "calendar" %}
+    <div class="row" style="margin-bottom:10px">
+      <button class="btn ghost sm" type="button" id="cal-prev" aria-label="Previous month">←</button>
+      <strong id="cal-title" style="min-width:150px;text-align:center"></strong>
+      <button class="btn ghost sm" type="button" id="cal-next" aria-label="Next month">→</button>
+      <span class="spacer"></span>
+      <span class="small muted"><span class="dot" style="background:var(--focus)"></span> scheduled &nbsp; <span class="dot good"></span> published &nbsp; <span class="dot critical"></span> failed</span>
+    </div>
+    <div class="calendar" id="calendar"></div>
+    <script type="application/json" id="calendar-data">{{ calendar|tojson }}</script>
+
+  {% else %}
+    {% for p in history %}
+      <div class="post-item">
+        <div class="row">{{ post_status(p.status) }}<span class="small muted">{{ (p.published_at or p.updated_at)|local_time }}</span>
+          <span class="spacer"></span>
+          {% if p.status in ("partial", "failed") %}
+          <form class="inline" method="post" action="{{ url_for('post_publish_now', post_id=p.id) }}" data-busy>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn ghost sm" type="submit">Retry failed</button></form>
+          <form class="inline" method="post" action="{{ url_for('post_delete', post_id=p.id) }}" data-confirm="Delete this post from the history?">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn danger sm" type="submit">Delete</button></form>
+          {% endif %}
+        </div>
+        <div class="body">{{ p.body }}</div>
+        <ul class="tight small">
+          {% for key, r in p.results.items() %}{% set info = target_names.get(key) %}
+            <li>{% if info %}{{ net(info[0]) }} · {{ info[1] }}{% else %}{{ r.get("name") or key }}{% endif %} —
+              {% if r.ok %}<span class="delta good">✓ posted</span>{% if r.url|safe_url %} · <a href="{{ r.url|safe_url }}" target="_blank" rel="noopener">view {{ icon("external") }}</a>{% endif %}
+              {% else %}<span class="delta bad">✗</span> {{ r.error }}{% endif %}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% else %}
+      <p class="empty">No posts published yet.</p>
+    {% endfor %}
+  {% endif %}
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  var LIMITS = {{ limits|tojson }};
+  var LABELS = { facebook: "Facebook", instagram: "Instagram", pinterest: "Pinterest", x: "X", linkedin: "LinkedIn" };
+  var form = document.getElementById("composer");
+  if (form) {
+    var body = document.getElementById("body");
+    var link = document.getElementById("link");
+    var image = document.getElementById("image_url");
+    var preview = document.getElementById("img-preview");
+    var counters = document.getElementById("counters");
+
+    // X weighs characters: links are 23, CJK and emoji count double.
+    function weigh(s) {
+      var n = 0;
+      Array.from(s).forEach(function (ch) {
+        var cp = ch.codePointAt(0);
+        n += (cp <= 0x10FF || (cp >= 0x2000 && cp <= 0x200D) || (cp >= 0x2010 && cp <= 0x201F) || (cp >= 0x2032 && cp <= 0x2037)) ? 1 : 2;
+      });
+      return n;
+    }
+    function xLength(text) {
+      var re = /https?:\/\/\S+/g, total = 0, last = 0, m;
+      while ((m = re.exec(text))) { total += weigh(text.slice(last, m.index)) + 23; last = m.index + m[0].length; }
+      return total + weigh(text.slice(last));
+    }
+    function selectedNetworks() {
+      var nets = {};
+      form.querySelectorAll('input[name="targets"]:checked').forEach(function (c) { nets[c.dataset.network] = true; });
+      return Object.keys(nets);
+    }
+    function textFor(network) {
+      var o = document.getElementById("override_" + network);
+      var text = (o && o.value.trim()) || body.value;
+      if (network === "x" && link.value.trim() && text.indexOf(link.value.trim()) === -1) text = text.trim() + "\n\n" + link.value.trim();
+      return text;
+    }
+    function update() {
+      var nets = selectedNetworks();
+      counters.textContent = "";
+      nets.forEach(function (n) {
+        var text = textFor(n);
+        var len = n === "x" ? xLength(text) : Array.from(text).length;
+        var span = MK.el("span", { class: len > LIMITS[n] ? "over" : (len > LIMITS[n] * 0.9 ? "near" : "") }, LABELS[n] + " " + len.toLocaleString() + " / " + LIMITS[n].toLocaleString());
+        counters.appendChild(span);
+        if (n === "instagram") {
+          var tags = (text.match(/#/g) || []).length;
+          if (tags) counters.appendChild(MK.el("span", { class: tags > {{ instagram_max_hashtags }} ? "over" : "" }, tags + " hashtags"));
+        }
+      });
+      if (!nets.length) counters.appendChild(MK.el("span", {}, "Pick where to publish to see character counts."));
+      form.querySelectorAll(".override").forEach(function (box) { box.hidden = nets.indexOf(box.dataset.network) === -1; });
+      document.getElementById("x-notice").hidden = nets.indexOf("x") === -1;
+      document.getElementById("needs-image").hidden = !((nets.indexOf("instagram") !== -1 || nets.indexOf("pinterest") !== -1) && !image.value.trim());
+    }
+    function showPreview() {
+      var url = image.value.trim();
+      if (/^https:\/\//i.test(url)) { preview.src = url; preview.classList.add("show"); }
+      else preview.classList.remove("show");
+    }
+    preview.addEventListener("error", function () { preview.classList.remove("show"); });
+    form.addEventListener("input", update);
+    form.addEventListener("change", update);
+    image.addEventListener("change", showPreview);
+
+    // Show the stored UTC schedule in the viewer's local time.
+    var when = document.getElementById("schedule-local");
+    if (when.dataset.utc) {
+      var d = new Date(when.dataset.utc);
+      if (!isNaN(d)) when.value = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    }
+    form.addEventListener("submit", function (e) {
+      var mode = e.submitter ? e.submitter.value : "now";
+      if (mode === "schedule") {
+        if (!when.value) { e.preventDefault(); MK.toast("Pick a date and time first.", "error"); when.focus(); return; }
+        document.getElementById("scheduled-utc").value = new Date(when.value).toISOString();
+      }
+      if (mode === "now" && !window.confirm("Publish this to " + selectedNetworks().length + " network(s) now?")) { e.preventDefault(); }
+    });
+
+    // Copy handed over from AI Studio.
+    try {
+      var handoff = JSON.parse(localStorage.getItem("mk-compose") || "null");
+      if (handoff && !body.value) {
+        body.value = handoff.body || "";
+        Object.keys(handoff.overrides || {}).forEach(function (n) {
+          var box = document.getElementById("override_" + n);
+          if (box) { box.value = handoff.overrides[n]; form.querySelector("details.overrides").open = true; }
+        });
+        if (handoff.title) document.getElementById("title").value = handoff.title;
+        if (handoff.link) link.value = handoff.link;
+        MK.toast("Copy from AI Studio loaded — pick where to publish.");
+      }
+      localStorage.removeItem("mk-compose");
+    } catch (err) { /* storage unavailable */ }
+    showPreview();
+    update();
+  }
+
+  // Content calendar, laid out in the viewer's own time zone.
+  var cal = document.getElementById("calendar");
+  if (cal) {
+    var posts = MK.readJSON("calendar-data") || [];
+    var shown = new Date(); shown.setDate(1);
+    function render() {
+      cal.textContent = "";
+      var year = shown.getFullYear(), month = shown.getMonth();
+      document.getElementById("cal-title").textContent = shown.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+      var start = new Date(year, month, 1);
+      start.setDate(1 - ((start.getDay() + 6) % 7)); // weeks start on Monday
+      ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].forEach(function (d) { cal.appendChild(MK.el("div", { class: "dow" }, d)); });
+      var today = new Date().toDateString();
+      var last = new Date(year, month + 1, 0);
+      var cells = Math.ceil((Math.round((last - start) / 86400000) + 1) / 7) * 7;
+      for (var i = 0; i < cells; i++) {
+        var day = new Date(start); day.setDate(start.getDate() + i);
+        var cell = MK.el("div", { class: "day" + (day.getMonth() !== month ? " out" : "") + (day.toDateString() === today ? " today" : "") });
+        cell.appendChild(MK.el("span", { class: "date" }, day.getDate()));
+        posts.forEach(function (p) {
+          var w = new Date(p.when);
+          if (w.toDateString() !== day.toDateString()) return;
+          var label = w.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) + " " + p.text;
+          var ev = MK.el("a", { class: "ev " + p.status, href: p.status === "scheduled" ? "{{ url_for('publish') }}?edit=" + p.id : "{{ url_for('publish', tab='history') }}", title: label }, label);
+          cell.appendChild(ev);
+        });
+        cal.appendChild(cell);
+      }
+    }
+    document.getElementById("cal-prev").addEventListener("click", function () { shown.setMonth(shown.getMonth() - 1); render(); });
+    document.getElementById("cal-next").addEventListener("click", function () { shown.setMonth(shown.getMonth() + 1); render(); });
+    render();
+  }
+});
+</script>
+{% endblock %}
