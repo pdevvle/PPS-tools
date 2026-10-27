@@ -1,0 +1,593 @@
+diff --git a/src/pps_tools/marketing/app.py b/src/pps_tools/marketing/app.py
+index 576144c..a4071cd 100644
+--- a/src/pps_tools/marketing/app.py
++++ b/src/pps_tools/marketing/app.py
+@@ -1,7 +1,12 @@
+ """Flask web app for the PPS Marketing Hub.
+ 
+-Pages:
+-    /             Dashboard — cross-platform KPIs, daily spend by channel, pacing
++Pages are organized the way people drill in: all services, then one service,
++then one of its campaigns. Each step keeps the earlier lists in view, compressed.
++
++    /                                   All services: cross-platform KPIs, daily spend by channel, pacing
++    /services/<platform>                One service: its numbers and campaigns
++    /services/<platform>/campaigns/<account>/<campaign>
++                                        One campaign: stats, leads (to come) and a link to the platform
+     /campaigns    Every campaign on every platform; pause / enable / change budget
+     /publish      Write once, post to Facebook, Instagram, Pinterest, X and LinkedIn; schedule; calendar
+     /studio       AI Studio — Claude writes platform-ready ad copy
+@@ -53,7 +58,7 @@ from pps_tools.marketing.copywriter import FORMATS, GOALS, CopyBrief, Copywriter
+ from pps_tools.marketing.http import NotConnectedError, PlatformAPIError
+ from pps_tools.marketing.hub import HubError, MarketingHub
+ from pps_tools.marketing.insights import Analyst, apply_recommendation, build_snapshot
+-from pps_tools.marketing.models import ACTIVE, NETWORKS, PAUSED, network_for
++from pps_tools.marketing.models import ACTIVE, NETWORKS, PAUSED, network_for, split_campaign_key
+ from pps_tools.marketing.pacing import month_key, pacing_for
+ from pps_tools.marketing.publisher import (
+     INSTAGRAM_MAX_HASHTAGS,
+@@ -71,19 +76,23 @@ logger = logging.getLogger(__name__)
+ 
+ HERE = Path(__file__).resolve().parent
+ 
+-NAV = [
+-    ("dashboard", "Dashboard", "grid"),
+-    ("campaigns", "Campaigns", "bars"),
++# Everything that isn't a service or a campaign, listed under the services.
++TOOLS = [
+     ("publish", "Publish", "send"),
+     ("studio", "AI Studio", "sparkle"),
+     ("insights", "Insights", "bulb"),
+     ("automation", "Automation", "bolt"),
+     ("budgets", "Budgets", "wallet"),
+     ("utm", "UTM Builder", "link"),
+-    ("connections", "Connections", "plug"),
+     ("activity", "Activity", "clock"),
++    ("connections", "Connections", "plug"),
+ ]
+ 
++# The mark each service shows when the services list is compressed.
++PLATFORM_BADGES = {"google_ads": "G", "meta": "M", "pinterest": "P", "x": "X", "linkedin": "in", "tiktok": "TT",
++                   "microsoft_ads": "MS"}
++KPI_METRICS = ("spend", "conversion_value", "roas", "conversions", "cpa", "ctr")
++
+ CURRENCY_SYMBOLS = {"USD": "$", "CAD": "CA$", "AUD": "A$", "EUR": "€", "GBP": "£", "NZD": "NZ$", "MXN": "MX$"}
+ 
+ 
+@@ -262,10 +271,87 @@ def create_app(
+     def platform_labels() -> dict:
+         return {k: p.name for k, p in hub.platforms.items()}
+ 
++    def platform_slot(key: str) -> int:
++        """A service's color: the color of its (first) network."""
++        p = hub.platforms.get(key)
++        return network_for(p.networks[0]).slot if p and p.networks else 0
++
++    def service_for_network() -> dict:
++        found = {n: p.key for p in hub.platforms.values() for n in p.networks}
++        if "meta" in hub.platforms:
++            found.setdefault("other", "meta")  # Meta's placements beyond Facebook and Instagram
++        return found
++
++    def range_args() -> dict:
++        """The date range in the current URL, carried along when moving between views."""
++        args = request.args
++        if args.get("start") and args.get("end"):
++            return {"start": args["start"], "end": args["end"]}
++        if args.get("range") in an.PRESETS and args["range"] != "30d":
++            return {"range": args["range"]}
++        return {}
++
++    def service_entry(p) -> dict:
++        short = p.short_name or p.name
++        return {"key": p.key, "name": p.name, "short": short, "slot": platform_slot(p.key),
++                "badge": PLATFORM_BADGES.get(p.key) or short[:2]}
++
++    def nav_campaigns(platform_key: str, campaigns: list, rows: list) -> list[dict]:
++        by_campaign = an.by_campaign(r for r in rows if r.platform == platform_key)
++        items = []
++        for c in campaigns:
++            t = by_campaign.get(c.key)
++            if c.platform != platform_key or (c.status not in (ACTIVE, PAUSED) and not (t and t.spend)):
++                continue
++            items.append({"key": c.key, "account_id": c.account_id, "campaign_id": c.campaign_id, "name": c.name,
++                          "status": c.status, "spend": t.spend if t else 0.0, "currency": c.currency})
++        items.sort(key=lambda i: (i["status"] != ACTIVE, -i["spend"], i["name"].lower()))
++        return items
++
++    def build_nav(level: int = 1, platform: Optional[str] = None, campaigns: Optional[list] = None,
++                  rows: Optional[list] = None, campaign_key: Optional[str] = None) -> dict:
++        """What the services and campaigns columns show. Deeper levels compress the columns above them."""
++        spend = an.by_platform(rows) if rows is not None else {}
++        services = []
++        for p in hub.sources():
++            if p.supports_ads:
++                t = spend.get(p.key)
++                services.append(dict(service_entry(p), spend=(t.spend if t else 0.0) if rows is not None else None))
++        return {
++            "level": level,
++            "range": range_args(),
++            "services": services,
++            "total_spend": sum(s["spend"] for s in services) if rows is not None else None,
++            "service": service_entry(hub.platform(platform)) if platform else None,
++            "campaigns": nav_campaigns(platform, campaigns or [], rows or []) if platform else [],
++            "campaign_key": campaign_key,
++        }
++
++    def service_or_404(key: str):
++        source = next((p for p in hub.sources() if p.key == key and p.supports_ads), None)
++        if source is None:
++            abort(404, "That service isn't connected. Add it on the Connections page.")
++        return source
++
++    def period_data(period: an.Period, refresh: bool):
++        """This period's and the previous period's rows, plus every campaign, fetched side by side."""
++        prev = period.previous()
++        with ThreadPoolExecutor(max_workers=3) as pool:
++            current_job = pool.submit(hub.metrics, period.start, period.end, refresh)
++            previous_job = pool.submit(hub.metrics, prev.start, prev.end, refresh)
++            campaigns_job = pool.submit(hub.campaigns, refresh)
++            rows, errors = current_job.result()
++            prev_rows, _ = previous_job.result()
++            campaigns, campaign_errors = campaigns_job.result()
++        errors.update(campaign_errors)
++        return rows, prev_rows, campaigns, errors
++
+     @app.context_processor
+     def inject():
+         return {
+-            "nav": NAV,
++            "nav": build_nav(),
++            "tools": TOOLS,
++            "platform_slots": {k: platform_slot(k) for k in hub.platforms},
+             "csrf_token": csrf_token,
+             "demo_active": hub.demo_active(),
+             "networks": NETWORKS,
+@@ -342,6 +428,48 @@ def create_app(
+             "spark": spark,
+         }
+ 
++    def kpi_tiles(rows: list, prev_rows: list, period: an.Period, currency: str) -> list[dict]:
++        cur, old = an.totals(rows), an.totals(prev_rows)
++        return [kpi(m, cur, old, an.daily(rows, period.start, period.end, m)["total"], currency) for m in KPI_METRICS]
++
++    def spend_chart(rows: list, period: an.Period, currency: str) -> dict:
++        by_net_daily = an.daily(rows, period.start, period.end, "spend",
++                                key=lambda r: r.network if r.network in NETWORKS else "other")
++        return {
++            "days": an.days_between(period.start, period.end),
++            "currency": CURRENCY_SYMBOLS.get(currency, ""),
++            "series": [
++                {"key": k, "label": NETWORKS[k].label, "slot": NETWORKS[k].slot, "values": by_net_daily[k]}
++                for k in NETWORKS
++                if k in by_net_daily
++            ],
++            "conversions": an.daily(rows, period.start, period.end, "conversions")["total"],
++        }
++
++    def campaign_items(found: list, rows: list, period: an.Period, platform: Optional[str] = None) -> list[dict]:
++        """Rows for a campaigns table: each live campaign with its totals and daily spend."""
++        by_campaign = an.by_campaign(rows)
++        spark = an.daily(rows, period.start, period.end, "spend", key=lambda r: r.campaign_key)
++        networks_by_campaign: dict[str, set] = {}
++        for r in rows:
++            networks_by_campaign.setdefault(r.campaign_key, set()).add(r.network)
++        items = []
++        for c in found:
++            if platform and c.platform != platform:
++                continue
++            t = by_campaign.get(c.key, an.Totals())
++            if c.status not in (ACTIVE, PAUSED) and not t.spend:
++                continue
++            items.append({
++                "c": c,
++                "t": t,
++                "spark": spark.get(c.key, []),
++                "networks": sorted(networks_by_campaign.get(c.key, set(hub.platform(c.platform).networks[:1])),
++                                   key=lambda n: list(NETWORKS).index(n) if n in NETWORKS else 99),
++            })
++        items.sort(key=lambda i: (-i["t"].spend, i["c"].name.lower()))
++        return items
++
+     @app.route("/")
+     def dashboard():
+         period = period_from_args()
+@@ -359,24 +487,9 @@ def create_app(
+             pacing = pacing_job.result()
+         currencies = an.currencies(rows)
+         currency = currencies[0] if currencies else "USD"
+-        cur, old = an.totals(rows), an.totals(prev_rows)
+-
+-        def series(metric: str) -> list[float]:
+-            return an.daily(rows, period.start, period.end, metric)["total"]
+-
+-        kpis = [kpi(m, cur, old, series(m), currency) for m in ("spend", "conversion_value", "roas", "conversions", "cpa", "ctr")]
+-        days = an.days_between(period.start, period.end)
+-        by_net_daily = an.daily(rows, period.start, period.end, "spend", key=lambda r: r.network if r.network in NETWORKS else "other")
+-        chart = {
+-            "days": days,
+-            "currency": CURRENCY_SYMBOLS.get(currency, ""),
+-            "series": [
+-                {"key": k, "label": NETWORKS[k].label, "slot": NETWORKS[k].slot, "values": by_net_daily[k]}
+-                for k in NETWORKS
+-                if k in by_net_daily
+-            ],
+-            "conversions": series("conversions"),
+-        }
++        cur = an.totals(rows)
++        kpis = kpi_tiles(rows, prev_rows, period, currency)
++        chart = spend_chart(rows, period, currency)
+         networks = an.by_network(rows)
+         top_spend = max((t.spend for _, t in networks), default=0) or 1
+ 
+@@ -391,6 +504,8 @@ def create_app(
+                 "key": key,
+                 "name": (by_key[key].name if key in by_key else names.get(key, key)),
+                 "platform": key.split(":", 1)[0],
++                "account_id": split_campaign_key(key)[1],
++                "campaign_id": split_campaign_key(key)[2],
+                 "status": by_key[key].status if key in by_key else None,
+                 "totals": t,
+                 "spark": spark_spend.get(key, []),
+@@ -411,12 +526,18 @@ def create_app(
+             top_campaigns=top_campaigns,
+             pacing=pacing,
+             connected=hub.sources(),
++            service_for_network=service_for_network(),
++            live_services={p.key for p in hub.sources()},
++            nav=build_nav(1, rows=rows),
+         )
+ 
+     @app.route("/export.csv")
+     def export_csv():
+         period = period_from_args()
+         rows, _ = hub.metrics(period.start, period.end)
++        only = request.args.get("platform")
++        if only:
++            rows = [r for r in rows if r.platform == only]
+         buf = io.StringIO()
+         writer = csv.writer(buf)
+         writer.writerow(["date", "platform", "network", "account_id", "campaign_id", "campaign", "impressions",
+@@ -425,7 +546,7 @@ def create_app(
+             writer.writerow([r.date, r.platform, r.network, r.account_id, r.campaign_id, r.campaign_name,
+                              r.impressions, r.clicks, f"{r.spend:.2f}", f"{r.conversions:.2f}",
+                              f"{r.conversion_value:.2f}", r.currency])
+-        filename = f"ad-performance-{period.start}-to-{period.end}.csv"
++        filename = f"ad-performance-{only + '-' if only else ''}{period.start}-to-{period.end}.csv"
+         return Response(buf.getvalue(), mimetype="text/csv",
+                         headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+ 
+@@ -438,31 +559,81 @@ def create_app(
+         found, errors = hub.campaigns(refresh=refresh)
+         rows, metric_errors = hub.metrics(period.start, period.end, refresh=refresh)
+         errors.update(metric_errors)
+-        by_campaign = an.by_campaign(rows)
+-        spark = an.daily(rows, period.start, period.end, "spend", key=lambda r: r.campaign_key)
+-        networks_by_campaign: dict[str, set] = {}
+-        for r in rows:
+-            networks_by_campaign.setdefault(r.campaign_key, set()).add(r.network)
+-        items = []
+-        for c in found:
+-            t = by_campaign.get(c.key, an.Totals())
+-            if c.status not in (ACTIVE, PAUSED) and not t.spend:
+-                continue
+-            items.append({
+-                "c": c,
+-                "t": t,
+-                "spark": spark.get(c.key, []),
+-                "networks": sorted(networks_by_campaign.get(c.key, set(hub.platform(c.platform).networks[:1])),
+-                                   key=lambda n: list(NETWORKS).index(n) if n in NETWORKS else 99),
+-            })
+-        items.sort(key=lambda i: (-i["t"].spend, i["c"].name.lower()))
+         return render_template(
+             "mk_campaigns.html",
+             period=period,
+-            items=items,
++            items=campaign_items(found, rows, period),
+             errors=errors,
+             totals=an.totals(rows),
+             max_change=settings.max_budget_change_pct,
++            nav=build_nav(1, rows=rows),
++        )
++
++    def errors_for(errors: dict, service: str, account: Optional[str] = None) -> dict:
++        """Only the read errors about one service, or one of its accounts (keys look like "Google Ads (Shop)")."""
++        if account:
++            return {k: v for k, v in errors.items() if k == f"{service} ({account})"}
++        return {k: v for k, v in errors.items() if k.startswith(service + " (")}
++
++    @app.route("/services/<platform>")
++    def service(platform: str):
++        source = service_or_404(platform)
++        period = period_from_args()
++        all_rows, all_prev, found, errors = period_data(period, request.args.get("refresh") == "1")
++        rows = [r for r in all_rows if r.platform == platform]
++        prev_rows = [r for r in all_prev if r.platform == platform]
++        currencies = an.currencies(rows)
++        currency = currencies[0] if currencies else "USD"
++        accounts = [a for a in hub.accounts() if a.platform == platform]
++        return render_template(
++            "mk_service.html",
++            period=period,
++            source=source,
++            kpis=kpi_tiles(rows, prev_rows, period, currency),
++            chart=spend_chart(rows, period, currency),
++            items=campaign_items(found, rows, period, platform),
++            totals=an.totals(rows),
++            currency=currency,
++            currencies=currencies,
++            errors=errors_for(errors, source.name),
++            accounts=[(a, source.console_url(a)) for a in accounts],
++            console_url=source.console_url(accounts[0] if len(accounts) == 1 else None),
++            max_change=settings.max_budget_change_pct,
++            nav=build_nav(2, platform, found, all_rows),
++        )
++
++    @app.route("/services/<platform>/campaigns/<account_id>/<campaign_id>")
++    def campaign(platform: str, account_id: str, campaign_id: str):
++        source = service_or_404(platform)
++        key = f"{platform}:{account_id}:{campaign_id}"
++        period = period_from_args()
++        all_rows, all_prev, found, errors = period_data(period, request.args.get("refresh") == "1")
++        c = next((x for x in found if x.key == key), None)
++        rows = [r for r in all_rows if r.campaign_key == key]
++        prev_rows = [r for r in all_prev if r.campaign_key == key]
++        if c is None and not rows and not prev_rows:
++            abort(404, "That campaign wasn't found. It may have been removed, or its ad account is switched off.")
++        account = next((a for a in hub.accounts() if a.platform == platform and a.account_id == account_id), None)
++        currencies = an.currencies(rows)
++        currency = (c.currency if c else None) or (currencies[0] if currencies else "USD")
++        networks = an.by_network(rows)
++        return render_template(
++            "mk_campaign.html",
++            period=period,
++            source=source,
++            c=c,
++            key=key,
++            name=c.name if c else next(r.campaign_name for r in rows or prev_rows),
++            account=account,
++            kpis=kpi_tiles(rows, prev_rows, period, currency),
++            chart=spend_chart(rows, period, currency),
++            networks=networks if len(networks) > 1 else [],
++            totals=an.totals(rows),
++            currency=currency,
++            errors=errors_for(errors, source.name, account.name if account else None),
++            console_url=source.console_url(account),
++            max_change=settings.max_budget_change_pct,
++            nav=build_nav(3, platform, found, all_rows, campaign_key=key),
+         )
+ 
+     @app.route("/api/campaigns/status", methods=["POST"])
+diff --git a/src/pps_tools/marketing/platforms/base.py b/src/pps_tools/marketing/platforms/base.py
+index f85bab4..a9dbc35 100644
+--- a/src/pps_tools/marketing/platforms/base.py
++++ b/src/pps_tools/marketing/platforms/base.py
+@@ -48,6 +48,9 @@ class Platform:
+     env_vars: tuple[str, ...] = ()
+     docs_url: str = ""
+     setup_steps: tuple[str, ...] = ()
++    # The platform's own ads dashboard, for "Open ..." links.
++    console_name: str = ""
++    console_home: str = ""
+ 
+     def __init__(
+         self,
+@@ -183,6 +186,10 @@ class Platform:
+ 
+     # -- ads ------------------------------------------------------------------
+ 
++    def console_url(self, account: Optional[AdAccount] = None) -> str:
++        """The platform's own ads dashboard; connectors whose URLs name the account link straight to it."""
++        return self.console_home
++
+     def discover_accounts(self) -> list[AdAccount]:
+         return []
+ 
+diff --git a/src/pps_tools/marketing/platforms/demo.py b/src/pps_tools/marketing/platforms/demo.py
+index 497d08d..32cb2b3 100644
+--- a/src/pps_tools/marketing/platforms/demo.py
++++ b/src/pps_tools/marketing/platforms/demo.py
+@@ -175,6 +175,9 @@ class DemoPlatform(Platform):
+         self.networks = real.networks
+         self.supports_ads = real.supports_ads
+         self.supports_publish = real.supports_publish
++        self.console_name = real.console_name
++        self.console_home = real.console_home
++        self.real = real
+         self.demo = DEMO_ACCOUNTS.get(real.key)
+ 
+     @property
+@@ -220,6 +223,9 @@ class DemoPlatform(Platform):
+     def discover_accounts(self) -> list[AdAccount]:
+         return self.accounts()
+ 
++    def console_url(self, account: Optional[AdAccount] = None) -> str:
++        return self.real.console_url(account)
++
+     def _campaign_state(self, dc: DemoCampaign, today: date) -> tuple[str, Optional[str], float]:
+         """(status, status-change date, current daily budget) for a demo campaign."""
+         status, since = ACTIVE, None
+diff --git a/src/pps_tools/marketing/platforms/google_ads.py b/src/pps_tools/marketing/platforms/google_ads.py
+index 88b07e5..820b777 100644
+--- a/src/pps_tools/marketing/platforms/google_ads.py
++++ b/src/pps_tools/marketing/platforms/google_ads.py
+@@ -65,6 +65,8 @@ class GoogleAdsPlatform(Platform):
+     supports_publish = False
+     env_vars = ("GOOGLE_ADS_CLIENT_ID", "GOOGLE_ADS_CLIENT_SECRET")
+     docs_url = "https://developers.google.com/google-ads/api/docs/start"
++    console_name = "Google Ads"
++    console_home = "https://ads.google.com/"
+     setup_steps = (
+         "In Google Cloud Console, enable the Google Ads API for a project.",
+         "On the project's Google Ads API page, apply for Explorer or Basic access (new projects can only reach test accounts).",
+diff --git a/src/pps_tools/marketing/platforms/linkedin.py b/src/pps_tools/marketing/platforms/linkedin.py
+index 91481e4..ed53d6a 100644
+--- a/src/pps_tools/marketing/platforms/linkedin.py
++++ b/src/pps_tools/marketing/platforms/linkedin.py
+@@ -77,6 +77,8 @@ class LinkedInPlatform(Platform):
+     supports_publish = True
+     env_vars = ("LINKEDIN_CLIENT_ID", "LINKEDIN_CLIENT_SECRET")
+     docs_url = "https://learn.microsoft.com/en-us/linkedin/marketing/"
++    console_name = "LinkedIn Campaign Manager"
++    console_home = "https://www.linkedin.com/campaignmanager/"
+     setup_steps = (
+         "Create an app at https://www.linkedin.com/developers/apps and link it to your Company Page.",
+         "Request the Advertising API and Community Management API products for the app.",
+@@ -160,6 +162,11 @@ class LinkedInPlatform(Platform):
+             page_url = f"{url}&pageToken={quote(token, safe='')}"
+         return elements
+ 
++    def console_url(self, account: Optional[AdAccount] = None) -> str:
++        if account is None:
++            return self.console_home
++        return f"{self.console_home}accounts/{account.account_id}/overview"
++
+     def discover_accounts(self) -> list[AdAccount]:
+         accounts = []
+         for el in self._paged(f"{API}/adAccounts?q=search&pageSize=1000"):
+diff --git a/src/pps_tools/marketing/platforms/meta.py b/src/pps_tools/marketing/platforms/meta.py
+index dad5847..5c0a629 100644
+--- a/src/pps_tools/marketing/platforms/meta.py
++++ b/src/pps_tools/marketing/platforms/meta.py
+@@ -92,6 +92,8 @@ class MetaPlatform(Platform):
+     supports_publish = True
+     env_vars = ("META_APP_ID", "META_APP_SECRET")
+     docs_url = "https://developers.facebook.com/docs/marketing-api/get-started"
++    console_name = "Meta Ads Manager"
++    console_home = "https://adsmanager.facebook.com/adsmanager/manage/campaigns"
+     setup_steps = (
+         "Create a Business-type app at https://developers.facebook.com/apps and add Facebook Login and the Marketing API.",
+         "In Facebook Login settings, add the redirect URI shown below (Meta requires https outside localhost).",
+@@ -177,6 +179,11 @@ class MetaPlatform(Platform):
+ 
+     # -- ads --------------------------------------------------------------------
+ 
++    def console_url(self, account: Optional[AdAccount] = None) -> str:
++        if account is None:
++            return self.console_home
++        return f"{self.console_home}?act={account.account_id.removeprefix('act_')}"
++
+     def discover_accounts(self) -> list[AdAccount]:
+         accounts = []
+         for a in self._paged(
+diff --git a/src/pps_tools/marketing/platforms/microsoft_ads.py b/src/pps_tools/marketing/platforms/microsoft_ads.py
+index c7cd1b3..8f09951 100644
+--- a/src/pps_tools/marketing/platforms/microsoft_ads.py
++++ b/src/pps_tools/marketing/platforms/microsoft_ads.py
+@@ -121,6 +121,8 @@ class MicrosoftAdsPlatform(Platform):
+     supports_publish = False
+     env_vars = ("MICROSOFT_ADS_CLIENT_ID", "MICROSOFT_ADS_CLIENT_SECRET", "MICROSOFT_ADS_DEVELOPER_TOKEN")
+     docs_url = "https://learn.microsoft.com/en-us/advertising/guides/get-started"
++    console_name = "Microsoft Advertising"
++    console_home = "https://ui.ads.microsoft.com/"
+     setup_steps = (
+         "Sign in to the Microsoft Advertising Developer Portal (https://developers.ads.microsoft.com) with your Microsoft Advertising login and request a developer token.",
+         "In the Azure portal, open Microsoft Entra ID → App registrations and register an app for 'Accounts in any organizational directory and personal Microsoft accounts'.",
+diff --git a/src/pps_tools/marketing/platforms/pinterest.py b/src/pps_tools/marketing/platforms/pinterest.py
+index 28ea466..6d5c528 100644
+--- a/src/pps_tools/marketing/platforms/pinterest.py
++++ b/src/pps_tools/marketing/platforms/pinterest.py
+@@ -47,6 +47,8 @@ class PinterestPlatform(Platform):
+     supports_publish = True
+     env_vars = ("PINTEREST_APP_ID", "PINTEREST_APP_SECRET")
+     docs_url = "https://developers.pinterest.com/docs/getting-started/set-up-app/"
++    console_name = "Pinterest Ads Manager"
++    console_home = "https://ads.pinterest.com/"
+     setup_steps = (
+         "Create an app at https://developers.pinterest.com/apps (Trial access is granted first; request Standard access to publish publicly).",
+         "Add the redirect URI shown below to the app.",
+diff --git a/src/pps_tools/marketing/platforms/tiktok.py b/src/pps_tools/marketing/platforms/tiktok.py
+index aa314b7..98a1044 100644
+--- a/src/pps_tools/marketing/platforms/tiktok.py
++++ b/src/pps_tools/marketing/platforms/tiktok.py
+@@ -33,6 +33,8 @@ class TikTokPlatform(Platform):
+     supports_publish = False
+     env_vars = ("TIKTOK_APP_ID", "TIKTOK_APP_SECRET")
+     docs_url = "https://business-api.tiktok.com/portal/docs"
++    console_name = "TikTok Ads Manager"
++    console_home = "https://ads.tiktok.com/"
+     setup_steps = (
+         "Create a developer app at https://business-api.tiktok.com/portal (My Apps).",
+         "Grant it the Ad Account Management, Ads Management and Reporting scopes.",
+diff --git a/src/pps_tools/marketing/platforms/x.py b/src/pps_tools/marketing/platforms/x.py
+index c196d23..c78d9c1 100644
+--- a/src/pps_tools/marketing/platforms/x.py
++++ b/src/pps_tools/marketing/platforms/x.py
+@@ -69,6 +69,8 @@ class XPlatform(Platform):
+     supports_publish = True
+     env_vars = ("X_CLIENT_ID", "X_CLIENT_SECRET")
+     docs_url = "https://docs.x.com/x-api/introduction"
++    console_name = "X Ads Manager"
++    console_home = "https://ads.x.com/"
+     setup_steps = (
+         "In the X developer console, create a project + app and add prepaid API credits (posting is pay-per-use).",
+         "Under User authentication settings, enable OAuth 2.0 (Web App, confidential client) and add the redirect URI shown below.",
+diff --git a/src/pps_tools/marketing/templates/mk_macros.html b/src/pps_tools/marketing/templates/mk_macros.html
+index af7876f..460bffb 100644
+--- a/src/pps_tools/marketing/templates/mk_macros.html
++++ b/src/pps_tools/marketing/templates/mk_macros.html
+@@ -21,6 +21,8 @@
+ {%- elif name == "refresh" -%}<path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 3v5h5"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 21v-5h-5"/>
+ {%- elif name == "download" -%}<path d="M12 4v11M7 10l5 5 5-5"/><path d="M5 20h14"/>
+ {%- elif name == "external" -%}<path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>
++{%- elif name == "plus" -%}<path d="M12 5v14M5 12h14"/>
++{%- elif name == "inbox" -%}<path d="M3 13h5l1.5 3h5L16 13h5"/><path d="M5.5 5h13l2.5 8v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-6l2.5-8z"/>
+ {%- elif name == "logout" -%}<path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4"/><path d="M10 16l-4-4 4-4M6 12h10"/>
+ {%- endif -%}
+ </svg>
+@@ -32,8 +34,28 @@
+ {%- endmacro %}
+ 
+ {% macro platform(key) -%}
+-{%- set slots = {"google_ads": 1, "meta": 2, "pinterest": 4, "x": 5, "linkedin": 6, "tiktok": 7, "microsoft_ads": 8} -%}
+-<span class="net"><span class="swatch s{{ slots.get(key, 0) }}" aria-hidden="true"></span>{{ platform_short.get(key, key) }}</span>
++<span class="net"><span class="swatch s{{ platform_slots.get(key, 0) }}" aria-hidden="true"></span>{{ platform_short.get(key, key) }}</span>
++{%- endmacro %}
++
++{#- A service's mark: its initials on a tint of its channel color. -#}
++{% macro badge(service) -%}
++<span class="badge tint-{{ service.slot }}" aria-hidden="true">{{ service.badge }}</span>
++{%- endmacro %}
++
++{% macro kpi_tiles(kpis) -%}
++<section class="kpis" aria-label="Key numbers">
++  {% for k in kpis %}
++  <div class="card kpi">
++    <div class="label">{{ k.label }}</div>
++    <div class="value">{{ k.text }}</div>
++    <div class="meta">
++      {{ delta(k.tone, k.delta_text, "Previous period: " ~ k.previous_text) }}
++      <span class="vs">vs {{ k.previous_text }}</span>
++    </div>
++    <svg class="spark" data-spark="{{ k.spark|tojson|forceescape }}" role="img" aria-label="{{ k.label }} by day"></svg>
++  </div>
++  {% endfor %}
++</section>
+ {%- endmacro %}
+ 
+ {% macro campaign_status(status) -%}
+@@ -57,11 +79,12 @@
+ </span>
+ {%- endmacro %}
+ 
+-{% macro period_filters(period, endpoint, show_refresh=true, extra={}) -%}
+-<form class="filters" method="get" action="{{ url_for(endpoint) }}">
++{#- path: the route's own parameters; extra: query parameters to keep. -#}
++{% macro period_filters(period, endpoint, show_refresh=true, extra={}, path={}) -%}
++<form class="filters" method="get" action="{{ url_for(endpoint, **path) }}">
+   <div class="segmented" role="group" aria-label="Date range">
+     {% for key, label in presets.items() %}
+-      <a href="{{ url_for(endpoint, range=key, **extra) }}" {% if period.preset == key %}aria-current="true"{% endif %}>{{ label }}</a>
++      <a href="{{ url_for(endpoint, range=key, **path, **extra) }}" {% if period.preset == key %}aria-current="true"{% endif %}>{{ label }}</a>
+     {% endfor %}
+   </div>
+   <div class="custom-range">
+@@ -74,7 +97,7 @@
+     <button class="btn ghost sm" type="submit">Apply</button>
+   </div>
+   {% if show_refresh %}
+-  <a class="btn ghost sm" href="{{ url_for(endpoint, range=period.preset if period.preset != 'custom' else None, start=period.start.isoformat() if period.preset == 'custom' else None, end=period.end.isoformat() if period.preset == 'custom' else None, refresh=1, **extra) }}" title="Fetch fresh numbers from every platform">{{ icon("refresh") }} Refresh</a>
++  <a class="btn ghost sm" href="{{ url_for(endpoint, range=period.preset if period.preset != 'custom' else None, start=period.start.isoformat() if period.preset == 'custom' else None, end=period.end.isoformat() if period.preset == 'custom' else None, refresh=1, **path, **extra) }}" title="Fetch fresh numbers from every platform">{{ icon("refresh") }} Refresh</a>
+   {% endif %}
+ </form>
+ {%- endmacro %}
